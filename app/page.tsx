@@ -20,8 +20,8 @@ export default function Home() {
       
 
       <AnnouncementBanner 
-         message="Promotion panel is live" 
-         link="/promote"
+         message="AgoraCash ownership token is live, be the new owner of agoracash" 
+         link="/AC"
       /> 
 
       
