@@ -21,6 +21,23 @@ interface TokenConfig {
 }
 
 export const tokens: Record<string, TokenConfig> = {
+  agoracashownership: {
+    name: "AgoraCash ownership token",
+    symbol: "AC",
+    tokenId: "a532bb3eae19cb4a8548101edf6ffda32f5b0b7dce7037a6b5393ba1a67179df",
+    telegramUrl: "https://agora.cash/AC",
+    feature: "Ownership token for agora.cash",
+    official: true,
+    description: {
+      title: "AgoraCash Ownership Token",
+      content: `The Agoracash token is officially released. Each AC token represents 1% ownership. Holding more than 50 tokens grants full ownership of the domain.
+
+      The WS server code is currently not open-sourced.
+
+      Buy link:
+      https://cashtab.com/#/token/a532bb3eae19cb4a8548101edf6ffda32f5b0b7dce7037a6b5393ba1a67179df`
+    }
+  },
   starcrystal: {
     name: "StarCrystal",
     symbol: "SC", 
