@@ -19,10 +19,12 @@ export default function Home() {
       */}
       
 
-      <AnnouncementBanner 
-         message="AgoraCash ownership token is live, be the new owner of agoracash" 
-         link="/AC"
-      /> 
+        {/*
+    <AnnouncementBanner 
+      message="AgoraCash ownership token is live, be the new owner of agoracash" 
+      link="/"
+    />
+    */}
 
       
       <Header />
