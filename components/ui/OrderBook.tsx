@@ -29,6 +29,8 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
   const collapsedBidRef = useRef<HTMLDivElement>(null);
   const xecPrice = useXECPrice();
   const { isWalletConnected, ecashAddress, userTokens } = useWallet();
+  // Temporary feature switch: disable StarShard holding gate while keeping logic for quick rollback.
+  const ENABLE_STARSHARD_ACCESS_GATE = false;
   const REQUIRED_TOKEN_ID = "d1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb";
   const REQUIRED_MIN_BALANCE = 100_000n;
 
@@ -41,7 +43,9 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
     }
   })();
 
-  const isBuySectionUnlocked = Boolean(isWalletConnected && ecashAddress && hasRequiredTokenBalance);
+  const isBuySectionUnlocked = ENABLE_STARSHARD_ACCESS_GATE
+    ? Boolean(isWalletConnected && ecashAddress && hasRequiredTokenBalance)
+    : Boolean(isWalletConnected && ecashAddress);
   const lockedMessage = !isWalletConnected || !ecashAddress
     ? "Login to access this feature"
     : "You need to hold at least 100,000 StarShard to access this feature.";

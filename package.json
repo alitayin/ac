@@ -1,6 +1,6 @@
 {
-  "name": "ecashinfo",
-  "version": "0.1.0",
+  "name": "agoracash",
+  "version": "3.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

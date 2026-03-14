@@ -4,8 +4,6 @@ import * as React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { chronik, fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
-import { tokens } from "@/config/tokens"
-import { useWallet } from "@/lib/context/WalletContext"
 import { detectAgoraTokenId } from "@/lib/chronik-transactions"
 import { WsMsgClient } from "chronik-client"
 import { formatNumber } from "@/lib/formatters"
@@ -34,21 +32,11 @@ const formatTxid = (txid: string) => {
   return `${txid.slice(0, 8)}...${txid.slice(-4)}`
 }
 
-const STAR_SHARD_TOKEN_ID = tokens.starshard.tokenId
-const REQUIRED_SS_AMOUNT = 100000
-const LOCK_DELAY_MS = 180_000
-
 export default function RealTimeEtokenFlow() {
   const [connected, setConnected] = React.useState(false)
   const [wsError, setWsError] = React.useState<string | null>(null)
   const [items, setItems] = React.useState<FlowItem[]>([])
   const [connecting, setConnecting] = React.useState(true)
-  const [ssDecimals, setSsDecimals] = React.useState(0)
-  const [lockReady, setLockReady] = React.useState(false)
-  const [isLocked, setIsLocked] = React.useState(false)
-  const [lockMessage, setLockMessage] = React.useState<string | null>(null)
-
-  const { isWalletConnected, userTokens } = useWallet()
 
   const tokenMetaCache = React.useRef<Map<string, any>>(new Map())
   const seenTxs = React.useRef<Set<string>>(new Set())
@@ -68,58 +56,6 @@ export default function RealTimeEtokenFlow() {
       return null
     }
   }, [])
-
-  React.useEffect(() => {
-    const timer = setTimeout(() => setLockReady(true), LOCK_DELAY_MS)
-    return () => clearTimeout(timer)
-  }, [])
-
-  React.useEffect(() => {
-    const loadSsMeta = async () => {
-      try {
-        const meta = await fetchTokenMeta(STAR_SHARD_TOKEN_ID)
-        const decimals = getTokenDecimalsFromDetails(meta, tokens.starshard.decimals ?? 0)
-        setSsDecimals(decimals)
-      } catch {
-        setSsDecimals(0)
-      }
-    }
-
-    void loadSsMeta()
-  }, [fetchTokenMeta])
-
-  const ssBalance = React.useMemo(() => {
-    const raw = userTokens[STAR_SHARD_TOKEN_ID]
-    if (!raw) return 0
-    try {
-      const atoms = BigInt(raw)
-      const decimals = ssDecimals || 0
-      return Number(atoms) / Math.pow(10, decimals)
-    } catch {
-      return 0
-    }
-  }, [userTokens, ssDecimals])
-
-  React.useEffect(() => {
-    if (!lockReady) return
-
-    const hasRequiredSs = ssBalance >= REQUIRED_SS_AMOUNT
-
-    if (!isWalletConnected) {
-      setIsLocked(true)
-      setLockMessage("Please connect your wallet. Viewing requires holding at least 100,000 SS.")
-      return
-    }
-
-    if (!hasRequiredSs) {
-      setIsLocked(true)
-      setLockMessage("Viewing requires holding at least 100,000 SS.")
-      return
-    }
-
-    setIsLocked(false)
-    setLockMessage(null)
-  }, [isWalletConnected, ssBalance, lockReady])
 
   const handleTx = React.useCallback(async (txid: string) => {
     if (seenTxs.current.has(txid)) return
@@ -361,16 +297,6 @@ export default function RealTimeEtokenFlow() {
           ))}
         </div>
       </CardContent>
-      {isLocked && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/5 backdrop-blur-sm px-6 text-center">
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-foreground">Premium feature 🔒</p>
-            <p className="text-xs text-muted-foreground">
-              {lockMessage ?? "Connect wallet and hold at least 100,000 SS to continue."}
-            </p>
-          </div>
-        </div>
-      )}
     </Card>
   )
 }
