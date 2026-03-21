@@ -55,18 +55,6 @@ const nextConfig = {
             from: "node_modules/ecash-lib/dist/ffi/ecash_lib_wasm_bg_nodejs.wasm",
             to: "./../static/wasm/",
           },
-          {
-            from: "node_modules/ecash-lib/dist/ffi/ecash_lib_wasm_bg_nodejs.wasm",
-            to: "./.next/server/app/promote/",
-          },
-          {
-            from: "node_modules/ecash-lib/dist/ffi/ecash_lib_wasm_bg_nodejs.wasm",
-            to: "./server/app/promote/",
-          },
-          {
-            from: "node_modules/ecash-lib/dist/ffi/ecash_lib_wasm_bg_nodejs.wasm",
-            to: "./app/promote/",
-          },
         ],
       }),
     );
