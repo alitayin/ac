@@ -191,7 +191,7 @@ export default function ListPage() {
                           Please send {calculateFee().toLocaleString()} {feeTokenLabel} to the following address:
                         </p>
                         <p className="font-mono bg-white dark:bg-gray-900 p-2 rounded border dark:border-gray-700 select-all break-all">
-                          ecash:qzey4jkh2x23q2zngq50z8uxgw0ek4xazgh65we6y0
+                        ecash:qpaw7v7sfvlsm4px33saggr63jgsalsx4q49m7n6v4
                         </p>
                       </div>
 
