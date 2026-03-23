@@ -289,7 +289,7 @@ Total Fee: ${calculateFee().toLocaleString()} ${feeTokenLabel}
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
                       <p>Please copy the above information and send it to:</p>
                       <p className={`mt-1 font-medium select-all ${isShaking ? 'shake' : ''}`}>
-                        mupeishan@proton.me
+                        alitaweb3@gmail.com
                       </p>
                       <p className="mt-1 text-gray-600 dark:text-gray-400">
                         We will review your listing request and process it as soon as possible.
