@@ -46,9 +46,6 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
     const loadOrders = () => {
       const savedOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
       
-      // Add debug log
-      console.log("Original order data:", savedOrders);
-      
       // Process orders and add extra info
       const processedOrders: Record<string, Order> = {};
       const tokenSet = new Set<string>();
@@ -78,7 +75,6 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
               if (remainingValue < 100) {
                 order.status = 'completed';
                 order.remainingAmount = 0;
-                console.log(`Order ${key} remaining amount below 100 XEC (${remainingValue.toFixed(2)} XEC); auto-marked as completed`);
               }
             }
           }
@@ -98,18 +94,8 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
               });
             }
           } else {
-            console.log(`TokenId not found: ${tokenId}`);
             order.tokenName = 'Unknown token';
           }
-          
-          // Debug log for each order detail
-          console.log(`Order ${key} detail:`, {
-            remainingAmount: order.remainingAmount,
-            maxPrice: order.maxPrice,
-            tokenId,
-            tokenName: order.tokenName,
-            tokenInfo
-          });
           
           processedOrders[key] = order;
         }
@@ -137,7 +123,6 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
         
         localStorage.setItem('swap_orders', JSON.stringify(updatedOrders));
         window.dispatchEvent(new Event('orders-updated'));
-        console.log('Saved order status updates to localStorage');
       }
       
       // Check whether orders are sufficiently funded

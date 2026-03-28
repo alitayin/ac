@@ -235,7 +235,6 @@ export default function Header({
     try {
       await processOrders();
    
-      console.log('Orders processed successfully');
     } catch (error) {
       console.error('Failed to process orders:', error);
     }
@@ -271,14 +270,12 @@ export default function Header({
       return;
     }
 
-    console.log(`[header] Setting up WebSocket subscriptions for ${tokenIds.length} tokens`);
 
 
     handleProcessOrders();
 
 
     const cleanup = watchOrderTokens(tokenIds, () => {
-      console.log('[header] WebSocket triggered order processing');
       if (!hasActiveOrders()) {
         setIsAutoProcessing(false);
         localStorage.setItem('auto_processing', 'false');
@@ -310,7 +307,6 @@ export default function Header({
     const TWELVE_HOURS = 12 * 60 * 60 * 1000;
     
     const refreshTimer = setTimeout(() => {
-      console.log('Auto-refreshing page after 12 hours...');
       window.location.reload();
     }, TWELVE_HOURS);
     

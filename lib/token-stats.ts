@@ -93,28 +93,16 @@ export const refreshSummaryCacheTimestamps = (tokenIds: string[]) => {
     const nowStr = new Date(now).toLocaleString()
     let updatedCount = 0
     
-    console.log(`\n[Cache Refresh] 🔄 Starting batch update at ${nowStr}`)
-    console.log(`[Cache Refresh] 📋 Processing ${tokenIds.length} tokens...`)
-    
-    tokenIds.forEach((tokenId, index) => {
+    tokenIds.forEach((tokenId) => {
       const cached = getCachedTokenSummary(tokenId)
       if (cached) {
-        const oldTime = new Date(cached.computedAt).toLocaleString()
-        const ageSeconds = Math.round((now - cached.computedAt) / 1000)
-        
         setCachedTokenSummary(tokenId, {
           ...cached,
           computedAt: now,
         })
-        
         updatedCount++
-        console.log(`[Cache Refresh]   ${index + 1}. ${tokenId.substring(0, 8)}... | Age: ${ageSeconds}s | ${oldTime} → ${nowStr}`)
-      } else {
-        console.log(`[Cache Refresh]   ${index + 1}. ${tokenId.substring(0, 8)}... | ⚠️ No cache found, skipped`)
       }
     })
-    
-    console.log(`[Cache Refresh] ✅ Batch complete: ${updatedCount}/${tokenIds.length} caches refreshed\n`)
   } catch (_err) {
     console.error('[Cache Refresh] ❌ Error during refresh:', _err)
   }
