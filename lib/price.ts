@@ -58,7 +58,9 @@ export async function getXECPrice(): Promise<number> {
     }
 
     if (i < MAX_RETRIES - 1) {
-      await delay(1000 * (i + 1));
+      // Exponential backoff with jitter: 500ms * 2^i + random(0-300ms)
+      const backoff = 500 * Math.pow(2, i) + Math.random() * 300;
+      await delay(Math.min(backoff, 15000));
     }
   }
 

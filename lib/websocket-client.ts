@@ -4,65 +4,64 @@ const WS_SERVER_URL = 'wss://api.agora.cash/ws';
 const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 const HEARTBEAT_INTERVAL = 30000;
-let wsConnection: WebSocket | null = null;
-let reconnectTimer: NodeJS.Timeout | null = null;
-let currentReconnectDelay = INITIAL_RECONNECT_DELAY;
-let reconnectAttempts = 0;
-let heartbeatTimer: NodeJS.Timeout | null = null;
-let lastSuccessfulConnection: number | null = null;
-let currentAddresses: string[] = [];
-let connectionStatus: 'connecting' | 'connected' | 'disconnected' = 'disconnected';
-const listeners: ((status: string) => void)[] = [];
+
+// All mutable WebSocket state in one singleton object
+const state = {
+  wsConnection: null as WebSocket | null,
+  reconnectTimer: null as NodeJS.Timeout | null,
+  currentReconnectDelay: INITIAL_RECONNECT_DELAY,
+  reconnectAttempts: 0,
+  heartbeatTimer: null as NodeJS.Timeout | null,
+  lastSuccessfulConnection: null as number | null,
+  currentAddresses: [] as string[],
+  connectionStatus: 'disconnected' as 'connecting' | 'connected' | 'disconnected',
+  listeners: [] as ((status: string) => void)[],
+};
 
 function notifyStatusChange(status: string) {
-  listeners.forEach(listener => listener(status));
-  connectionStatus = status as any;
+  state.listeners.forEach(listener => listener(status));
+  state.connectionStatus = status as typeof state.connectionStatus;
 }
 
 function connectWebSocket(addresses: string[]) {
   try {
-    if (wsConnection) {
-      wsConnection.close();
+    if (state.wsConnection) {
+      state.wsConnection.close();
     }
-    
+
     if (addresses.length === 0) {
       return;
     }
-    
-    currentAddresses = [...addresses];
-    
-    wsConnection = new WebSocket(WS_SERVER_URL);
+
+    state.currentAddresses = [...addresses];
+
+    state.wsConnection = new WebSocket(WS_SERVER_URL);
     notifyStatusChange('connecting');
-    
+
     const connectionTimeout = setTimeout(() => {
-      if (wsConnection && wsConnection.readyState !== WebSocket.OPEN) {
-        wsConnection.close();
+      if (state.wsConnection && state.wsConnection.readyState !== WebSocket.OPEN) {
+        state.wsConnection.close();
         scheduleReconnect();
       }
     }, 10000);
-    
-    wsConnection.onopen = () => {
+
+    state.wsConnection.onopen = () => {
       clearTimeout(connectionTimeout);
-      reconnectAttempts = 0;
-      currentReconnectDelay = INITIAL_RECONNECT_DELAY;
-      lastSuccessfulConnection = Date.now();
+      state.reconnectAttempts = 0;
+      state.currentReconnectDelay = INITIAL_RECONNECT_DELAY;
+      state.lastSuccessfulConnection = Date.now();
       notifyStatusChange('connected');
-      
-      const message = {
-        type: 'client_online',
-        addresses: addresses
-      };
-      
-      wsConnection?.send(JSON.stringify(message));
+
+      state.wsConnection?.send(JSON.stringify({ type: 'client_online', addresses }));
       startHeartbeat();
-      
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
+
+      if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer);
+        state.reconnectTimer = null;
       }
     };
-    
-    wsConnection.onmessage = (event) => {
+
+    state.wsConnection.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'pong') {
@@ -71,21 +70,21 @@ function connectWebSocket(addresses: string[]) {
       } catch (_error) {
       }
     };
-    
-    wsConnection.onclose = (event) => {
+
+    state.wsConnection.onclose = () => {
       clearTimeout(connectionTimeout);
       stopHeartbeat();
       notifyStatusChange('disconnected');
       scheduleReconnect();
     };
-    
-    wsConnection.onerror = (error) => {
+
+    state.wsConnection.onerror = () => {
       clearTimeout(connectionTimeout);
       stopHeartbeat();
       notifyStatusChange('disconnected');
       scheduleReconnect();
     };
-    
+
   } catch (_error) {
     notifyStatusChange('disconnected');
     scheduleReconnect();
@@ -93,36 +92,25 @@ function connectWebSocket(addresses: string[]) {
 }
 
 function scheduleReconnect() {
-  if (!reconnectTimer && currentAddresses.length > 0) {
-    reconnectAttempts++;
-    
-    currentReconnectDelay = Math.min(
-      currentReconnectDelay * 1.5, 
-      MAX_RECONNECT_DELAY
-    );
-    
-    const jitter = Math.random() * 1000;
-    const delay = currentReconnectDelay + jitter;
-    
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      connectWebSocket(currentAddresses);
+  if (!state.reconnectTimer && state.currentAddresses.length > 0) {
+    state.reconnectAttempts++;
+    state.currentReconnectDelay = Math.min(state.currentReconnectDelay * 1.5, MAX_RECONNECT_DELAY);
+    const delay = state.currentReconnectDelay + Math.random() * 1000;
+    state.reconnectTimer = setTimeout(() => {
+      state.reconnectTimer = null;
+      connectWebSocket(state.currentAddresses);
     }, delay);
   }
 }
 
 function startHeartbeat() {
   stopHeartbeat();
-  heartbeatTimer = setInterval(() => {
-    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
-      const heartbeat = {
-        type: 'ping',
-        timestamp: Date.now()
-      };
-      wsConnection.send(JSON.stringify(heartbeat));
+  state.heartbeatTimer = setInterval(() => {
+    if (state.wsConnection && state.wsConnection.readyState === WebSocket.OPEN) {
+      state.wsConnection.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
     } else {
       stopHeartbeat();
-      if (!reconnectTimer) {
+      if (!state.reconnectTimer) {
         scheduleReconnect();
       }
     }
@@ -130,97 +118,91 @@ function startHeartbeat() {
 }
 
 function stopHeartbeat() {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
+  if (state.heartbeatTimer) {
+    clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = null;
   }
 }
 
 export function updateAddresses(addresses: string[]) {
-  if (JSON.stringify(currentAddresses.sort()) === JSON.stringify([...addresses].sort())) {
+  if (JSON.stringify([...state.currentAddresses].sort()) === JSON.stringify([...addresses].sort())) {
     return;
   }
-  
-  currentAddresses = [...addresses];
-  
-  if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
-    const message = {
-      type: 'update_addresses',
-      addresses: addresses
-    };
-    wsConnection.send(JSON.stringify(message));
-  } else if (addresses.length > 0) {
+
+  if (state.wsConnection && state.wsConnection.readyState === WebSocket.OPEN) {
+    state.currentAddresses = [...addresses];
+    state.wsConnection.send(JSON.stringify({ type: 'update_addresses', addresses }));
+  } else {
     connectWebSocket(addresses);
   }
 }
 
 export function closeConnection() {
-  if (wsConnection) {
-    wsConnection.close();
-    wsConnection = null;
+  if (state.wsConnection) {
+    state.wsConnection.close();
+    state.wsConnection = null;
   }
-  
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
+
+  if (state.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
   }
-  
+
   stopHeartbeat();
-  currentAddresses = [];
+  state.currentAddresses = [];
 }
 
 export function addStatusListener(listener: (status: string) => void) {
-  listeners.push(listener);
-  listener(connectionStatus);
+  state.listeners.push(listener);
+  listener(state.connectionStatus);
   return () => {
-    const index = listeners.indexOf(listener);
+    const index = state.listeners.indexOf(listener);
     if (index !== -1) {
-      listeners.splice(index, 1);
+      state.listeners.splice(index, 1);
     }
   };
 }
 
 export function useWebSocketStatus() {
-  const [status, setStatus] = useState<string>(connectionStatus);
-  
+  const [status, setStatus] = useState<string>(state.connectionStatus);
+
   useEffect(() => {
     const removeListener = addStatusListener(setStatus);
     return removeListener;
   }, []);
-  
+
   return status;
 }
 
 export function useAddressNotifier(address: string | undefined) {
   const [notifying, setNotifying] = useState<boolean>(false);
-  
+
   useEffect(() => {
     if (!address) {
       return;
     }
-    
+
     updateAddresses([address]);
     setNotifying(true);
-    
+
     return () => {
+      disconnectAddress(address);
     };
   }, [address]);
-  
+
   return notifying;
 }
 
 export function disconnectAddress(address: string) {
   if (!address) return;
-  
-  currentAddresses = currentAddresses.filter(addr => addr !== address);
-  
-  if (currentAddresses.length > 0 && wsConnection && wsConnection.readyState === WebSocket.OPEN) {
-    const message = {
-      type: 'update_addresses',
-      addresses: currentAddresses
-    };
-    wsConnection.send(JSON.stringify(message));
-  } else if (currentAddresses.length === 0) {
+
+  state.currentAddresses = state.currentAddresses.filter(addr => addr !== address);
+
+  if (state.currentAddresses.length > 0 && state.wsConnection && state.wsConnection.readyState === WebSocket.OPEN) {
+    state.wsConnection.send(JSON.stringify({ type: 'update_addresses', addresses: state.currentAddresses }));
+  } else if (state.currentAddresses.length === 0) {
     closeConnection();
   }
-} 
+}
+
+
