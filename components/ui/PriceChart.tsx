@@ -21,14 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getLastNDays } from "@/lib/time-utils"
-import { fetchHourlyData } from "@/lib/hourly-cache"
-
-interface ChartDataItem {
-  date: string
-  totalTx: number
-  matchedTx: number
-}
+import { useHourlyData } from "@/lib/use-hourly-data"
 
 interface TokenComponentProps {
   tokenIds: string[]
@@ -36,71 +29,12 @@ interface TokenComponentProps {
 
 export default function Component({ tokenIds }: TokenComponentProps) {
   const [timeRange, setTimeRange] = React.useState("30d")
-  const [chartData, setChartData] = React.useState<ChartDataItem[]>([])
-  const [isLoading, setIsLoading] = React.useState(false)
-
-  React.useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true)
-      try {
-        const days = timeRange === "90d" ? 90 : timeRange === "7d" ? 7 : 30
-        const hours = days * 24
-
-        const hourlyArrays = await Promise.all(
-          tokenIds.map((id) =>
-            fetchHourlyData(id, hours).catch((err) => {
-              console.error("Error fetching token hourly:", id, err)
-              return []
-            })
-          )
-        )
-
-        const dailyDataMap = new Map<string, ChartDataItem>()
-        hourlyArrays.flat().forEach((hourData: any) => {
-          const date = hourData.date.split(" ")[0]
-          const existing = dailyDataMap.get(date) || {
-            date,
-            totalTx: 0,
-            matchedTx: 0,
-          }
-          existing.totalTx += hourData.totalTxCount || 0
-          existing.matchedTx += hourData.matchedTxCount || 0
-          dailyDataMap.set(date, existing)
-        })
-
-        const lastNDays = getLastNDays(days)
-        const formattedData = lastNDays.map((date) => {
-          const entry = dailyDataMap.get(date)
-          return {
-            date,
-            totalTx: entry?.totalTx ?? 0,
-            matchedTx: entry?.matchedTx ?? 0,
-          }
-        })
-
-        setChartData(formattedData)
-      } catch (error) {
-        console.error("Error fetching data:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchData()
-  }, [tokenIds.join(","), timeRange])
-
-  const filteredData = chartData.filter((item: { date: string }) => {
-    const date = new Date(item.date)
-    const referenceDate = new Date()
-    let daysToSubtract = 90
-    if (timeRange === "30d") {
-      daysToSubtract = 30
-    } else if (timeRange === "7d") {
-      daysToSubtract = 7
-    }
-    const startDate = new Date(referenceDate)
-    startDate.setDate(startDate.getDate() - daysToSubtract)
-    return date >= startDate
-  })
+  const { data: rawData, isLoading } = useHourlyData(tokenIds, timeRange)
+  const filteredData = rawData.map((d) => ({
+    date: d.date,
+    totalTx: d.totalTxCount,
+    matchedTx: d.matchedTxCount,
+  }))
 
   const chartConfig: ChartConfig = {
     transactions: {

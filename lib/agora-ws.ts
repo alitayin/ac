@@ -45,30 +45,16 @@ const trackMempoolMessage = () => {
   
   // Check if message is within timeout window
   if (lastWsMessageTime !== null && (now - lastWsMessageTime) > WS_MESSAGE_TIMEOUT_MS) {
-    // Timeout exceeded, reset counter
-    console.log(`[WS Cache] ⚠️ Message timeout exceeded (${Math.round((now - lastWsMessageTime) / 1000)}s), resetting counter from ${wsMessageCount} to 0`)
     wsMessageCount = 0
   }
   
   // Update tracking
   lastWsMessageTime = now
   wsMessageCount++
-  
-  console.log(`[WS Cache] 📊 Mempool message received | Counter: ${wsMessageCount}/${WS_MESSAGE_THRESHOLD}`)
-  
-  // Check if threshold reached
+
   if (wsMessageCount >= WS_MESSAGE_THRESHOLD) {
-    // Refresh all watched tokens' summary cache timestamps
-    const tokenIdsArray = Array.from(watchedTokenIds)
-    
-    console.log(`[WS Cache] 🎯 Threshold reached! Refreshing ${tokenIdsArray.length} token summary caches...`)
-    
-    refreshSummaryCacheTimestamps(tokenIdsArray)
-    
-    // Reset counter
+    refreshSummaryCacheTimestamps(Array.from(watchedTokenIds))
     wsMessageCount = 0
-    
-    console.log(`[WS Cache] ✅ Cache refresh complete! Counter reset to 0. Next refresh at 20 messages.`)
   }
 }
 

@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
 
 import {
   Card,
-  CardContent, 
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -25,64 +25,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatNumber } from "@/lib/formatters"
-import { getLastNDays } from "@/lib/time-utils"
-import { VolumeData, TokenListComponentProps } from "@/lib/types"
-import { fetchHourlyData } from "@/lib/hourly-cache"
+import { TokenListComponentProps } from "@/lib/types"
+import { useHourlyData } from "@/lib/use-hourly-data"
 
 const chartConfig = {
   views: { label: "Trading Volume" },
   amount: { label: "XEC", color: "hsl(var(--chart-1))" },
 } satisfies ChartConfig
 
-const aggregateVolumeData = (dataArrays: any[], days: number): VolumeData[] => {
-  const lastNDays = getLastNDays(days)
-  const dailyDataMap = new Map<string, any>()
-
-  dataArrays.flat().forEach((hourData: any) => {
-    const date = hourData.date.split(" ")[0]
-    
-    if (!dailyDataMap.has(date)) {
-      dailyDataMap.set(date, {
-        date,
-        amount: 0,
-        token: 0,
-        matchedTxCount: 0,
-        totalTxCount: 0,
-        prices: []
-      })
-    }
-    
-    const dayData = dailyDataMap.get(date)
-    dayData.amount += hourData.amount / 100
-    dayData.token += hourData.token
-    dayData.matchedTxCount += hourData.matchedTxCount
-    dayData.totalTxCount += hourData.totalTxCount
-    if (hourData.latestPrice) dayData.prices.push(hourData.latestPrice)
-  })
-  
-  return lastNDays.map(date => {
-    const dayData = dailyDataMap.get(date)
-    if (!dayData) {
-      return {
-        date,
-        amount: 0,
-        token: 0,
-        matchedTxCount: 0,
-        totalTxCount: 0,
-        highPrice: null,
-        lowPrice: null,
-        closePrice: null
-      }
-    }
-    const { prices, ...rest } = dayData
-    return {
-      ...rest,
-      highPrice: prices.length ? Math.max(...prices) : null,
-      lowPrice: prices.length ? Math.min(...prices) : null,
-      closePrice: prices.length ? prices[prices.length - 1] : null
-    }
-  })
-}
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null
@@ -105,36 +55,8 @@ const CustomTooltip = ({ active, payload }: any) => {
 }
 
 export default function Component({ tokenIds }: TokenListComponentProps) {
-  const [chartData, setChartData] = useState<VolumeData[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [timeRange, setTimeRange] = useState("30d")
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true)
-      try {
-        const days = timeRange === "90d" ? 90 : timeRange === "7d" ? 7 : 30
-        const hours = days * 24
-
-        const hourlyArrays = await Promise.all(
-          tokenIds.map((id) =>
-            fetchHourlyData(id, hours).catch((err) => {
-              console.error("Error fetching token hourly:", id, err)
-              return []
-            }),
-          ),
-        )
-
-        const aggregatedData = aggregateVolumeData(hourlyArrays, days)
-        setChartData(aggregatedData)
-      } catch (error) {
-        console.error("Error fetching data:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchData()
-  }, [tokenIds.join(','), timeRange])
+  const { data: chartData, isLoading } = useHourlyData(tokenIds, timeRange)
 
   const totalVolume = useMemo(() => 
     chartData.reduce((sum, item) => sum + item.amount, 0),
