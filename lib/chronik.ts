@@ -5,7 +5,6 @@ export const chronik = new ChronikClient([
   "https://chronik.e.cash",
   "https://chronik-native2.fabien.cash",
   "https://chronik-native3.fabien.cash",
-  "https://chronik1.alitayin.com",
 ])
 
 export const fetchBlockchainInfo = async (): Promise<{ tipHash: string; tipHeight: number }> => {
