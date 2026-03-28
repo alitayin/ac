@@ -7,7 +7,8 @@ import AgoraStats from "@/components/ui/AgoraStats";
 import RealTimeEtokenFlow from "@/components/ui/RealTimeEtokenFlow";
 import { Button } from "@/components/ui/button";
 import { SwapPanel } from "@/app/swap/SwapPanel";
-import AnnouncementBanner from "@/components/ui/AnnouncementBanner";
+import AnnouncementBanner from "@/components/ui/AnnouncementBanner"
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 export default function Home() {
   const [view, setView] = useState<"table" | "flow" | "swap">("table");
@@ -53,9 +54,11 @@ export default function Home() {
             </div>
 
             <div className={view === "table" ? "block" : "hidden"}>
-              <Suspense fallback={<div>loading...</div>}>
-                <TokenTable />
-              </Suspense>
+              <ErrorBoundary>
+                <Suspense fallback={<div>loading...</div>}>
+                  <TokenTable />
+                </Suspense>
+              </ErrorBoundary>
             </div>
 
             <div className={view === "flow" ? "block" : "hidden"}>

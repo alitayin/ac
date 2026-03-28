@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import OrderBook from "@/components/ui/OrderBook"
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import AddressDistribution from "@/components/ui/AddressDistribution"
 import { useWallet } from "@/lib/context/WalletContext"
 import { useToast } from "@/hooks/use-toast"
@@ -892,10 +893,10 @@ export default function TokenPage() {
 
           <div className="p-4">
             <div className="flex flex-col">
-              {selectedChart === "realtimeprice" ? <RealtimePrice tokenId={tokenData.tokenId} /> : 
+              {selectedChart === "realtimeprice" ? <RealtimePrice tokenId={tokenData.tokenId} /> :
                selectedChart === "piechart" ? <Piechart tokenId={tokenData.tokenId} /> :
-               selectedChart === "volumechart" ? <VolumeChart tokenIds={[tokenData.tokenId]} /> :
-               selectedChart === "pricechart" ? <PriceChart tokenIds={[tokenData.tokenId]} /> : null}
+               selectedChart === "volumechart" ? <ErrorBoundary><VolumeChart tokenIds={[tokenData.tokenId]} /></ErrorBoundary> :
+               selectedChart === "pricechart" ? <ErrorBoundary><PriceChart tokenIds={[tokenData.tokenId]} /></ErrorBoundary> : null}
               <div className="self-end mt-4">
                 <Select
                   value={selectedChart}
@@ -988,7 +989,9 @@ export default function TokenPage() {
               <TokenTx tokenId={tokenData.tokenId}/>
             </div>
             {activeTab === 'orderbook' ? (
-              <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
+              <ErrorBoundary>
+                <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
+              </ErrorBoundary>
             ) : activeTab === 'address' ? (
               <AddressDistribution tokenId={tokenData.tokenId} decimals={tokenDecimals} />
             ) : null}
@@ -1087,7 +1090,9 @@ export default function TokenPage() {
 
           {activeTab !== 'orderbook' && (
             <div className="hidden lg:block">
-              <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
+              <ErrorBoundary>
+                <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
+              </ErrorBoundary>
             </div>
           )}
         </div>
