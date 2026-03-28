@@ -40,8 +40,6 @@ export const AutoExecutionProvider = ({
 
 
   useEffect(() => {
-    console.log('AutoExecutionContext detected change:', { isAutoProcessing, isNotifying, hasActiveOrders: hasActiveOrders() });
-    
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;

@@ -3,7 +3,6 @@ import { createContext, useState, useContext, useEffect, ReactNode, useRef } fro
 import * as ecashLib from 'ecash-lib';
 import * as ecashAddrJs from 'ecashaddrjs';
 import { disconnectAddress } from '../websocket-client';
-import { ChronikClient } from 'chronik-client';
 import { CashtabConnect } from 'cashtab-connect';
 import { chronik as sharedChronik } from '../chronik';
 
@@ -38,18 +37,9 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   const subscribedAddressRef = useRef<string>('');
 
 
-  const chronik = new ChronikClient([
-    'https://chronik1.alitayin.com',
-    'https://chronik-native1.fabien.cash',
-    'https://chronik-native2.fabien.cash',
-    'https://chronik-native3.fabien.cash',
-  ]);
-
-
   const fetchBalance = async (address: string) => {
     try {
-      const response = await chronik.address(address).utxos();
-      console.log('Chronik response data:', response);
+      const response = await sharedChronik.address(address).utxos();
       
       const totalBalanceSats = response.utxos
         .filter((utxo: any) => !utxo.token)

@@ -21,7 +21,6 @@ export const OrderProcessingProvider = ({
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedValue = localStorage.getItem("auto_processing");
-      console.log("localStorage on refresh:", savedValue);
       if (savedValue === 'false') {
         // On refresh, if there are unfinished orders for the current address, try enabling auto processing once
         try {
@@ -40,7 +39,6 @@ export const OrderProcessingProvider = ({
           });
 
           if (hasActiveOrders) {
-            console.log("Unfinished orders detected, enabling auto_processing automatically");
             setIsAutoProcessing(true);
             localStorage.setItem('auto_processing', 'true');
           } else {
@@ -64,7 +62,6 @@ export const OrderProcessingProvider = ({
   }, [isAutoProcessing, initialized]);
 
   const setIsAutoProcessingWithLog = (v: boolean) => {
-    console.log("setIsAutoProcessing called with value:", v, new Error().stack);
     setIsAutoProcessing(v);
   };
 
