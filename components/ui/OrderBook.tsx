@@ -31,7 +31,7 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
   const { isWalletConnected, ecashAddress, userTokens } = useWallet();
   // Temporary feature switch: disable StarShard holding gate while keeping logic for quick rollback.
   const ENABLE_STARSHARD_ACCESS_GATE = false;
-  const REQUIRED_TOKEN_ID = "d1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb";
+  const REQUIRED_TOKEN_ID = TOKEN_IDS.STAR_SHARD;
   const REQUIRED_MIN_BALANCE = 100_000n;
 
   const hasRequiredTokenBalance = (() => {
@@ -66,7 +66,7 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
           }));
       }
 
-      if (tokenId === "83f682dffca1cab952d7439f4b5a09ad89e9492b24c879be58d59cf88859f254") {
+      if (tokenId === TOKEN_IDS.SPARK) {
         formattedOrders.push({
           price: 1,
           amount: 10000000000,
@@ -79,7 +79,7 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
       console.error('Error fetching buy orders:', error);
 
       // Even on request failure, keep the Spark page hint bid
-      if (tokenId === "83f682dffca1cab952d7439f4b5a09ad89e9492b24c879be58d59cf88859f254") {
+      if (tokenId === TOKEN_IDS.SPARK) {
         setBuyOrders([{
           price: 1,
           amount: 10000000000,

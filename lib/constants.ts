@@ -5,6 +5,7 @@ export const API_ENDPOINTS = {
 
 export const TOKEN_IDS = {
   STAR_SHARD: 'd1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb',
+  SPARK: '83f682dffca1cab952d7439f4b5a09ad89e9492b24c879be58d59cf88859f254',
 } as const;
 
 export const PRICE_CONSTANTS = {

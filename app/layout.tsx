@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { OrderProcessingProvider } from "@/lib/context/OrderProcessingContext";
 import { WebSocketProvider } from "@/lib/context/WebSocketContext";
 import { ThemeProvider } from "../components/ui/theme-provider"
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { WalletProvider } from '@/lib/context/WalletContext';
 
 import "./globals.css";
@@ -46,14 +47,16 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <WebSocketProvider>
-            <OrderProcessingProvider>
-              <WalletProvider>
-                {children}
-                <Toaster />
-              </WalletProvider>
-            </OrderProcessingProvider>
-          </WebSocketProvider>
+          <ErrorBoundary>
+            <WebSocketProvider>
+              <OrderProcessingProvider>
+                <WalletProvider>
+                  {children}
+                  <Toaster />
+                </WalletProvider>
+              </OrderProcessingProvider>
+            </WebSocketProvider>
+          </ErrorBoundary>
         </ThemeProvider>
       </body>
     </html>
