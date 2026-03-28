@@ -1,4 +1,6 @@
 import { Agora } from "ecash-agora"
+
+type AgoraOffer = Awaited<ReturnType<Agora['activeOffersByTokenId']>>[number]
 import { encodeCashAddress } from "ecashaddrjs"
 import { shaRmd160 } from "ecash-lib"
 import { chronik, fetchTokenDetails, getTokenDecimalsFromDetails, getTokenAmountFromToken } from "./chronik"
@@ -80,7 +82,7 @@ const getTokenDecimals = async (tokenId: string): Promise<number> => {
   return 0
 }
 
-const formatOffer = (offer: any, divisor: number): Order | null => {
+const formatOffer = (offer: AgoraOffer, divisor: number): Order | null => {
   try {
     const totalTokens = getTokenAmountFromToken(offer.token)
     if (totalTokens <= BigInt(0)) return null
@@ -151,7 +153,7 @@ export const fetchAgoraOrderBook = async (
     const offers = await getAgoraClient().activeOffersByTokenId(tokenId)
 
     const orders = offers
-      .map((offer: any) => formatOffer(offer, divisor))
+      .map((offer: AgoraOffer) => formatOffer(offer, divisor))
       .filter(Boolean) as Order[]
 
     orders.sort((a, b) => b.price - a.price)
