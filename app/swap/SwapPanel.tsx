@@ -1,6 +1,6 @@
 "use client"
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import * as ecashLib from "ecash-lib";
 import * as bip39 from "bip39";
 import { Button } from "@/components/ui/button";
@@ -121,7 +121,7 @@ export function SwapPanel() {
   };
 
   // Fetch order book for the selected token
-  const fetchOrderBook = async () => {
+  const fetchOrderBook = useCallback(async () => {
     try {
       const data = await fetchAgoraOrderBook(selectedToken.id);
       if (data.success && data.data) {
@@ -134,7 +134,7 @@ export function SwapPanel() {
       console.error('Error fetching order book:', error);
       setOrderBook({ orders: [] });
     }
-  };
+  }, [selectedToken.id]);
 
   // Fetch order book when token changes or PRO panel is shown
   useEffect(() => {
@@ -673,7 +673,8 @@ export function SwapPanel() {
 
   const handleClearLocalStorage = () => {
     localStorage.clear();
-    
+
+    setIsAutoProcessing(false);
     disconnectWallet();
     
     setSpendAmount('');
