@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { Inter } from 'next/font/google'
 import localFont from "next/font/local";
+import Script from "next/script";
 import { Toaster } from "@/components/ui/toaster"
 import { OrderProcessingProvider } from "@/lib/context/OrderProcessingContext";
 import { WebSocketProvider } from "@/lib/context/WebSocketContext";
 import { ThemeProvider } from "../components/ui/theme-provider"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { WalletProvider } from '@/lib/context/WalletContext';
+import Footer from "@/components/ui/Footer";
 
 import "./globals.css";
 
@@ -41,6 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${marlinFont.variable} antialiased`}>
+        <Script src="https://unpkg.com/@paybutton/paybutton/dist/paybutton.js" strategy="lazyOnload" />
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
@@ -52,6 +55,7 @@ export default function RootLayout({
               <OrderProcessingProvider>
                 <WalletProvider>
                   {children}
+                  <Footer />
                   <Toaster />
                 </WalletProvider>
               </OrderProcessingProvider>
