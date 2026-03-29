@@ -271,7 +271,6 @@ export const compute24hStats = (
     latestPrice,
     priceChange24h,
     last24HoursXECAmount,
-    last30DaysXECAmount: last24HoursXECAmount,
     totalTransactions: sorted.length,
     latestBlockHeight,
   }

@@ -1013,53 +1013,40 @@ export default function Component() {
       const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
       const customTokens = getCustomTokens()
       const latestPrice = rawLatestPrice
+      const savedAt = Date.now()
+
+      const tokenSnapshot = {
+        id: tokenId,
+        tokenId,
+        name,
+        latestPrice,
+        priceChange24h,
+        last24HoursXECAmount,
+        last30DaysXECAmount,
+        totalTransactions: totalTransactions30d,
+        totalXECAmount: last30DaysXECAmount,
+        official: tokenConfig?.official || false,
+        gratitude: tokenConfig?.gratitude || false,
+        community: tokenConfig?.community || false,
+        stablecoin: tokenConfig?.stablecoin || false,
+        apyTag: tokenConfig?.apyTag,
+        watchlist: customTokens.includes(tokenId),
+      }
 
       if (!cancelledRef.current) {
-        applyTokenUpdate(tokenId, {
-          id: tokenId,
-          tokenId,
-          name,
-          latestPrice,
-          priceChange24h,
-          last24HoursXECAmount,
-          last30DaysXECAmount,
-          totalTransactions: totalTransactions30d,
-          totalXECAmount: last30DaysXECAmount,
-          official: tokenConfig?.official || false,
-          gratitude: tokenConfig?.gratitude || false,
-          community: tokenConfig?.community || false,
-          stablecoin: tokenConfig?.stablecoin || false,
-          apyTag: tokenConfig?.apyTag,
-          watchlist: customTokens.includes(tokenId),
-        })
+        applyTokenUpdate(tokenId, tokenSnapshot)
       }
 
       if (!fetchError && !cancelledRef.current) {
         setCachedTokenData(tokenId, {
-          computedAt: Date.now(),
+          computedAt: savedAt,
           latestProcessedHeight: latestProcessedHeight || 0,
           last30DaysXECAmount,
           totalTransactions: totalTransactions30d,
         })
         setCachedTokenSummary(tokenId, {
-          computedAt: Date.now(),
-          data: {
-            id: tokenId,
-            tokenId,
-            name,
-            latestPrice,
-            priceChange24h,
-            last24HoursXECAmount,
-            last30DaysXECAmount,
-            totalTransactions: totalTransactions30d,
-            totalXECAmount: last30DaysXECAmount,
-            official: tokenConfig?.official || false,
-            gratitude: tokenConfig?.gratitude || false,
-            community: tokenConfig?.community || false,
-            stablecoin: tokenConfig?.stablecoin || false,
-            apyTag: tokenConfig?.apyTag,
-            watchlist: customTokens.includes(tokenId),
-          },
+          computedAt: savedAt,
+          data: tokenSnapshot,
         })
       }
 
