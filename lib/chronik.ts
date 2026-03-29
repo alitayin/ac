@@ -2,7 +2,6 @@ import { ChronikClient } from "chronik-client"
 
 export const chronik = new ChronikClient([
   "https://chronik-native1.fabien.cash",
-  "https://chronik.e.cash",
   "https://chronik-native2.fabien.cash",
   "https://chronik-native3.fabien.cash",
 ])
