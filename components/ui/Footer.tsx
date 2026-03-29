@@ -54,7 +54,7 @@ export default function Footer() {
   }, [])
 
   return (
-    <footer className="w-full border-t border-border mt-12 py-8 px-4">
+    <footer className="w-full mt-12 py-8 px-4">
       <div className="max-w-4xl mx-auto flex flex-col items-center gap-6">
 
         {/* PayButtons */}
