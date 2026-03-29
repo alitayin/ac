@@ -90,9 +90,6 @@ export const deleteSummaryCache = (tokenId: string) => {
 export const refreshSummaryCacheTimestamps = (tokenIds: string[]) => {
   try {
     const now = Date.now()
-    const nowStr = new Date(now).toLocaleString()
-    let updatedCount = 0
-    
     tokenIds.forEach((tokenId) => {
       const cached = getCachedTokenSummary(tokenId)
       if (cached) {
@@ -100,7 +97,6 @@ export const refreshSummaryCacheTimestamps = (tokenIds: string[]) => {
           ...cached,
           computedAt: now,
         })
-        updatedCount++
       }
     })
   } catch (_err) {

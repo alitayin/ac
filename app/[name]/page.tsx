@@ -275,7 +275,7 @@ export default function TokenPage() {
         name: tokenData.name
       });
     }
-  }, [tokenData.tokenId]);
+  }, [tokenData.tokenId, tokenData.name]);
 
   const fetchOrderBook = async () => {
     try {
