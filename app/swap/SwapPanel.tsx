@@ -6,6 +6,7 @@ import * as bip39 from "bip39";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useOrderProcessing } from "@/lib/context/OrderProcessingContext";
+import { useAutoExecution } from "@/lib/context/AutoExecutionContext";
 import {
   Tabs,
   TabsContent,
@@ -86,6 +87,7 @@ export function SwapPanel() {
   const [tokenPriceInput, setTokenPriceInput] = useState<string>('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
   const { isAutoProcessing, setIsAutoProcessing } = useOrderProcessing();
+  const { executeOrders } = useAutoExecution();
   const [showOrdersRainbow, setShowOrdersRainbow] = useState<boolean>(false);
   const [ordersRainbowTimer, setOrdersRainbowTimer] = useState<NodeJS.Timeout | null>(null);
   const [showUsdPrice, setShowUsdPrice] = useState<boolean>(false);
@@ -586,7 +588,7 @@ export function SwapPanel() {
       });
     }
     
-    if (!isAutoProcessing && isNotifying) {
+    if (!isAutoProcessing) {
       setIsAutoProcessing(true);
       localStorage.setItem('auto_processing', 'true');
       if (isOfflineOrder) {
@@ -600,6 +602,10 @@ export function SwapPanel() {
           description: "System will automatically search and process orders in real-time via WebSocket",
         });
       }
+    }
+
+    if (!isOfflineOrder) {
+      executeOrders().catch(() => {});
     }
     
     setSpendAmount('');
