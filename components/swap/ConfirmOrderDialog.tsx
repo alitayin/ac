@@ -5,6 +5,7 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -72,6 +73,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
               <X className="h-4 w-4" />
             </Button>
           </AlertDialogTitle>
+          <AlertDialogDescription className="sr-only">Review and confirm your order details before submitting.</AlertDialogDescription>
           <div className="mt-4">
             <span className="text-sm text-muted-foreground">
               You are about to create the following order:
