@@ -1,5 +1,5 @@
 "use client"
-import { createContext, useState, useContext, useEffect, ReactNode, useRef } from 'react';
+import { createContext, useState, useContext, useEffect, ReactNode, useRef, useCallback } from 'react';
 import * as ecashLib from 'ecash-lib';
 import * as ecashAddrJs from 'ecashaddrjs';
 import { disconnectAddress } from '../websocket-client';
@@ -31,10 +31,11 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   const [balance, setBalance] = useState<string>('0');
   const [userTokens, setUserTokens] = useState<{[key: string]: string}>({});
   const [mnemonic, setMnemonic] = useState<string>('');
-  const [wordList, setWordList] = useState<string[]>([]);
+  const wordListRef = useRef<string[]>([]);
   const [isGuestMode, setIsGuestMode] = useState<boolean>(false);
   const wsRef = useRef<ReturnType<typeof sharedChronik.ws> | null>(null);
   const subscribedAddressRef = useRef<string>('');
+  const wsReconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
 
   const fetchBalance = async (address: string) => {
@@ -85,11 +86,11 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   };
 
 
-  const refreshBalance = async () => {
+  const refreshBalance = useCallback(async () => {
     if (ecashAddress) {
       await fetchBalance(ecashAddress);
     }
-  };
+  }, [ecashAddress]);
 
 
   const ensureAddressWebSocket = () => {
@@ -110,8 +111,8 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       onEnd: () => {
         wsRef.current = null;
         subscribedAddressRef.current = '';
-    
-        setTimeout(() => ensureAddressWebSocket(), 1000);
+        if (wsReconnectTimerRef.current) clearTimeout(wsReconnectTimerRef.current);
+        wsReconnectTimerRef.current = setTimeout(() => ensureAddressWebSocket(), 1000);
       },
     });
 
@@ -137,43 +138,47 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
 
   
   useEffect(() => {
-    fetch('/english.json')
-      .then(res => res.json())
-      .then(data => setWordList(data.words))
-      .catch(err => console.error('Failed to load word list:', err));
-  }, []);
-
-  
-  useEffect(() => {
     const savedMnemonic = localStorage.getItem('wallet_mnemonic');
     const savedAddress = localStorage.getItem('wallet_address');
     const savedIsGuest = localStorage.getItem('wallet_is_guest');
-    
-  
+
     if (savedIsGuest === 'true' && savedAddress) {
       setIsWalletConnected(true);
       setEcashAddress(savedAddress);
       setIsGuestMode(true);
       setMnemonic('');
-    } else if (savedMnemonic && savedAddress && wordList.length > 0) {
-  
-      try {
-        ecashLib.mnemonicToEntropy(savedMnemonic.trim(), wordList);
-        setIsWalletConnected(true);
-        setMnemonic(savedMnemonic);
-        setEcashAddress(savedAddress);
-        setIsGuestMode(false);
-      } catch (error) {
-        localStorage.removeItem('wallet_mnemonic');
-        localStorage.removeItem('wallet_address');
-        localStorage.removeItem('wallet_is_guest');
-        setIsWalletConnected(false);
-        setMnemonic('');
-        setEcashAddress('');
-        setIsGuestMode(false);
-      }
+      return;
     }
-  }, [wordList]);
+
+    if (savedMnemonic && savedAddress) {
+      fetch('/english.json')
+        .then(res => res.json())
+        .then(data => {
+          wordListRef.current = data.words;
+          try {
+            ecashLib.mnemonicToEntropy(savedMnemonic.trim(), wordListRef.current);
+            setIsWalletConnected(true);
+            setMnemonic(savedMnemonic);
+            setEcashAddress(savedAddress);
+            setIsGuestMode(false);
+          } catch (error) {
+            localStorage.removeItem('wallet_mnemonic');
+            localStorage.removeItem('wallet_address');
+            localStorage.removeItem('wallet_is_guest');
+            setIsWalletConnected(false);
+            setMnemonic('');
+            setEcashAddress('');
+            setIsGuestMode(false);
+          }
+        })
+        .catch(err => console.error('Failed to load word list:', err));
+    } else {
+      fetch('/english.json')
+        .then(res => res.json())
+        .then(data => { wordListRef.current = data.words; })
+        .catch(err => console.error('Failed to load word list:', err));
+    }
+  }, []);
 
   useEffect(() => {
     if (isWalletConnected && ecashAddress) {
@@ -182,7 +187,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
 
     return () => {
-
+      if (wsReconnectTimerRef.current) clearTimeout(wsReconnectTimerRef.current);
       subscribedAddressRef.current = '';
       wsRef.current?.close?.();
       wsRef.current = null;
@@ -191,11 +196,11 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
 
   const connectWallet = async (mnemonicPhrase: string): Promise<boolean> => {
     try {
-      if (!wordList.length) {
+      if (!wordListRef.current.length) {
         throw new Error('Word list not loaded');
       }
 
-      ecashLib.mnemonicToEntropy(mnemonicPhrase.trim(), wordList);
+      ecashLib.mnemonicToEntropy(mnemonicPhrase.trim(), wordListRef.current);
       
       const seed = ecashLib.mnemonicToSeed(mnemonicPhrase);
       const hdRoot = ecashLib.HdNode.fromSeed(seed);
