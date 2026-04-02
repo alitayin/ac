@@ -238,7 +238,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
                           rel="noopener noreferrer"
                           className="hover:underline"
                         >
-                          {listing.tokenId.substring(0, 8)}...{listing.tokenId.substring(listing.tokenId.length - 8)}
+                          View on Cashtab
                         </a>
                       </div>
                     </div>
