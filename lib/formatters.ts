@@ -1,24 +1,29 @@
 export const formatNumber = (num: number | null | undefined, noDecimals: boolean = false): string => {
   if (num === null || num === undefined) return "0";
-  
-  if (num >= 1e9) return (num / 1e9).toFixed(3) + 'B';
-  if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-  if (num >= 1e3) return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const absNum = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+
+  if (absNum >= 1e9) return sign + (absNum / 1e9).toFixed(3) + 'B';
+  if (absNum >= 1e6) return sign + (absNum / 1e6).toFixed(2) + 'M';
+  if (absNum >= 1e3) return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return noDecimals ? Math.round(num).toString() : num.toFixed(2);
 };
 
 export const formatPrice = (price: number | null | undefined): string => {
   if (price === null || price === undefined) return "0";
-  
+
   const roundedPrice = Math.round(price * 1e8) / 1e8;
-  
-  if (roundedPrice >= 1 || Math.abs(roundedPrice - 1) < Number.EPSILON) {
-    return roundedPrice.toFixed(2);
+  const absPrice = Math.abs(roundedPrice);
+  const sign = roundedPrice < 0 ? '-' : '';
+
+  if (absPrice >= 1 || Math.abs(absPrice - 1) < Number.EPSILON) {
+    return sign + absPrice.toFixed(2);
   }
-  
-  if (roundedPrice >= 0.1) return Number(roundedPrice.toFixed(3)).toString();
-  if (roundedPrice >= 0.01) return Number(roundedPrice.toFixed(5)).toString();
-  return Number(roundedPrice.toFixed(8)).toString();
+
+  if (absPrice >= 0.1) return sign + Number(absPrice.toFixed(3)).toString();
+  if (absPrice >= 0.01) return sign + Number(absPrice.toFixed(5)).toString();
+  return sign + Number(absPrice.toFixed(8)).toString();
 };
 
 export const shortenAddress = (address: string, chars: number = 3): string => {
@@ -36,38 +41,41 @@ export const convertPrice = (
   showUSD: boolean = false,
   xecPrice: number = 0
 ): string => {
+  const absPrice = Math.abs(price);
+  const sign = price < 0 ? '-' : '';
+
   if (!showUSD || !xecPrice) {
     let formattedPrice: string;
-    if (price >= 1) {
-      formattedPrice = price.toFixed(2);
-    } else if (price >= 0.01) {
-      formattedPrice = price.toFixed(3);
-    } else if (price >= 0.001) {
-      formattedPrice = price.toFixed(4);
-    } else if (price >= 0.0001) {
-      formattedPrice = price.toFixed(5);
+    if (absPrice >= 1) {
+      formattedPrice = absPrice.toFixed(2);
+    } else if (absPrice >= 0.01) {
+      formattedPrice = absPrice.toFixed(3);
+    } else if (absPrice >= 0.001) {
+      formattedPrice = absPrice.toFixed(4);
+    } else if (absPrice >= 0.0001) {
+      formattedPrice = absPrice.toFixed(5);
     } else {
-      formattedPrice = price.toFixed(10);
+      formattedPrice = absPrice.toFixed(10);
     }
-    
+
     const parts = formattedPrice.split('.');
     if (parts.length === 2) {
       const integerPart = parts[0];
       let decimalPart = parts[1].replace(/0+$/, '');
-      
+
       if (decimalPart.length < 2) {
         decimalPart = decimalPart.padEnd(2, '0');
       }
-      
-      return `${integerPart}.${decimalPart}`;
+
+      return sign + `${integerPart}.${decimalPart}`;
     }
-    
-    return formattedPrice;
+
+    return sign + formattedPrice;
   }
-  
-  const usdValue = price * xecPrice;
+
+  const usdValue = absPrice * xecPrice;
   let formattedUsdPrice: string;
-  
+
   if (usdValue >= 1) {
     formattedUsdPrice = usdValue.toFixed(2);
   } else if (usdValue >= 0.01) {
@@ -79,6 +87,6 @@ export const convertPrice = (
   } else {
     formattedUsdPrice = usdValue.toFixed(10);
   }
-  
-  return formattedUsdPrice.replace(/\.?0+$/, '');
+
+  return sign + formattedUsdPrice.replace(/\.?0+$/, '');
 };

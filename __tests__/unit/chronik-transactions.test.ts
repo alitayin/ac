@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { isAgoraCanceled, detectAgoraTokenId } from '@/lib/chronik-transactions'
+import { isAgoraCanceled, detectAgoraTokenId, processMatchedTransaction } from '@/lib/chronik-transactions'
 import { createMockTransaction, createCanceledTransaction } from '../helpers/mocks'
 
 // Mock dependencies
@@ -186,131 +186,329 @@ describe('chronik-transactions', () => {
     })
   })
 
-  describe('transaction processing edge cases', () => {
-    it('should handle missing xecOutput', () => {
+  describe('processMatchedTransaction behavior', () => {
+    it('should return null when xecOutput (outputs[1]) is missing', () => {
       const tx = createMockTransaction({
         outputs: [
           {},
           undefined, // Missing XEC output
           {},
-          {
-            token: {
-              tokenId: 'test-token',
-              amount: BigInt(1000),
-            },
-          },
+          { token: { tokenId: 'test-token', amount: BigInt(1000) } },
         ],
       })
 
-      expect(tx.outputs[1]).toBeUndefined()
+      const result = processMatchedTransaction(tx, 100)
+      expect(result).toBe(null)
     })
 
-    it('should handle sats vs value field', () => {
-      const txWithSats = createMockTransaction({
+    it('should prefer sats over value field for XEC amount', () => {
+      const tx = createMockTransaction({
         outputs: [
           {},
-          { sats: 100000 },
+          { sats: 50000, value: 99999 }, // sats should win
           {},
-          { token: { tokenId: 'test', amount: BigInt(1000) } },
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
         ],
       })
 
-      const txWithValue = createMockTransaction({
-        outputs: [
-          {},
-          { value: 100000 },
-          {},
-          { token: { tokenId: 'test', amount: BigInt(1000) } },
-        ],
-      })
-
-      expect(txWithSats.outputs[1].sats).toBe(100000)
-      expect(txWithValue.outputs[1].value).toBe(100000)
+      const result = processMatchedTransaction(tx, 100)
+      expect(result).not.toBe(null)
+      expect(result!.price).toBe((50000 / 1000) / 100) // 50000 sats / 1000 tokens / 100
     })
 
-    it('should handle timestamp selection logic', () => {
+    it('should fallback to value when sats is undefined', () => {
+      const tx = createMockTransaction({
+        outputs: [
+          {},
+          { value: 30000 }, // Only value field
+          {},
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
+        ],
+      })
+
+      const result = processMatchedTransaction(tx, 100)
+      expect(result).not.toBe(null)
+      expect(result!.price).toBe((30000 / 1000) / 100)
+    })
+
+    it('should use 0 when both sats and value are missing', () => {
+      const tx = createMockTransaction({
+        outputs: [
+          {},
+          {}, // No sats or value
+          {},
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
+        ],
+      })
+
+      const result = processMatchedTransaction(tx, 100)
+      expect(result).not.toBe(null)
+      expect(result!.price).toBe(0)
+    })
+
+    it('should select earliest valid timestamp from block.timestamp and timeFirstSeen', () => {
       const now = Math.floor(Date.now() / 1000)
 
-      // Test with both timestamps
-      const tx1 = createMockTransaction({
+      const tx = createMockTransaction({
         block: { height: 800000, timestamp: now - 100 },
         timeFirstSeen: now - 50,
+        outputs: [
+          {},
+          { sats: 10000 },
+          {},
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
+        ],
       })
-      expect(tx1.block.timestamp).toBeLessThan(tx1.timeFirstSeen)
 
-      // Test with only timeFirstSeen
-      const tx2 = createMockTransaction({
-        block: undefined,
-        timeFirstSeen: now,
-      })
-      expect(tx2.timeFirstSeen).toBe(now)
+      const result = processMatchedTransaction(tx, 100)
+      expect(result!.timestamp).toBe(now - 100) // Should pick earlier one
     })
 
-    it('should handle future timestamps', () => {
-      const futureTime = Math.floor(Date.now() / 1000) + 10000
+    it('should use timeFirstSeen when block.timestamp is missing', () => {
+      const now = Math.floor(Date.now() / 1000)
+
+      const tx = createMockTransaction({
+        block: undefined,
+        timeFirstSeen: now - 200,
+        outputs: [
+          {},
+          { sats: 10000 },
+          {},
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
+        ],
+      })
+
+      const result = processMatchedTransaction(tx, 100)
+      expect(result!.timestamp).toBe(now - 200)
+    })
+
+    it('should clamp future timestamps to current time', () => {
+      const now = Math.floor(Date.now() / 1000)
+      const futureTime = now + 10000
+
       const tx = createMockTransaction({
         block: { height: 800000, timestamp: futureTime },
-        timeFirstSeen: futureTime,
+        timeFirstSeen: futureTime + 5000,
+        outputs: [
+          {},
+          { sats: 10000 },
+          {},
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
+        ],
       })
 
-      // Should clamp to current time
-      expect(tx.block.timestamp).toBeGreaterThan(Math.floor(Date.now() / 1000))
+      const result = processMatchedTransaction(tx, 100)
+      expect(result!.timestamp).toBeLessThanOrEqual(now + 1) // Allow 1 sec tolerance
     })
 
-    it('should handle missing txid and hash', () => {
-      const tx = createMockTransaction()
+    it('should use fallback timestamp when all timestamps are invalid', () => {
+      const now = Math.floor(Date.now() / 1000)
+
+      const tx = createMockTransaction({
+        block: { height: 800000, timestamp: -1 },
+        timeFirstSeen: 0,
+        outputs: [
+          {},
+          { sats: 10000 },
+          {},
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
+        ],
+      })
+
+      const result = processMatchedTransaction(tx, 100)
+      expect(result!.timestamp).toBeGreaterThan(now - 5) // Should be close to now
+    })
+
+    it('should fallback to hash when txid is missing', () => {
+      const tx = createMockTransaction({
+        outputs: [
+          {},
+          { sats: 10000 },
+          {},
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
+        ],
+      })
+      delete (tx as any).txid
+      ;(tx as any).hash = 'fallback-hash-value'
+
+      const result = processMatchedTransaction(tx, 100)
+      expect(result!.txid).toBe('fallback-hash-value')
+    })
+
+    it('should return null when both txid and hash are missing', () => {
+      const tx = createMockTransaction({
+        outputs: [
+          {},
+          { sats: 10000 },
+          {},
+          { token: { tokenId: 'test', amount: BigInt(100000) } },
+        ],
+      })
       delete (tx as any).txid
       delete (tx as any).hash
 
-      expect(tx.txid).toBeUndefined()
+      const result = processMatchedTransaction(tx, 100)
+      expect(result).toBe(null)
     })
 
-    it('should handle zero token amount', () => {
+    it('should return null when token amount is zero after division', () => {
       const tx = createMockTransaction({
         outputs: [
           {},
-          { sats: 100000 },
+          { sats: 10000 },
           {},
-          {
-            token: {
-              tokenId: 'test-token',
-              amount: BigInt(0),
-            },
-          },
+          { token: { tokenId: 'test', amount: BigInt(0) } },
         ],
       })
 
-      expect(tx.outputs[3].token.amount).toBe(BigInt(0))
+      const result = processMatchedTransaction(tx, 100)
+      expect(result).toBe(null)
     })
 
-    it('should handle very large token amounts', () => {
+    it('should return null when token amount is negative', () => {
       const tx = createMockTransaction({
         outputs: [
           {},
-          { sats: 100000 },
+          { sats: 10000 },
           {},
-          {
-            token: {
-              tokenId: 'test-token',
-              amount: BigInt('999999999999999999'),
-            },
-          },
+          { token: { tokenId: 'test', amount: BigInt(-1000) } },
         ],
       })
 
-      expect(tx.outputs[3].token.amount).toBe(BigInt('999999999999999999'))
+      const result = processMatchedTransaction(tx, 100)
+      expect(result).toBe(null)
     })
 
-    it('should handle transaction with multiple inputs', () => {
+    it('should return null when token amount becomes Infinity', () => {
       const tx = createMockTransaction({
-        inputs: [
-          { inputScript: '514d075041525449414c' },
-          { inputScript: '514d075041525449414c' },
-          { inputScript: '514d075041525449414c' },
+        outputs: [
+          {},
+          { sats: 10000 },
+          {},
+          { token: { tokenId: 'test', amount: BigInt('99999999999999999999999999') } },
         ],
       })
 
-      expect(tx.inputs.length).toBe(3)
+      const result = processMatchedTransaction(tx, 0) // divisor = 0 causes Infinity
+      expect(result).toBe(null)
+    })
+  })
+
+  describe('fetchAgoraTransactionsFromChronik pagination', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('should stop when reaching targetCount', async () => {
+      const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
+      const mockChronik = {
+        tokenId: vi.fn().mockReturnThis(),
+        history: vi.fn()
+          .mockResolvedValueOnce({
+            txs: Array(5).fill(createMockTransaction()),
+          })
+          .mockResolvedValueOnce({
+            txs: Array(5).fill(createMockTransaction()),
+          }),
+      }
+
+      await fetchAgoraTransactionsFromChronik('test-token', undefined, { targetCount: 3 }, mockChronik as any)
+
+      expect(mockChronik.history).toHaveBeenCalledTimes(1) // Should stop after first page
+    })
+
+    it('should stop when page returns fewer items than pageSize', async () => {
+      const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
+      const mockChronik = {
+        tokenId: vi.fn().mockReturnThis(),
+        history: vi.fn().mockResolvedValueOnce({
+          txs: Array(50).fill(createMockTransaction()), // Less than default pageSize (200)
+        }),
+      }
+
+      await fetchAgoraTransactionsFromChronik('test-token', undefined, {}, mockChronik as any)
+
+      expect(mockChronik.history).toHaveBeenCalledTimes(1)
+    })
+
+    it('should stop when maxBlocksBack threshold is reached', async () => {
+      const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
+      const mockChronik = {
+        tokenId: vi.fn().mockReturnThis(),
+        history: vi.fn()
+          .mockResolvedValueOnce({
+            txs: [
+              createMockTransaction({ block: { height: 800000, timestamp: 1000 } }),
+              createMockTransaction({ block: { height: 799900, timestamp: 1000 } }),
+            ],
+          })
+          .mockResolvedValueOnce({
+            txs: [
+              createMockTransaction({ block: { height: 799800, timestamp: 1000 } }), // Should be filtered
+            ],
+          }),
+      }
+
+      const result = await fetchAgoraTransactionsFromChronik(
+        'test-token',
+        undefined,
+        { maxBlocksBack: 150, pageSize: 2 },
+        mockChronik as any
+      )
+
+      expect(result.length).toBe(2) // Only first 2 txs within range
+    })
+
+    it('should stop when stopBelowHeight threshold is reached', async () => {
+      const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
+      const mockChronik = {
+        tokenId: vi.fn().mockReturnThis(),
+        history: vi.fn().mockResolvedValueOnce({
+          txs: [
+            createMockTransaction({ block: { height: 800100, timestamp: 1000 } }),
+            createMockTransaction({ block: { height: 800001, timestamp: 1000 } }),
+            createMockTransaction({ block: { height: 799999, timestamp: 1000 } }), // Below threshold
+          ],
+        }),
+      }
+
+      const result = await fetchAgoraTransactionsFromChronik(
+        'test-token',
+        undefined,
+        { stopBelowHeight: 800000, pageSize: 10 },
+        mockChronik as any
+      )
+
+      expect(result.length).toBe(2)
+    })
+
+    it('should throw error when failOnError is true and fetch fails', async () => {
+      const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
+      const mockChronik = {
+        tokenId: vi.fn().mockReturnThis(),
+        history: vi.fn().mockRejectedValue(new Error('Network error')),
+      }
+
+      await expect(
+        fetchAgoraTransactionsFromChronik('test-token', undefined, { failOnError: true }, mockChronik as any)
+      ).rejects.toThrow('Network error')
+    })
+
+    it('should return empty array when failOnError is false and fetch fails', async () => {
+      const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
+      const mockChronik = {
+        tokenId: vi.fn().mockReturnThis(),
+        history: vi.fn().mockRejectedValue(new Error('Network error')),
+      }
+
+      const result = await fetchAgoraTransactionsFromChronik(
+        'test-token',
+        undefined,
+        { failOnError: false },
+        mockChronik as any
+      )
+
+      expect(result).toEqual([])
     })
   })
 })

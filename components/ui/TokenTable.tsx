@@ -74,9 +74,11 @@ import {
   setCachedTokenData,
   getCachedTokenSummary,
   setCachedTokenSummary,
+  invalidateTokenCache,
+  deleteSummaryCache,
   CACHE_TTL_MS,
   SUMMARY_CACHE_TTL_MS,
-  BLOCKS_PER_3_DAYS,
+  BLOCKS_PER_7_DAYS,
   BLOCKS_PER_DAY,
   compute24hStats,
 } from "@/lib/token-stats"
@@ -164,6 +166,10 @@ export default function Component() {
   const [adTokenId, setAdTokenId] = React.useState<string | null>(null)
   const [adTokenName, setAdTokenName] = React.useState<string>("Loading...")
   const [adTokenTicker, setAdTokenTicker] = React.useState<string>("")
+
+  const [largeDatasetTokens, setLargeDatasetTokens] = React.useState<Set<string>>(new Set())
+  const [approvedLargeTokens, setApprovedLargeTokens] = React.useState<Set<string>>(new Set())
+  const approvedLargeTokensRef = React.useRef<Set<string>>(new Set())
 
   React.useEffect(() => {
     if (isChronikLoading || !chronikClient) return
@@ -675,7 +681,7 @@ export default function Component() {
     },
     {
       accessorKey: "last30DaysXECAmount",
-      header: "3D Volume",
+      header: "7D Volume",
       cell: ({ row }) => {
         const isAdRow = row.original.isAd
         const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
@@ -688,6 +694,25 @@ export default function Component() {
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
+
+        const isLargeDataset = largeDatasetTokens.has(tokenIdForLoad)
+        const isApproved = approvedLargeTokens.has(tokenIdForLoad)
+
+        if (isLargeDataset && !isApproved) {
+          return (
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+              onClick={(e) => {
+                e.stopPropagation()
+                load7DayDataForToken(tokenIdForLoad, row.original.name)
+              }}
+            >
+              Show
+            </Badge>
+          )
+        }
+
         return (
           <div className="text-left">
             {formatNumber(row.original.last30DaysXECAmount || 0)} XEC
@@ -697,7 +722,7 @@ export default function Component() {
     },
     {
       accessorKey: "totalTransactions",
-      header: "Sales in 3D",
+      header: "Sales in 7D",
       cell: ({ row }) => {
         const isAdRow = row.original.isAd
         const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
@@ -710,6 +735,25 @@ export default function Component() {
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">loading</div>
         }
+
+        const isLargeDataset = largeDatasetTokens.has(tokenIdForLoad)
+        const isApproved = approvedLargeTokens.has(tokenIdForLoad)
+
+        if (isLargeDataset && !isApproved) {
+          return (
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+              onClick={(e) => {
+                e.stopPropagation()
+                load7DayDataForToken(tokenIdForLoad, row.original.name)
+              }}
+            >
+              Show
+            </Badge>
+          )
+        }
+
         return (
           <div className="text-left">
             {formatNumber(row.original.totalTransactions || 0, true)}
@@ -776,6 +820,29 @@ export default function Component() {
         })
       }, UI_CONSTANTS.HIGHLIGHT_DURATION)
     }
+  }
+
+  const load7DayDataForToken = async (tokenId: string, name: string) => {
+    // Update ref immediately for synchronous access
+    approvedLargeTokensRef.current.add(tokenId)
+
+    setApprovedLargeTokens((prev) => {
+      const next = new Set(prev)
+      next.add(tokenId)
+      return next
+    })
+
+    setLoadedTokens((prev) => {
+      const next = new Set(prev)
+      next.delete(tokenId)
+      return next
+    })
+
+    // Clear cache to force reload with 7D data
+    invalidateTokenCache(tokenId)
+    deleteSummaryCache(tokenId)
+
+    await loadTokenStatsRef.current?.(tokenId, name, { ignoreFilter: true })
   }
 
   const loadTokenStats = async (
@@ -856,12 +923,16 @@ export default function Component() {
 
       let fetchError = false
       const tx24h: Transaction[] = []
+      let pagesRead = 0
 
       try {
         await fetchAgoraTransactionsFromChronik(
           tokenId,
-          (batch) => {
+          (batch, meta) => {
             tx24h.push(...batch)
+            if (meta?.page !== undefined) {
+              pagesRead = meta.page + 1
+            }
           },
           {
             targetCount: 400,
@@ -961,24 +1032,77 @@ export default function Component() {
       }
 
       if (!cacheValid) {
+        const totalTransactionsScanned = pagesRead * 200
+        console.log(`[Large Dataset Check] Token: ${name}, pages read: ${pagesRead}, total scanned: ${totalTransactionsScanned}`)
+
+        if (pagesRead >= 3) {
+          console.log(`[Large Dataset] Token ${name} required ${pagesRead} pages (${totalTransactionsScanned}+ transactions), marking as large dataset`)
+          setLargeDatasetTokens((prev) => {
+            if (prev.has(tokenId)) return prev
+            const next = new Set(prev)
+            next.add(tokenId)
+            return next
+          })
+
+          if (!approvedLargeTokens.has(tokenId) && !approvedLargeTokensRef.current.has(tokenId)) {
+            console.log(`[Large Dataset] Token ${name} not approved, skipping 7D data fetch`)
+            const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
+            const customTokens = getCustomTokens()
+
+            if (!cancelledRef.current) {
+              applyTokenUpdate(tokenId, {
+                tokenId,
+                name,
+                latestPrice: rawLatestPrice,
+                priceChange24h,
+                last24HoursXECAmount,
+                last30DaysXECAmount: 0,
+                totalTransactions: 0,
+                totalXECAmount: 0,
+                official: tokenConfig?.official || false,
+                gratitude: tokenConfig?.gratitude || false,
+                community: tokenConfig?.community || false,
+                stablecoin: tokenConfig?.stablecoin || false,
+                apyTag: tokenConfig?.apyTag,
+                watchlist: customTokens.includes(tokenId),
+              })
+
+              setLoadedTokens((prev) => {
+                if (prev.has(tokenId)) return prev
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+            }
+
+            loadingTokens.current.delete(tokenId)
+            const timeoutId = loadingTimeouts.current.get(tokenId)
+            if (timeoutId) {
+              clearTimeout(timeoutId)
+              loadingTimeouts.current.delete(tokenId)
+            }
+
+            return
+          }
+        }
         try {
-          const tx3d = await fetchAgoraTransactionsFromChronik(tokenId, undefined, {
-            targetCount: 800,
+          const tx7d = await fetchAgoraTransactionsFromChronik(tokenId, undefined, {
+            targetCount: 1400,
             pageSize: 200,
-            maxBlocksBack: BLOCKS_PER_3_DAYS,
+            maxBlocksBack: BLOCKS_PER_7_DAYS,
             stopBelowHeight:
               typeof effectiveTipHeight === "number"
-                ? Math.max(effectiveTipHeight - BLOCKS_PER_3_DAYS, 0)
+                ? Math.max(effectiveTipHeight - BLOCKS_PER_7_DAYS, 0)
                 : undefined,
             failOnError: false,
           }, activeChronik)
-          const confirmed3d = tx3d.filter((tx) => typeof tx.blockHeight === "number")
-          last30DaysXECAmount = confirmed3d.reduce(
+          const confirmed7d = tx7d.filter((tx) => typeof tx.blockHeight === "number")
+          last30DaysXECAmount = confirmed7d.reduce(
             (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
             0,
           )
-          totalTransactions30d = confirmed3d.length
-          const maxHeight = confirmed3d.reduce<number | null>((max, tx) => {
+          totalTransactions30d = confirmed7d.length
+          const maxHeight = confirmed7d.reduce<number | null>((max, tx) => {
             if (typeof tx.blockHeight !== "number") return max
             if (max === null) return tx.blockHeight
             return Math.max(max, tx.blockHeight)

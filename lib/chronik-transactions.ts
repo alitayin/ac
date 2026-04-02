@@ -221,6 +221,8 @@ const processMatchedTransaction = (
   }
 }
 
+export { processMatchedTransaction }
+
 type BatchHandler = (batch: Transaction[], meta: { page: number }) => void
 
 interface FetchOptions {

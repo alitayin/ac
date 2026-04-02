@@ -47,9 +47,10 @@ describe('formatters', () => {
       expect(formatNumber(0, true)).toBe('0')
     })
 
-    it('should handle negative numbers', () => {
-      expect(formatNumber(-1000)).toBe('-1000.00')
-      expect(formatNumber(-5_000_000)).toBe('-5000000.00')
+    it('should handle negative numbers with consistent formatting', () => {
+      expect(formatNumber(-1000)).toBe('-1,000.00')
+      expect(formatNumber(-5_000_000)).toBe('-5.00M')
+      expect(formatNumber(-2_000_000_000)).toBe('-2.000B')
     })
 
     it('should handle very large numbers', () => {
@@ -106,8 +107,15 @@ describe('formatters', () => {
       expect(formatPrice(1.00000001)).toBe('1.00')
     })
 
-    it('should handle negative prices', () => {
-      expect(formatPrice(-1.5)).toBe('-1.5')
+    it('should handle negative prices with consistent formatting', () => {
+      expect(formatPrice(-1.5)).toBe('-1.50')
+      expect(formatPrice(-0.5)).toBe('-0.5')
+      expect(formatPrice(-0.05)).toBe('-0.05')
+      expect(formatPrice(-0.001)).toBe('-0.001')
+    })
+
+    it('should handle USD conversion for negative prices', () => {
+      expect(convertPrice(-100, true, 0.00003)).toBe('-0.003')
     })
 
     it('should remove trailing zeros for small prices', () => {
@@ -188,8 +196,9 @@ describe('formatters', () => {
       expect(convertPrice(0, false, 0)).toBe('0.00')
     })
 
-    it('should handle negative prices', () => {
+    it('should handle negative prices with consistent formatting', () => {
       expect(convertPrice(-1.5, false, 0)).toBe('-1.50')
+      expect(convertPrice(-0.5, false, 0)).toBe('-0.50')
     })
   })
 
