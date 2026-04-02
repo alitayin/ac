@@ -1073,6 +1073,7 @@ export function SwapPanel() {
                   usdPriceText={calculateTokenUsdPrice()}
                   onTokenSelect={handleTokenSelect}
                   onTokenMetaChange={(meta) => setSelectedTokenDecimals(meta.decimals)}
+                  showTokenSelector={false}
                 />
 
                 <SpendCard
