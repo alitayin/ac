@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { ChronikClient } from "chronik-client";
 import { encodeCashAddress, getTypeAndHashFromOutputScript } from "ecashaddrjs";
+import { chronik } from "@/lib/chronik";
 
 interface AddressDistributionProps {
   tokenId: string;
@@ -16,13 +16,6 @@ type AddressRow = {
   rawAmount: bigint; // amount in base units
   hasMintBaton: boolean;
 };
-
-const chronik = new ChronikClient([
-  "https://chronik.e.cash",
-  "https://chronik-native1.fabien.cash",
-  "https://chronik-native2.fabien.cash",
-  "https://chronik-native3.fabien.cash",
-]);
 
 function makeDivisor(decimals: number): bigint {
   if (decimals <= 0) return BigInt(1);
