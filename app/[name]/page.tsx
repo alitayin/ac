@@ -28,6 +28,8 @@ import { useToast } from "@/hooks/use-toast"
 import { Checkbox } from "@/components/ui/checkbox"
 import { TokenSelector } from "@/components/ui/token-selector"
 import { SwapPanel } from "@/components/ui/SwapPanel"
+
+const MIN_ORDER_TOTAL_XEC = 100;
 import {
   AlertDialog,
   AlertDialogAction,
@@ -171,7 +173,7 @@ export default function TokenPage() {
         }
         
         const budget = order.remainingAmount * order.maxPrice;
-        if (budget < 1000 && order.maxPrice <= 1 && order.status !== 'completed' && order.remainingAmount !== 0) {
+        if (budget < MIN_ORDER_TOTAL_XEC && order.maxPrice <= 1 && order.status !== 'completed' && order.remainingAmount !== 0) {
           insufficientCount++;
           insufficientOrderKeys.push(key);
         }
@@ -658,7 +660,7 @@ export default function TokenPage() {
     }
 
     if (orderCheckInfo.hasInsufficientBudget && orderCheckInfo.insufficientOrders.length > 0) {
-      const actualSpendAmount = 1000;
+      const actualSpendAmount = MIN_ORDER_TOTAL_XEC;
 
       if (currentBalance < actualSpendAmount) {
         toast({
@@ -798,10 +800,10 @@ export default function TokenPage() {
     }
 
     const totalCost = parseFloat(receiveAmount) * maxPrice;
-    if (totalCost < 1000) {
+    if (totalCost < MIN_ORDER_TOTAL_XEC) {
       toast({
         title: "Order amount too small",
-        description: `Orders require a minimum total value of 1,000 XEC. Current total: ${totalCost.toFixed(2)} XEC`,
+        description: `Orders require a minimum total value of ${MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC. Current total: ${totalCost.toFixed(2)} XEC`,
         variant: "destructive",
       });
       return;
@@ -1131,12 +1133,12 @@ export default function TokenPage() {
               )}
               {orderCheckInfo.hasInsufficientBudget && (
                 <p className="leading-relaxed text-foreground">
-                  ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient budget (less than 1,000 XEC).
+                  ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient budget (less than {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC).
                 </p>
               )}
               {orderCheckInfo.hasInsufficientBudget && (
                 <p className="leading-relaxed text-muted-foreground">
-                  These orders will be automatically adjusted to 1,000 XEC.
+                  These orders will be automatically adjusted to {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC.
                 </p>
               )}
               {orderCheckInfo.hasCompleted && !orderCheckInfo.hasInsufficientBudget && (

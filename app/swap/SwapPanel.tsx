@@ -55,7 +55,7 @@ import ConfirmOrderDialog from "@/components/swap/ConfirmOrderDialog";
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions";
 import { Transaction } from "@/lib/types";
 
-const MIN_ORDER_TOTAL_XEC = 1000;
+const MIN_ORDER_TOTAL_XEC = 100;
 
 export function SwapPanel() {
   const { toast } = useToast();
