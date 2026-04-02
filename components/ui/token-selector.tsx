@@ -217,13 +217,6 @@ export function TokenSelector({
             )}
           </div>
         </div>
-        <div className="mt-4 pt-4 border-t">
-          <Link href="/list" className="block">
-            <div className="text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-center">
-              Pay 1M SS to list your token and enable buy functionality!
-            </div>
-          </Link>
-        </div>
       </PopoverContent>
     </Popover>
   );
