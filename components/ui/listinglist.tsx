@@ -244,7 +244,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
                           rel="noopener noreferrer"
                           className="shrink-0"
                         >
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-600 hover:bg-green-500/20 cursor-pointer transition-colors">
+                          <Badge variant="secondary" className="bg-muted/50 text-muted-foreground hover:bg-muted cursor-pointer transition-colors">
                             View on Cashtab
                           </Badge>
                         </a>
