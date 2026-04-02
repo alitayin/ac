@@ -1,8 +1,7 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState, useRef } from "react";
-import { processOrders } from '@/lib/Auto.js'; 
+import { processOrders } from '@/lib/Auto.js';
 import { useToast } from "@/hooks/use-toast";
-import { useWebSocketStatus } from "./WebSocketContext";
 import { useOrderProcessing } from "./OrderProcessingContext";
 
 interface AutoExecutionContextType {
@@ -17,7 +16,6 @@ export const AutoExecutionProvider = ({
   children: React.ReactNode;
 }) => {
   const { toast } = useToast();
-  const { isNotifying } = useWebSocketStatus();
   const { isAutoProcessing } = useOrderProcessing();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -44,28 +42,28 @@ export const AutoExecutionProvider = ({
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    
 
-    if (isAutoProcessing && isNotifying && hasActiveOrders()) {
-      
+
+    if (isAutoProcessing && hasActiveOrders()) {
+
       executeOrders();
 
       intervalRef.current = setInterval(async () => {
         try {
-          if (!isAutoProcessing || !isNotifying || !hasActiveOrders()) {
+          if (!isAutoProcessing || !hasActiveOrders()) {
             if (intervalRef.current) {
               clearInterval(intervalRef.current);
               intervalRef.current = null;
             }
             return;
           }
-          
+
           await executeOrders();
         } catch (error) {
         }
       }, 3000);
     }
-    
+
     return () => {
       // Cleanup interval on unmount or dependency change
       if (intervalRef.current) {
@@ -73,7 +71,7 @@ export const AutoExecutionProvider = ({
         intervalRef.current = null;
       }
     };
-  }, [isAutoProcessing, isNotifying]);
+  }, [isAutoProcessing]);
 
   return (
     <AutoExecutionContext.Provider value={{ executeOrders }}>

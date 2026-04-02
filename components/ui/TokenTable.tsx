@@ -1542,8 +1542,8 @@ export default function Component() {
           }
         }
 
-        // Start 2 concurrent workers
-        await Promise.all([loadNext(), loadNext()])
+        // Start 3 concurrent workers
+        await Promise.all([loadNext(), loadNext(), loadNext()])
       } catch (_error) {
         setIsLoading(false)
       }

@@ -15,10 +15,9 @@ import {
 } from "@/components/ui/tabs";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import { TOKENS } from '@/config/tokenconfig';
-import { Power, Trash2, Signal, CircleAlert, Eraser, ArrowDownUp, ShieldAlert, Layout } from "lucide-react";
+import { Power, Trash2, CircleAlert, Eraser, ArrowDownUp, ShieldAlert, Layout } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OrderList } from "@/components/ui/orderlist";
-import { useWebSocketStatus } from "@/lib/context/WebSocketContext";
 import { pushOrdersToServer } from '@/lib/Auto.js';
 import { main as createOfflineBuyTransaction } from '@/lib/offlinebuy.js';
 import Image from "next/image";
@@ -38,7 +37,6 @@ import {
 import { AuroraText } from "@/components/magicui/aurora-text";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Globe } from "@/components/magicui/globe";
 import { useWallet } from "@/lib/context/WalletContext";
 import OrderBook from "@/components/ui/OrderBook";
 import { fetchAgoraOrderBook } from "@/lib/agora-orders";
@@ -316,7 +314,7 @@ export function SwapPanel() {
     e.preventDefault();
     const pastedText = e.clipboardData.getData('text');
     const words = pastedText.trim().split(/\s+/);
-    
+
     if (words.length === 12) {
       setMnemonicWords(words);
     } else {
@@ -325,8 +323,6 @@ export function SwapPanel() {
       setMnemonicWords(newWords);
     }
   };
-
-  const { isNotifying } = useWebSocketStatus();
 
   const calculateNetworkFeeFromUtxos = async (): Promise<number> => {
     try {
@@ -774,42 +770,6 @@ export function SwapPanel() {
     }
   }, [isWalletConnected]);
 
-  const toggleAutoProcessing = () => {
-    if (isAutoProcessing && hasActiveOrders()) {
-      toast({
-        title: "Cannot disable auto processing",
-        description: "You have active orders. Auto processing cannot be disabled while orders are pending",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (!isAutoProcessing && (!isNotifying || !hasActiveOrders())) {
-      toast({
-        title: "Cannot enable auto processing",
-        description: "You need to be online and have active orders to enable auto processing & sync",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    const newState = !isAutoProcessing;
-    setIsAutoProcessing(newState);
-    localStorage.setItem('auto_processing', newState.toString());
-    
-    if (newState) {
-      toast({
-        title: "✅ Auto processing enabled",
-        description: "System will automatically search and process orders in real-time via WebSocket",
-      });
-    } else {
-      toast({
-        title: "✅ Auto processing disabled",
-        description: "Automatic order processing has been stopped",
-      });
-    }
-  };
-
   const handleTokenPriceInputChange = (value: string) => {
     if (value === '' || /^[0-9]*\.?[0-9]*$/.test(value)) {
       setTokenPriceInput(value);
@@ -899,9 +859,9 @@ export function SwapPanel() {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className={`h-8 w-8 hidden lg:flex ${showProPanel ? 'text-blue-500' : 'text-muted-foreground'}`}
                       onClick={() => setShowProPanel(!showProPanel)}
                     >
@@ -916,85 +876,10 @@ export function SwapPanel() {
 
               <TooltipProvider>
                 <Tooltip>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className={`h-8 w-8 relative ${isAutoProcessing ? 'text-green-400' : 'text-muted-foreground'}`}
-                        style={{ 
-                          opacity: (isNotifying && hasActiveOrders()) ? 1 : 0.5, 
-                          cursor: (isNotifying && hasActiveOrders()) ? 'pointer' : 'not-allowed' 
-                        }}
-                      >
-                        <Signal size={16} />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-80 p-2">
-                      <div className="relative flex flex-col items-center p-2 overflow-hidden rounded-lg">
-                        <div className="relative flex size-full max-w-lg items-center justify-center overflow-hidden rounded-lg bg-background px-24 pb-24 pt-6">
-                          <span className="pointer-events-none whitespace-pre-wrap bg-gradient-to-b from-black to-gray-300/80 bg-clip-text text-center text-5xl font-semibold leading-none text-transparent dark:from-white dark:to-slate-900/10">
-                            {isAutoProcessing ? "Auto" : "Off"}
-                          </span>
-                          <Globe className="top-12" />
-                          <div className="pointer-events-none absolute inset-0 h-full bg-[radial-gradient(circle_at_50%_200%,rgba(0,0,0,0.2),rgba(255,255,255,0))]" />
-                        </div>
-                      </div>
-                      <DropdownMenuItem 
-                        onClick={() => {
-                          if (!isAutoProcessing) {
-                            toggleAutoProcessing();
-                          } else {
-                            toast({
-                              title: "✅ Auto processing already enabled",
-                              description: "System is already automatically processing orders",
-                            });
-                          }
-                        }}
-                        className="flex justify-center"
-                      >
-                        <Power className="h-4 w-4 text-green-500" /> Buy order On
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => {
-                          if (isAutoProcessing) {
-                            if (hasActiveOrders()) {
-                              toast({
-                                title: "Cannot disable auto processing",
-                                description: "You have active orders. Auto processing cannot be disabled while orders are pending",
-                                variant: "destructive",
-                              });
-                            } else {
-                              toggleAutoProcessing();
-                            }
-                          } else {
-                            toast({
-                              title: "✅ Auto processing already disabled",
-                              description: "Automatic order processing is already stopped",
-                            });
-                          }
-                        }}
-                        className="flex justify-center"
-                      >
-                        <Power className="h-4 w-4 text-red-500" /> Buy order Off
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                   <TooltipTrigger asChild>
-                    <div className="sr-only">Auto processing</div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{isAutoProcessing ? "Auto processing enabled" : "Enable auto processing"}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       onClick={handleOpenDeleteDialog}
                     >
@@ -1012,22 +897,22 @@ export function SwapPanel() {
                   <Tooltip>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-primary"
                         >
                           <Power size={16} />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => {
                             disconnectWallet();
                             setSpendAmount('');
                             setReceiveAmount('');
                             setMnemonicWords(new Array(12).fill(''));
-                            
+
                             toast({
                               title: "✅ Wallet disconnected",
                               description: "Your wallet has been successfully disconnected",
