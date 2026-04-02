@@ -136,8 +136,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
           )
         );
 
-        // Reload listings in background to sync
-        setTimeout(() => loadListings(), 2000);
+        // Don't reload - the cancellation is final
       } else {
         toast({
           title: "Failed to cancel listing",
