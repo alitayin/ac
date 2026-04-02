@@ -129,8 +129,15 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
           description: `Successfully cancelled listing for ${listingToCancel.tokenName}`,
         });
 
-        // Reload listings
-        await loadListings();
+        // Immediately remove from UI
+        setListings(prevListings =>
+          prevListings.filter(l =>
+            !(l.tokenId === listingToCancel.tokenId && l.price === listingToCancel.price)
+          )
+        );
+
+        // Reload listings in background to sync
+        setTimeout(() => loadListings(), 2000);
       } else {
         toast({
           title: "Failed to cancel listing",
@@ -210,65 +217,72 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredListings.map((listing, index) => (
-            <Card key={`${listing.tokenId}-${index}`} className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3 flex-1">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src={getTokenIcon(listing.tokenId)} alt={listing.tokenName} />
-                    <AvatarFallback>{listing.tokenName.substring(0, 2)}</AvatarFallback>
-                  </Avatar>
+          {filteredListings.map((listing, index) => {
+            const listingKey = `${listing.tokenId}-${listing.price}`;
+            const isCancellingThis = isCancelling === listingKey;
 
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{listing.tokenName}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {listing.tokenId.substring(0, 8)}...{listing.tokenId.substring(listing.tokenId.length - 8)}
+            return (
+              <Card key={`${listing.tokenId}-${index}`} className="rounded-3xl overflow-hidden border-muted/40 hover:border-muted transition-all duration-200">
+                <div className="p-5">
+                  <div className="flex items-start gap-4">
+                    <Avatar className="h-12 w-12 ring-2 ring-muted/20">
+                      <AvatarImage src={getTokenIcon(listing.tokenId)} alt={listing.tokenName} />
+                      <AvatarFallback className="text-lg font-semibold">{listing.tokenName.substring(0, 2)}</AvatarFallback>
+                    </Avatar>
+
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="font-semibold text-lg">{listing.tokenName}</h3>
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                            {listing.tokenId.substring(0, 12)}...{listing.tokenId.substring(listing.tokenId.length - 12)}
+                          </p>
+                        </div>
+                        <a
+                          href={`https://cashtab.com/#/token/${listing.tokenId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0"
+                        >
+                          <Badge variant="secondary" className="bg-green-500/10 text-green-600 hover:bg-green-500/20 cursor-pointer transition-colors">
+                            View on Cashtab
+                          </Badge>
+                        </a>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4 p-3 bg-muted/30 rounded-xl">
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Amount</div>
+                          <div className="font-semibold text-base">{listing.amount.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Price</div>
+                          <div className="font-semibold text-base">{listing.price.toFixed(8)} XEC</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Total Value</div>
+                          <div className="font-semibold text-base">{listing.total.toLocaleString()} XEC</div>
                         </div>
                       </div>
-                      <a
-                        href={`https://cashtab.com/#/token/${listing.tokenId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Badge variant="secondary" className="bg-green-500/10 text-green-500 hover:bg-green-500/20 cursor-pointer">
-                          View on Cashtab
-                        </Badge>
-                      </a>
-                    </div>
 
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <div className="text-muted-foreground">Amount</div>
-                        <div className="font-medium">{listing.amount.toLocaleString()}</div>
+                      <div className="flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCancelClick(listing)}
+                          disabled={isCancellingThis}
+                          className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950 dark:hover:text-red-300"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                          {isCancellingThis ? 'Cancelling...' : 'Cancel Listing'}
+                        </Button>
                       </div>
-                      <div>
-                        <div className="text-muted-foreground">Price</div>
-                        <div className="font-medium">{listing.price.toFixed(8)} XEC</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Total</div>
-                        <div className="font-medium">{listing.total.toLocaleString()} XEC</div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end mt-2">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleCancelClick(listing)}
-                        disabled={isCancelling === `${listing.tokenId}-${listing.price}`}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        {isCancelling === `${listing.tokenId}-${listing.price}` ? 'Cancelling...' : 'Cancel Listing'}
-                      </Button>
                     </div>
                   </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
