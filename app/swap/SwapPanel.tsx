@@ -1097,7 +1097,7 @@ export function SwapPanel() {
                   selectedTokenDecimals={selectedTokenDecimals}
                 />
 
-                <div className="space-y-2">
+                <div className="space-y-2 mt-2">
                   <Drawer>
                     <DrawerTrigger asChild>
                       <Button
@@ -1263,7 +1263,7 @@ export function SwapPanel() {
                   showMaxBalance={true}
                 />
 
-                <div className="space-y-2">
+                <div className="space-y-2 mt-2">
                   <Button
                     className="w-full text-md rounded-2xl h-12"
                     variant="default"
