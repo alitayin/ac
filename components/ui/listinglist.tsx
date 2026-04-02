@@ -161,9 +161,15 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
                           {listing.tokenId.substring(0, 8)}...{listing.tokenId.substring(listing.tokenId.length - 8)}
                         </div>
                       </div>
-                      <Badge variant="secondary" className="bg-green-500/10 text-green-500">
-                        OPEN
-                      </Badge>
+                      <a
+                        href={`https://cashtab.com/#/token/${listing.tokenId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Badge variant="secondary" className="bg-green-500/10 text-green-500 hover:bg-green-500/20 cursor-pointer">
+                          View on Cashtab
+                        </Badge>
+                      </a>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4 text-sm">
