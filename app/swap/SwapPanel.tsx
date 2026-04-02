@@ -895,10 +895,15 @@ export function SwapPanel() {
       // Convert amount to bigint with proper decimals
       const tokenAmountBigInt = BigInt(Math.floor(amount * Math.pow(10, selectedTokenDecimals)));
 
+      // Convert price from "per token" to "per atom"
+      // If token has 2 decimals, 1 token = 100 atoms
+      // So if price is 0.01 XEC per token, it's 0.01/100 = 0.0001 XEC per atom
+      const pricePerAtom = pricePerToken / Math.pow(10, selectedTokenDecimals);
+
       const result = await createAgoraOffer({
         tokenId: selectedToken.id,
         tokenAmount: tokenAmountBigInt,
-        pricePerToken: pricePerToken,
+        pricePerToken: pricePerAtom,
         mnemonic: mnemonic,
         offerType: 'PARTIAL'
       });
@@ -1257,7 +1262,7 @@ export function SwapPanel() {
                   onTokenSelect={handleTokenSelect}
                   onTokenMetaChange={(meta) => setSelectedTokenDecimals(meta.decimals)}
                   selectedTokenDecimals={selectedTokenDecimals}
-                  label={`How many ${selectedToken.name} to list?`}
+                  label="Sell"
                   showTokenSelector={true}
                   onlyOwnedTokens={true}
                   showMaxBalance={true}
