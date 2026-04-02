@@ -1531,10 +1531,19 @@ export default function Component() {
         setData(initialTokens)
         setIsLoading(false)
 
-        for (const token of initialTokens) {
-          if (isCancelled) break
-          await loadTokenStats(token.tokenId, token.name)
+        // Load tokens with concurrency limit of 2
+        const CONCURRENCY_LIMIT = 2
+        let index = 0
+        const loadNext = async () => {
+          while (index < initialTokens.length && !isCancelled) {
+            const currentIndex = index++
+            const token = initialTokens[currentIndex]
+            await loadTokenStats(token.tokenId, token.name)
+          }
         }
+
+        // Start 2 concurrent workers
+        await Promise.all([loadNext(), loadNext()])
       } catch (_error) {
         setIsLoading(false)
       }
