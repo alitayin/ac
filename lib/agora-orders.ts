@@ -183,7 +183,7 @@ const derivePubkeyHex = (mnemonic: string): string => {
 export type UserListingsResponse = {
   success: boolean
   data?: {
-    listings: Array<Order & { tokenId: string; tokenName: string }>
+    listings: Array<Order & { tokenId: string; tokenName: string; rawOffer: any }>
   }
   error?: string
 }
@@ -221,13 +221,14 @@ export const fetchUserListings = async (
           ...formattedOffer,
           tokenId,
           tokenName,
+          rawOffer: offer, // Store the raw offer for cancellation
         }
       } catch (error) {
         return null
       }
     })
 
-    const listings = (await Promise.all(listingsPromises)).filter(Boolean) as Array<Order & { tokenId: string; tokenName: string }>
+    const listings = (await Promise.all(listingsPromises)).filter(Boolean) as Array<Order & { tokenId: string; tokenName: string; rawOffer: any }>
 
     listings.sort((a, b) => b.price - a.price)
 

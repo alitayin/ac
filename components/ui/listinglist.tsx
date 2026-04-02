@@ -6,8 +6,19 @@ import { Badge } from "@/components/ui/badge";
 import { tokens } from '@/config/tokens';
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { fetchUserListings } from "@/lib/agora-orders";
+import { cancelAgoraOffer } from "ecash-quicksend";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Listing {
   price: number;
@@ -16,6 +27,7 @@ interface Listing {
   makerAddress?: string;
   tokenId: string;
   tokenName: string;
+  rawOffer: any;
 }
 
 interface ListingListProps {
@@ -29,6 +41,9 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [tokenFilter, setTokenFilter] = useState<string>("all");
   const [availableTokens, setAvailableTokens] = useState<Array<{id: string, name: string}>>([]);
+  const [isCancelling, setIsCancelling] = useState<string | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState<boolean>(false);
+  const [listingToCancel, setListingToCancel] = useState<Listing | null>(null);
 
   const loadListings = async () => {
     if (!mnemonic || !ecashAddress) {
@@ -84,6 +99,57 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
   useEffect(() => {
     loadListings();
   }, [ecashAddress, mnemonic]);
+
+  const handleCancelClick = (listing: Listing) => {
+    setListingToCancel(listing);
+    setCancelDialogOpen(true);
+  };
+
+  const handleCancelConfirm = async () => {
+    if (!listingToCancel || !mnemonic) return;
+
+    const listingKey = `${listingToCancel.tokenId}-${listingToCancel.price}`;
+    setIsCancelling(listingKey);
+
+    try {
+      // Wrap the raw offer in the format ecash-quicksend expects
+      const wrappedOffer = {
+        offer: listingToCancel.rawOffer,
+        pricePerToken: listingToCancel.price,
+        totalTokenAmount: BigInt(Math.floor(listingToCancel.amount * Math.pow(10, 0))), // Will need proper decimals
+        totalXEC: listingToCancel.total,
+        offerType: listingToCancel.rawOffer.variant?.type || 'PARTIAL'
+      };
+
+      const result = await cancelAgoraOffer(wrappedOffer, { mnemonic });
+
+      if (result.success) {
+        toast({
+          title: "Listing cancelled",
+          description: `Successfully cancelled listing for ${listingToCancel.tokenName}`,
+        });
+
+        // Reload listings
+        await loadListings();
+      } else {
+        toast({
+          title: "Failed to cancel listing",
+          description: result.message || "Unknown error",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error cancelling listing",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCancelling(null);
+      setCancelDialogOpen(false);
+      setListingToCancel(null);
+    }
+  };
 
   const filteredListings = listings.filter(listing => {
     if (tokenFilter === "all") return true;
@@ -186,6 +252,18 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
                         <div className="font-medium">{listing.total.toLocaleString()} XEC</div>
                       </div>
                     </div>
+
+                    <div className="flex justify-end mt-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleCancelClick(listing)}
+                        disabled={isCancelling === `${listing.tokenId}-${listing.price}`}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        {isCancelling === `${listing.tokenId}-${listing.price}` ? 'Cancelling...' : 'Cancel Listing'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -193,6 +271,28 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
           ))}
         </div>
       )}
+
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Listing</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this listing for {listingToCancel?.tokenName}?
+              <br />
+              <br />
+              Amount: {listingToCancel?.amount.toLocaleString()}
+              <br />
+              Price: {listingToCancel?.price.toFixed(8)} XEC per token
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No, keep it</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancelConfirm}>
+              Yes, cancel listing
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
