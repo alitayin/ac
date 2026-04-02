@@ -18,7 +18,8 @@ import {
 import { tokens } from "@/config/tokens"
 import { paidTokenIds } from "@/config/paidSC"
 import { TOKEN_IDS } from "@/lib/constants"
-import { chronik, fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import { useChronik } from "@/lib/context/ChronikContext"
 import { Agora } from "ecash-agora"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/lib/context/WalletContext"
@@ -33,6 +34,7 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
   watchlistFreeLimit,
   ssUnlockThreshold,
 }) => {
+  const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const ITEMS_PER_PAGE = 10
   const [allTokenIds, setAllTokenIds] = React.useState<string[]>([])
   const [activeTokens, setActiveTokens] = React.useState<any[]>([])
@@ -47,10 +49,12 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
   const [ssDecimals, setSsDecimals] = React.useState<number | null>(null)
 
   React.useEffect(() => {
+    if (isChronikLoading || !chronikClient) return
+
     let cancelled = false
     const loadSsMeta = async () => {
       try {
-        const detail = await fetchTokenDetails(TOKEN_IDS.STAR_SHARD)
+        const detail = await fetchTokenDetails(TOKEN_IDS.STAR_SHARD, chronikClient)
         const decimals = getTokenDecimalsFromDetails(detail, 0)
         if (!cancelled) setSsDecimals(decimals)
       } catch (_e) {
@@ -61,7 +65,7 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [chronikClient, isChronikLoading])
 
   const isSsUnlocked = React.useMemo(() => {
     if (!isWalletConnected) return false
@@ -157,13 +161,15 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
   }
 
   React.useEffect(() => {
+    if (isChronikLoading || !chronikClient) return
+
     const loadTokenIds = async () => {
       try {
         setAllTokenIds(paidTokenIds)
         setIsLoading(false)
         setIsLoadingMoreTokens(true)
 
-        const agora = new Agora(chronik)
+        const agora = new Agora(chronikClient as any)
         const tokenIds = await agora.offeredFungibleTokenIds()
 
         const paidInList = paidTokenIds.filter((id) => tokenIds.includes(id))
@@ -180,11 +186,12 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
     }
 
     loadTokenIds()
-  }, [])
+  }, [chronikClient, isChronikLoading])
 
   React.useEffect(() => {
-    if (allTokenIds.length === 0) return
+    if (!chronikClient || allTokenIds.length === 0) return
 
+    const activeChronik = chronikClient
     const loadCurrentPageTokens = async () => {
       const startIdx = (currentPage - 1) * ITEMS_PER_PAGE
       const endIdx = startIdx + ITEMS_PER_PAGE
@@ -204,7 +211,7 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
         setLoadingTokenIds((prev) => new Set(prev).add(tokenId))
 
         try {
-          const tokenDetails = await fetchTokenDetails(tokenId)
+          const tokenDetails = await fetchTokenDetails(tokenId, activeChronik)
 
           setActiveTokens((prev) =>
             prev.map((token) =>
@@ -229,7 +236,7 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
 
             setTimeout(async () => {
               try {
-                const tokenDetails = await fetchTokenDetails(tokenId)
+                const tokenDetails = await fetchTokenDetails(tokenId, activeChronik)
                 setActiveTokens((prev) =>
                   prev.map((token) =>
                     token.tokenId === tokenId
@@ -284,9 +291,9 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
     }
 
     loadCurrentPageTokens()
-  }, [allTokenIds, currentPage])
+  }, [allTokenIds, currentPage, chronikClient])
 
-  if (isLoading) {
+  if (isLoading || isChronikLoading || !chronikClient) {
     return (
       <div className="flex items-center justify-center py-8">
         <div className="text-muted-foreground">Loading token list...</div>

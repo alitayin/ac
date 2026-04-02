@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { WalletProvider } from '@/lib/context/WalletContext';
 import Footer from "@/components/ui/Footer";
 import { AutoExecutionProvider } from "@/lib/context/AutoExecutionContext";
+import { ChronikProvider } from '@/lib/context/ChronikContext';
 
 import "./globals.css";
 
@@ -52,17 +53,19 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ErrorBoundary>
-            <WebSocketProvider>
-              <OrderProcessingProvider>
-                <WalletProvider>
-                  <AutoExecutionProvider>
-                    {children}
-                    <Footer />
-                    <Toaster />
-                  </AutoExecutionProvider>
-                </WalletProvider>
-              </OrderProcessingProvider>
-            </WebSocketProvider>
+            <ChronikProvider>
+              <WebSocketProvider>
+                <OrderProcessingProvider>
+                  <WalletProvider>
+                    <AutoExecutionProvider>
+                      {children}
+                      <Footer />
+                      <Toaster />
+                    </AutoExecutionProvider>
+                  </WalletProvider>
+                </OrderProcessingProvider>
+              </WebSocketProvider>
+            </ChronikProvider>
           </ErrorBoundary>
         </ThemeProvider>
       </body>

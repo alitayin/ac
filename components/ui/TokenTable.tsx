@@ -66,7 +66,8 @@ import { formatNumber, formatPrice } from "@/lib/formatters"
 import { Token, SortType, Transaction } from "@/lib/types"
 import { TOKEN_IDS, UI_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
-import { fetchBlockchainInfo, chronik, fetchTokenDetails, getTokenAmountFromToken, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import { fetchBlockchainInfo, fetchTokenDetails, getTokenAmountFromToken, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import { useChronik } from "@/lib/context/ChronikContext"
 import {
   clearTokenCache,
   getCachedTokenData,
@@ -75,7 +76,7 @@ import {
   setCachedTokenSummary,
   CACHE_TTL_MS,
   SUMMARY_CACHE_TTL_MS,
-  BLOCKS_PER_MONTH,
+  BLOCKS_PER_3_DAYS,
   BLOCKS_PER_DAY,
   compute24hStats,
 } from "@/lib/token-stats"
@@ -114,6 +115,7 @@ const getStoredFilterOption = (): FilterOption => {
 }
 
 export default function Component() {
+  const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const { toast } = useToast()
   const { isWalletConnected, userTokens } = useWallet()
   const [ssDecimals, setSsDecimals] = React.useState<number | null>(null)
@@ -164,6 +166,8 @@ export default function Component() {
   const [adTokenTicker, setAdTokenTicker] = React.useState<string>("")
 
   React.useEffect(() => {
+    if (isChronikLoading || !chronikClient) return
+
     let cancelled = false
     const loadAd = async () => {
       setAdStatus("loading")
@@ -189,7 +193,7 @@ export default function Component() {
 
         setAdTokenId(sponsoredTokenId)
         try {
-          const details = await fetchTokenDetails(sponsoredTokenId)
+          const details = await fetchTokenDetails(sponsoredTokenId, chronikClient)
           if (cancelled) return
           const name = details?.genesisInfo?.tokenName || sponsoredTokenId.substring(0, 6)
           const ticker = details?.genesisInfo?.tokenTicker || ""
@@ -215,16 +219,18 @@ export default function Component() {
     return () => {
       cancelled = true
     }
-  }, [refreshNonce])
+  }, [refreshNonce, chronikClient, isChronikLoading])
 
   React.useEffect(() => {
+    if (isChronikLoading || !chronikClient) return
+
     let cancelled = false
     const loadSsMeta = async () => {
       try {
-        const detail = await fetchTokenDetails(TOKEN_IDS.STAR_SHARD)
+        const detail = await fetchTokenDetails(TOKEN_IDS.STAR_SHARD, chronikClient)
         const decimals = getTokenDecimalsFromDetails(detail, 0)
         if (!cancelled) setSsDecimals(decimals)
-      } catch (e) {
+      } catch (_e) {
         if (!cancelled) setSsDecimals(0)
       }
     }
@@ -232,7 +238,7 @@ export default function Component() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [chronikClient, isChronikLoading])
 
   const isSsUnlocked = React.useMemo(() => {
     if (!isWalletConnected) return false
@@ -669,7 +675,7 @@ export default function Component() {
     },
     {
       accessorKey: "last30DaysXECAmount",
-      header: "30D Volume",
+      header: "3D Volume",
       cell: ({ row }) => {
         const isAdRow = row.original.isAd
         const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
@@ -691,7 +697,7 @@ export default function Component() {
     },
     {
       accessorKey: "totalTransactions",
-      header: "Sales in 30D",
+      header: "Sales in 3D",
       cell: ({ row }) => {
         const isAdRow = row.original.isAd
         const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
@@ -831,10 +837,11 @@ export default function Component() {
       const cached = getCachedTokenData(tokenId)
       const cacheValid = !!cached && now - cached.computedAt < CACHE_TTL_MS
 
+      const activeChronik = chronikClient!
       let effectiveTipHeight = chainTipHeight
       if (typeof effectiveTipHeight !== "number") {
         try {
-          const info = await fetchBlockchainInfo()
+          const info = await fetchBlockchainInfo(activeChronik)
           if (typeof info?.tipHeight === "number") {
             effectiveTipHeight = info.tipHeight
             setChainTipHeight(info.tipHeight)
@@ -866,6 +873,7 @@ export default function Component() {
                 : undefined,
             failOnError: true,
           },
+          activeChronik,
         )
       } catch (err) {
         fetchError = true
@@ -902,6 +910,7 @@ export default function Component() {
             pageSize: 50,
             failOnError: false,
           },
+          activeChronik,
         )
       } catch (err) {
         if (!fetchError) {
@@ -910,7 +919,7 @@ export default function Component() {
             next.add(tokenId)
             return next
           })
-          
+
           setTimeout(() => {
             if (
               !cancelledRef.current &&
@@ -925,7 +934,7 @@ export default function Component() {
               loadTokenStatsRef.current?.(tokenId, name, options)
             }
           }, 5000)
-          
+
           return
         }
       }
@@ -953,23 +962,23 @@ export default function Component() {
 
       if (!cacheValid) {
         try {
-          const tx30d = await fetchAgoraTransactionsFromChronik(tokenId, undefined, {
+          const tx3d = await fetchAgoraTransactionsFromChronik(tokenId, undefined, {
             targetCount: 800,
             pageSize: 200,
-            maxBlocksBack: BLOCKS_PER_MONTH,
+            maxBlocksBack: BLOCKS_PER_3_DAYS,
             stopBelowHeight:
               typeof effectiveTipHeight === "number"
-                ? Math.max(effectiveTipHeight - BLOCKS_PER_MONTH, 0)
+                ? Math.max(effectiveTipHeight - BLOCKS_PER_3_DAYS, 0)
                 : undefined,
             failOnError: false,
-          })
-          const confirmed30d = tx30d.filter((tx) => typeof tx.blockHeight === "number")
-          last30DaysXECAmount = confirmed30d.reduce(
+          }, activeChronik)
+          const confirmed3d = tx3d.filter((tx) => typeof tx.blockHeight === "number")
+          last30DaysXECAmount = confirmed3d.reduce(
             (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
             0,
           )
-          totalTransactions30d = confirmed30d.length
-          const maxHeight = confirmed30d.reduce<number | null>((max, tx) => {
+          totalTransactions30d = confirmed3d.length
+          const maxHeight = confirmed3d.reduce<number | null>((max, tx) => {
             if (typeof tx.blockHeight !== "number") return max
             if (max === null) return tx.blockHeight
             return Math.max(max, tx.blockHeight)
@@ -983,7 +992,7 @@ export default function Component() {
             next.add(tokenId)
             return next
           })
-          
+
           setTimeout(() => {
             if (
               !cancelledRef.current &&
@@ -998,7 +1007,7 @@ export default function Component() {
               loadTokenStatsRef.current?.(tokenId, name, options)
             }
           }, 5000)
-          
+
           return
         }
       }
@@ -1173,7 +1182,7 @@ export default function Component() {
   }
 
   const handleSearchToken = async () => {
-    if (!isValidTokenId(searchInput)) {
+    if (!isValidTokenId(searchInput) || isChronikLoading || !chronikClient) {
       return
     }
 
@@ -1186,7 +1195,7 @@ export default function Component() {
       setIsTokenListed(isListed)
 
       if (!isListed) {
-        const tokenInfo = await fetchTokenDetails(searchInput)
+        const tokenInfo = await fetchTokenDetails(searchInput, chronikClient)
         setSearchTokenInfo(tokenInfo)
       }
 
@@ -1240,6 +1249,8 @@ export default function Component() {
   }
 
   React.useEffect(() => {
+    if (isChronikLoading || !chronikClient) return
+
     const handleWatchlistAdd = async (event: Event) => {
       const customEvent = event as CustomEvent<{ tokenId?: string }>
       const tokenId = customEvent.detail?.tokenId
@@ -1276,7 +1287,7 @@ export default function Component() {
       })
 
       try {
-        const details = await fetchTokenDetails(tokenId)
+        const details = await fetchTokenDetails(tokenId, chronikClient)
         const name = details?.genesisInfo?.tokenName || tokenId.substring(0, 6)
         setData((prev) =>
           prev.map((t) =>
@@ -1300,17 +1311,23 @@ export default function Component() {
     return () => {
       window.removeEventListener("token-watchlist-added", handleWatchlistAdd as EventListener)
     }
-  }, [])
+  }, [chronikClient, isChronikLoading])
 
   React.useEffect(() => {
+    if (isChronikLoading || !chronikClient) return
+
     let isCancelled = false
 
     cancelledRef.current = false
 
     const bootstrap = async () => {
+      if (!chronikClient) {
+        return
+      }
+
       try {
         try {
-          const info = await fetchBlockchainInfo()
+          const info = await fetchBlockchainInfo(chronikClient)
           setChainTipHeight(
             typeof info?.tipHeight === "number" ? info.tipHeight : null,
           )
@@ -1344,7 +1361,7 @@ export default function Component() {
           }
           
           try {
-            const tokenInfo = await fetchTokenDetails(customTokenId)
+            const tokenInfo = await fetchTokenDetails(customTokenId, chronikClient)
             
             const tokenName = tokenInfo?.genesisInfo?.tokenName || customTokenId.substring(0, 6)
             
@@ -1410,7 +1427,7 @@ export default function Component() {
       loadingTimeouts.current.clear()
       loadingTokens.current.clear()
     }
-  }, [refreshNonce])
+  }, [refreshNonce, chronikClient, isChronikLoading])
 
   React.useEffect(() => {
     const tokenIds = Object.values(tokens).map((t) => t.tokenId)
@@ -1625,8 +1642,37 @@ export default function Component() {
 
   MemoizedTableRow.displayName = 'MemoizedTableRow'
 
-  if (isLoading) {
-    return <div>loading</div>
+  if (isLoading || isChronikLoading || !chronikClient) {
+    return (
+      <Card className="relative overflow-hidden">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-baseline gap-2">
+              <AuroraText className="text-lg font-bold tracking-tighter">eToken Market</AuroraText>
+            </CardTitle>
+            <CardDescription>Loading market data...</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4 animate-pulse">
+                <div className="h-4 bg-muted rounded w-8"></div>
+                <div className="h-8 w-8 bg-muted rounded-full"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-muted rounded w-32"></div>
+                </div>
+                <div className="h-4 bg-muted rounded w-20"></div>
+                <div className="h-4 bg-muted rounded w-16"></div>
+                <div className="h-4 bg-muted rounded w-24"></div>
+                <div className="h-4 bg-muted rounded w-24"></div>
+                <div className="h-4 bg-muted rounded w-16"></div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   const styles = `

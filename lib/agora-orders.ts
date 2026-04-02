@@ -28,7 +28,7 @@ const decimalsCache = new Map<string, number>()
 
 const getAgoraClient = () => {
   if (!agoraClient) {
-    agoraClient = new Agora(chronik)
+    agoraClient = new Agora(chronik as any)
   }
   return agoraClient
 }

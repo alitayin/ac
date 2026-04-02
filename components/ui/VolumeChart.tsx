@@ -55,7 +55,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 }
 
 export default function Component({ tokenIds }: TokenListComponentProps) {
-  const [timeRange, setTimeRange] = useState("30d")
+  const [timeRange, setTimeRange] = useState("7d")
   const { data: chartData, isLoading } = useHourlyData(tokenIds, timeRange)
 
   const totalVolume = useMemo(() => 
@@ -98,7 +98,7 @@ export default function Component({ tokenIds }: TokenListComponentProps) {
         </div>
         <Select value={timeRange} onValueChange={setTimeRange}>
           <SelectTrigger className="w-[160px] rounded-lg sm:ml-auto" aria-label="Select a value">
-            <SelectValue placeholder="Last 30 days" />
+            <SelectValue placeholder="Last 7 days" />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
             <SelectItem value="90d" className="rounded-lg">
@@ -109,6 +109,9 @@ export default function Component({ tokenIds }: TokenListComponentProps) {
             </SelectItem>
             <SelectItem value="7d" className="rounded-lg">
               Last 7 days
+            </SelectItem>
+            <SelectItem value="72h" className="rounded-lg">
+              Last 72 hours
             </SelectItem>
           </SelectContent>
         </Select>

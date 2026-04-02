@@ -2,6 +2,7 @@ import { Transaction } from "@/lib/types"
 
 export const BLOCKS_PER_HOUR = 6
 export const BLOCKS_PER_DAY = BLOCKS_PER_HOUR * 24
+export const BLOCKS_PER_3_DAYS = BLOCKS_PER_DAY * 3
 export const BLOCKS_PER_MONTH = BLOCKS_PER_DAY * 30
 export const BLOCKS_PER_YEAR = BLOCKS_PER_DAY * 365
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000

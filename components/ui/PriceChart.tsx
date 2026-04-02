@@ -28,7 +28,7 @@ interface TokenComponentProps {
 }
 
 export default function Component({ tokenIds }: TokenComponentProps) {
-  const [timeRange, setTimeRange] = React.useState("30d")
+  const [timeRange, setTimeRange] = React.useState("7d")
   const { data: rawData, isLoading } = useHourlyData(tokenIds, timeRange)
   const filteredData = rawData.map((d) => ({
     date: d.date,
@@ -86,7 +86,7 @@ export default function Component({ tokenIds }: TokenComponentProps) {
             className="w-[160px] rounded-lg sm:ml-auto"
             aria-label="Select a value"
           >
-            <SelectValue placeholder="Last 3 months" />
+            <SelectValue placeholder="Last 7 days" />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
             <SelectItem value="90d" className="rounded-lg">
@@ -97,6 +97,9 @@ export default function Component({ tokenIds }: TokenComponentProps) {
             </SelectItem>
             <SelectItem value="7d" className="rounded-lg">
               Last 7 days
+            </SelectItem>
+            <SelectItem value="72h" className="rounded-lg">
+              Last 72 hours
             </SelectItem>
           </SelectContent>
         </Select>

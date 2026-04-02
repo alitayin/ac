@@ -52,7 +52,7 @@ const chartConfig = {
 export default function Component({ tokenId }: TokenComponentProps) {
   const [chartData, setChartData] = useState<RealtimePriceData[]>([])
   const [hoverData, setHoverData] = useState<RealtimePriceData | null>(null)
-  const [timeRange, setTimeRange] = useState("720")
+  const [timeRange, setTimeRange] = useState("168")
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {

@@ -1,34 +1,40 @@
 import { ChronikClient } from "chronik-client"
 
+// Legacy synchronous export (keep during migration)
 export const chronik = new ChronikClient([
   "https://chronik-native1.fabien.cash",
   "https://chronik-native2.fabien.cash",
   "https://chronik-native3.fabien.cash",
 ])
 
-export const fetchBlockchainInfo = async (): Promise<{ tipHash: string; tipHeight: number }> => {
-  const info = await chronik.blockchainInfo()
+export const fetchBlockchainInfo = async (
+  client?: ChronikClient
+): Promise<{ tipHash: string; tipHeight: number }> => {
+  const c = client || chronik
+  const info = await c.blockchainInfo()
   return {
     tipHash: info?.tipHash ?? "",
     tipHeight: typeof info?.tipHeight === "number" ? info.tipHeight : 0,
   }
 }
 
-export const fetchTokenUtxos = async (tokenId: string): Promise<any[]> => {
+export const fetchTokenUtxos = async (tokenId: string, client?: ChronikClient): Promise<any[]> => {
   if (!tokenId) {
     throw new Error("tokenId is required")
   }
 
-  const utxosResp = await chronik.tokenId(tokenId).utxos()
+  const c = client || chronik
+  const utxosResp = await c.tokenId(tokenId).utxos()
   return utxosResp?.utxos || []
 }
 
-export const fetchAddressXecUtxos = async (address: string): Promise<any[]> => {
+export const fetchAddressXecUtxos = async (address: string, client?: ChronikClient): Promise<any[]> => {
   if (!address) {
     throw new Error("address is required")
   }
 
-  const utxosResp = await chronik.address(address).utxos()
+  const c = client || chronik
+  const utxosResp = await c.address(address).utxos()
   const utxos = utxosResp?.utxos || []
 
   return utxos.filter((utxo: any) => !utxo.token)
@@ -82,22 +88,23 @@ const setCachedTokenDetails = (tokenId: string, data: any) => {
   }
 }
 
-export const fetchTokenDetails = async (tokenId: string) => {
+export const fetchTokenDetails = async (tokenId: string, client?: ChronikClient) => {
   if (!tokenId) {
     throw new Error("tokenId is required")
   }
-  
+
   const cached = getCachedTokenDetails(tokenId)
   if (cached) {
     return cached
   }
-  
-  const tokenData = await chronik.token(tokenId)
-  
+
+  const c = client || chronik
+  const tokenData = await c.token(tokenId)
+
   if (tokenData) {
     setCachedTokenDetails(tokenId, tokenData)
   }
-  
+
   return tokenData
 }
 

@@ -1,3 +1,4 @@
+import { ChronikClient } from "chronik-client"
 import { tokens } from "@/config/tokens"
 import {
   chronik,
@@ -23,14 +24,14 @@ const toNumber = (value: any): number => {
   return Number.isFinite(num) ? num : 0
 }
 
-const getTokenDecimals = async (tokenId: string): Promise<number> => {
+const getTokenDecimals = async (tokenId: string, client?: ChronikClient): Promise<number> => {
   const tokenConfig = Object.values(tokens).find(t => t.tokenId === tokenId)
   if (tokenConfig && typeof tokenConfig.decimals === "number") {
     return tokenConfig.decimals
   }
 
   try {
-    const tokenDetails = await fetchTokenDetails(tokenId)
+    const tokenDetails = await fetchTokenDetails(tokenId, client)
     return getTokenDecimalsFromDetails(tokenDetails, 0)
   } catch (_error) {}
 
@@ -235,6 +236,7 @@ export const fetchAgoraTransactionsFromChronik = async (
   tokenId: string,
   onBatch?: BatchHandler,
   options: FetchOptions = {},
+  client?: ChronikClient,
 ): Promise<TransactionWithStatus[]> => {
   if (!tokenId) return []
 
@@ -244,15 +246,16 @@ export const fetchAgoraTransactionsFromChronik = async (
   const stopBelowHeight = options.stopBelowHeight
   const failOnError = options.failOnError ?? false
 
-  const decimals = await getTokenDecimals(tokenId)
+  const decimals = await getTokenDecimals(tokenId, client)
   const divisor = Math.pow(10, decimals || 0)
 
   const result: TransactionWithStatus[] = []
   let latestBlockHeight: number | null = null
+  const activeChronik = client || chronik
 
   for (let page = 0; ; page++) {
     try {
-      const history = await (chronik.tokenId(tokenId) as any).history(
+      const history = await (activeChronik.tokenId(tokenId) as any).history(
         page,
         pageSize,
       )

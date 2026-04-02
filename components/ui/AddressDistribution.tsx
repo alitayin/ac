@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { encodeCashAddress, getTypeAndHashFromOutputScript } from "ecashaddrjs";
-import { chronik } from "@/lib/chronik";
+import { useChronik } from "@/lib/context/ChronikContext";
 
 interface AddressDistributionProps {
   tokenId: string;
@@ -38,18 +38,22 @@ function formatPercent(n: number): string {
 }
 
 export default function AddressDistribution({ tokenId, decimals = 0, className = "" }: AddressDistributionProps) {
+  const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik();
   const [rows, setRows] = useState<AddressRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [sortDesc, setSortDesc] = useState<boolean>(true);
 
   useEffect(() => {
+    if (isChronikLoading || !chronikClient) return
+
     let isCancelled = false;
+    const activeChronik = chronikClient;
     async function load() {
       setIsLoading(true);
       setError("");
       try {
-        const utxosResp = await chronik.tokenId(tokenId).utxos();
+        const utxosResp = await activeChronik.tokenId(tokenId).utxos();
         const utxos = utxosResp?.utxos || [];
 
         const mapAddressToAmount = new Map<string, bigint>();
@@ -126,7 +130,7 @@ export default function AddressDistribution({ tokenId, decimals = 0, className =
       isCancelled = true;
       clearInterval(id);
     };
-  }, [tokenId]);
+  }, [tokenId, chronikClient, isChronikLoading]);
 
   const sortedRows = useMemo(() => {
     const copy = [...rows];
@@ -165,6 +169,7 @@ export default function AddressDistribution({ tokenId, decimals = 0, className =
         </button>
       </CardHeader>
       <CardContent>
+        {isChronikLoading && <div className="text-sm text-muted-foreground">Connecting Chronik...</div>}
         {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
         {error && <div className="text-sm text-red-500">{error}</div>}
         {!isLoading && !error && (

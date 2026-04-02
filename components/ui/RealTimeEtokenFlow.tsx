@@ -3,7 +3,8 @@
 import * as React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { chronik, fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import { useChronik } from "@/lib/context/ChronikContext"
 import { detectAgoraTokenId } from "@/lib/chronik-transactions"
 import { WsMsgClient } from "chronik-client"
 import { formatNumber } from "@/lib/formatters"
@@ -33,6 +34,7 @@ const formatTxid = (txid: string) => {
 }
 
 export default function RealTimeEtokenFlow() {
+  const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const [connected, setConnected] = React.useState(false)
   const [wsError, setWsError] = React.useState<string | null>(null)
   const [items, setItems] = React.useState<FlowItem[]>([])
@@ -49,7 +51,7 @@ export default function RealTimeEtokenFlow() {
       return tokenMetaCache.current.get(tokenId)
     }
     try {
-      const meta = await fetchTokenDetails(tokenId)
+      const meta = await fetchTokenDetails(tokenId, chronikClient!)
       tokenMetaCache.current.set(tokenId, meta)
       return meta
     } catch {
@@ -62,7 +64,7 @@ export default function RealTimeEtokenFlow() {
     seenTxs.current.add(txid)
 
     try {
-      const tx = await chronik.tx(txid)
+      const tx = await chronikClient!.tx(txid)
       if (!tx) return
 
       const tokenMap = new Map<
@@ -157,14 +159,16 @@ export default function RealTimeEtokenFlow() {
   )
 
   React.useEffect(() => {
-    let ws: ReturnType<typeof chronik.ws> | null = null
+    if (isChronikLoading || !chronikClient) return
+
+    let ws: ReturnType<typeof chronikClient.ws> | null = null
     cancelledRef.current = false
 
     const connect = async () => {
       setConnecting(true)
       setWsError(null)
       try {
-        ws = chronik.ws({
+        ws = chronikClient.ws({
           onConnect: () => {
             setConnected(true)
             setConnecting(false)
@@ -211,7 +215,7 @@ export default function RealTimeEtokenFlow() {
         return
       }
     }
-  }, [enqueueTx])
+  }, [enqueueTx, chronikClient, isChronikLoading])
 
   return (
     <Card className="relative overflow-hidden">

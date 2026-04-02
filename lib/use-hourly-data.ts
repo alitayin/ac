@@ -52,7 +52,7 @@ export function useHourlyData(tokenIds: string[], timeRange: string) {
     const fetchData = async () => {
       setIsLoading(true)
       try {
-        const days = timeRange === "90d" ? 90 : timeRange === "7d" ? 7 : 30
+        const days = timeRange === "90d" ? 90 : timeRange === "7d" ? 7 : timeRange === "72h" ? 3 : 30
         const hours = days * 24
         const hourlyArrays = await Promise.all(
           tokenIds.map((id) => fetchHourlyData(id, hours).catch(() => []))
