@@ -214,8 +214,19 @@ export const fetchUserListings = async (
 
         if (!formattedOffer) return null
 
+        // Try to get token name from config first
         const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
-        const tokenName = tokenConfig?.name || 'Unknown Token'
+        let tokenName = tokenConfig?.name
+
+        // If not in config, fetch from Chronik
+        if (!tokenName) {
+          try {
+            const tokenDetails = await fetchTokenDetails(tokenId)
+            tokenName = tokenDetails?.genesisInfo?.tokenName || 'Unknown Token'
+          } catch (error) {
+            tokenName = 'Unknown Token'
+          }
+        }
 
         return {
           ...formattedOffer,
