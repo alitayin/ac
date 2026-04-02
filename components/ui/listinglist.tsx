@@ -225,9 +225,9 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
               <Card key={`${listing.tokenId}-${index}`} className="rounded-3xl overflow-hidden border-muted/40 hover:border-muted transition-all duration-200">
                 <div className="p-5">
                   <div className="flex items-start gap-4">
-                    <Avatar className="h-12 w-12 ring-2 ring-muted/20">
+                    <Avatar className="h-10 w-10 ring-2 ring-muted/20">
                       <AvatarImage src={getTokenIcon(listing.tokenId)} alt={listing.tokenName} />
-                      <AvatarFallback className="text-lg font-semibold">{listing.tokenName.substring(0, 2)}</AvatarFallback>
+                      <AvatarFallback className="text-sm font-semibold">{listing.tokenName.substring(0, 2)}</AvatarFallback>
                     </Avatar>
 
                     <div className="flex-1 space-y-3">
