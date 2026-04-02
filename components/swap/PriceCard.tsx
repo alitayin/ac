@@ -26,6 +26,7 @@ interface PriceCardProps {
   usdPriceText: string;
   onTokenSelect: (tokenId: string, tokenName: string) => void;
   onTokenMetaChange: (meta: { decimals: number }) => void;
+  showTokenSelector?: boolean;
 }
 
 export const PriceCard: React.FC<PriceCardProps> = ({
@@ -44,6 +45,7 @@ export const PriceCard: React.FC<PriceCardProps> = ({
   usdPriceText,
   onTokenSelect,
   onTokenMetaChange,
+  showTokenSelector = true,
 }) => {
   return (
     <Card className="rounded-3xl p-4 bg-background border shadow-none transition-all hover:bg-muted/50">
@@ -123,13 +125,15 @@ export const PriceCard: React.FC<PriceCardProps> = ({
             onBlur={onTokenPriceBlur}
           />
         </span>
-        <TokenSelector
-          selectedToken={selectedToken}
-          userTokens={userTokens}
-          onTokenSelect={onTokenSelect}
-          onTokenMetaChange={onTokenMetaChange}
-          className="px-2"
-        />
+        {showTokenSelector && (
+          <TokenSelector
+            selectedToken={selectedToken}
+            userTokens={userTokens}
+            onTokenSelect={onTokenSelect}
+            onTokenMetaChange={onTokenMetaChange}
+            className="px-2"
+          />
+        )}
       </div>
 
       <div className="flex mt-4 justify-between items-center">

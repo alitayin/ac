@@ -24,14 +24,16 @@ interface TokenSelectorProps {
     detail?: any;
   }) => void;
   className?: string;
+  onlyOwnedTokens?: boolean;
 }
 
-export function TokenSelector({ 
-  selectedToken, 
-  userTokens, 
+export function TokenSelector({
+  selectedToken,
+  userTokens,
   onTokenSelect,
   onTokenMetaChange,
-  className = "" 
+  className = "",
+  onlyOwnedTokens = false
 }: TokenSelectorProps) {
   const [open, setOpen] = useState(false);
   const [showScrollHint, setShowScrollHint] = useState(false);
@@ -172,6 +174,7 @@ export function TokenSelector({
                     formattedAmount,
                   };
                 })
+                .filter(({ hasBalance }) => !onlyOwnedTokens || hasBalance)
                 .sort((a, b) => {
                   if (a.hasBalance !== b.hasBalance) {
                     return a.hasBalance ? -1 : 1;
@@ -186,9 +189,10 @@ export function TokenSelector({
                     variant="ghost"
                     className="w-full justify-start gap-2 px-2 py-1.5 h-auto"
                     onClick={() => handleTokenSelect(tokenId, token.name)}
+                    disabled={onlyOwnedTokens && !hasBalance}
                   >
                     <Avatar className="h-8 w-8">
-                      <AvatarImage 
+                      <AvatarImage
                         src={`https://icons.etokens.cash/32/${tokenId}.png`}
                         alt={token.name}
                       />

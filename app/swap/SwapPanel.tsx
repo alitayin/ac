@@ -833,6 +833,22 @@ export function SwapPanel() {
   };
 
 
+  // Auto-select first owned token when wallet connects or user has tokens
+  useEffect(() => {
+    if (isWalletConnected && userTokens && Object.keys(userTokens).length > 0) {
+      // Find first token with balance > 0
+      const ownedTokens = Object.entries(userTokens).filter(([_, amount]) => amount !== "0");
+      if (ownedTokens.length > 0) {
+        const [firstTokenId] = ownedTokens[0];
+        const tokenConfig = TOKENS[firstTokenId as keyof typeof TOKENS];
+        if (tokenConfig && selectedToken.id !== firstTokenId) {
+          handleTokenSelect(firstTokenId, tokenConfig.name);
+        }
+      }
+    }
+  }, [isWalletConnected, userTokens]);
+
+
   const handleCreateListing = async () => {
     if (!isWalletConnected || !mnemonic) {
       toast({
@@ -1228,6 +1244,7 @@ export function SwapPanel() {
                   usdPriceText={sellPrice && parseFloat(sellPrice) > 0 && xecPrice ? (parseFloat(sellPrice) * xecPrice).toFixed(4) : ''}
                   onTokenSelect={handleTokenSelect}
                   onTokenMetaChange={(meta) => setSelectedTokenDecimals(meta.decimals)}
+                  showTokenSelector={false}
                 />
 
                 <BuyCard
@@ -1239,6 +1256,10 @@ export function SwapPanel() {
                   onTokenSelect={handleTokenSelect}
                   onTokenMetaChange={(meta) => setSelectedTokenDecimals(meta.decimals)}
                   selectedTokenDecimals={selectedTokenDecimals}
+                  label={`How many ${selectedToken.name} to list?`}
+                  showTokenSelector={true}
+                  onlyOwnedTokens={true}
+                  showMaxBalance={true}
                 />
 
                 <div className="space-y-2">

@@ -147,7 +147,10 @@ export default function TokenPage() {
       const insufficientOrderKeys: string[] = [];
 
       Object.entries(existingOrders).forEach(([key, order]: [string, any]) => {
-        const [tokenId, address, priceStr] = key.split('|');
+        const parts = key.split('|');
+        const tokenId = parts[0];
+        const address = parts[1];
+        const priceStr = parts[2];
         if (address !== ecashAddress) return;
         
         if (order.status === 'completed' || order.remainingAmount === 0) {
@@ -628,7 +631,10 @@ export default function TokenPage() {
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
       Object.entries(existingOrders).forEach(([key, order]: [string, any]) => {
-        const [tokenId, address, priceStr] = key.split('|');
+        const parts = key.split('|');
+        const tokenId = parts[0];
+        const address = parts[1];
+        const priceStr = parts[2];
         if (address !== ecashAddress) return;
         
         if (order.status === 'completed' || order.remainingAmount === 0) {
@@ -666,8 +672,11 @@ export default function TokenPage() {
       }
 
       for (const orderKey of orderCheckInfo.insufficientOrders) {
-        const [tokenId, address, priceStr] = orderKey.split('|');
-        
+        const parts = orderKey.split('|');
+        const tokenId = parts[0];
+        const address = parts[1];
+        const priceStr = parts[2];
+
         try {
           const data = await fetchAgoraOrderBook(tokenId);
           

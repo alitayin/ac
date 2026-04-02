@@ -52,8 +52,12 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
       const tokenList: Array<{id: string, name: string}> = [];
       
       Object.entries(savedOrders).forEach(([key, orderData]) => {
-        const [tokenId, address, price] = key.split('|');
-        
+        const parts = key.split('|');
+        const tokenId = parts[0];
+        const address = parts[1];
+        const price = parts[2];
+        // parts[3] is the random string (if present)
+
         // Only show orders for the connected wallet
         if (address === ecashAddress) {
           const order = orderData as Order;

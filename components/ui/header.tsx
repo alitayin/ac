@@ -225,7 +225,9 @@ export default function Header({
     if (!isWalletConnected || !ecashAddress) return false;
 
     return Object.keys(orders).some(orderKey => {
-      const [tokenId, address] = orderKey.split('|');
+      const parts = orderKey.split('|');
+      const tokenId = parts[0];
+      const address = parts[1];
       return address === ecashAddress;
     });
   };
@@ -253,7 +255,9 @@ export default function Header({
       const tokenIds = new Set<string>();
       
       Object.keys(orders).forEach(orderKey => {
-        const [tokenId, address] = orderKey.split('|');
+        const parts = orderKey.split('|');
+        const tokenId = parts[0];
+        const address = parts[1];
         if (address === ecashAddress) {
           tokenIds.add(tokenId);
         }
