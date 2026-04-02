@@ -13,6 +13,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { createAgoraOffer } from "ecash-quicksend";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import { TOKENS } from '@/config/tokenconfig';
 import { Power, Trash2, CircleAlert, Eraser, ArrowDownUp, ShieldAlert, Layout } from "lucide-react";
@@ -104,6 +105,9 @@ export function SwapPanel() {
   const [orderBook, setOrderBook] = useState<{ orders: any[] }>({ orders: [] });
   const [selectedTokenDecimals, setSelectedTokenDecimals] = useState<number>(0);
   const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC); // Network fee estimated from UTXO count
+  const [sellAmount, setSellAmount] = useState<string>('');
+  const [sellPrice, setSellPrice] = useState<string>('');
+  const [isCreatingListing, setIsCreatingListing] = useState<boolean>(false);
 
   const handleGenerateMnemonic = () => {
     try {
@@ -478,7 +482,8 @@ export function SwapPanel() {
     if (isOfflineOrder) {
       const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
       const hasActiveCustodialOrder = Object.keys(existingOrders).some(orderKey => {
-        const [, address] = orderKey.split('|');
+        const parts = orderKey.split('|');
+        const address = parts[1];
         const order = existingOrders[orderKey];
         return address === ecashAddress && 
                order.orderType === 'offline' && 
@@ -496,10 +501,8 @@ export function SwapPanel() {
     }
 
     const exactReceiveAmount = parseFloat(receiveAmount);
-    
-    const orderKey = isOfflineOrder 
-      ? `${selectedToken.id}|${ecashAddress}|${tokenPrice}|${generateRandomString()}`
-      : `${selectedToken.id}|${ecashAddress}|${tokenPrice}`;
+
+    const orderKey = `${selectedToken.id}|${ecashAddress}|${tokenPrice}|${generateRandomString()}`;
     
     const orderData: {
       remainingAmount: number;
@@ -716,7 +719,8 @@ export function SwapPanel() {
     if (!isWalletConnected || !ecashAddress) return false;
     
     return Object.keys(orders).some(orderKey => {
-      const [, address] = orderKey.split('|');
+      const parts = orderKey.split('|');
+      const address = parts[1];
       return address === ecashAddress;
     });
   };
@@ -829,6 +833,90 @@ export function SwapPanel() {
   };
 
 
+  const handleCreateListing = async () => {
+    if (!isWalletConnected || !mnemonic) {
+      toast({
+        title: "Wallet not connected",
+        description: "Please connect your wallet with recovery phrase",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isGuestMode) {
+      toast({
+        title: "Guest Mode Restriction",
+        description: "Cannot create listings in guest mode. Please connect wallet with recovery phrase",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!sellAmount || parseFloat(sellAmount) <= 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid token amount to sell",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!sellPrice || parseFloat(sellPrice) <= 0) {
+      toast({
+        title: "Invalid price",
+        description: "Please enter a valid price per token",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingListing(true);
+
+    try {
+      const amount = parseFloat(sellAmount);
+      const pricePerToken = parseFloat(sellPrice);
+
+      // Convert amount to bigint with proper decimals
+      const tokenAmountBigInt = BigInt(Math.floor(amount * Math.pow(10, selectedTokenDecimals)));
+
+      const result = await createAgoraOffer({
+        tokenId: selectedToken.id,
+        tokenAmount: tokenAmountBigInt,
+        pricePerToken: pricePerToken,
+        mnemonic: mnemonic,
+        offerType: 'PARTIAL'
+      });
+
+      if (result.success) {
+        toast({
+          title: "✅ Listing created successfully",
+          description: `Successfully listed ${amount} ${selectedToken.name} at ${pricePerToken} XEC per token`,
+        });
+
+        setSellAmount('');
+        setSellPrice('');
+
+        window.dispatchEvent(new Event('listings-updated'));
+      } else {
+        toast({
+          title: "Failed to create listing",
+          description: result.message || "Unknown error occurred",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error creating listing:', error);
+      toast({
+        title: "Error creating listing",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingListing(false);
+    }
+  };
+
+
   return (
     <>
       <div className="flex-1 flex justify-center px-4">
@@ -837,14 +925,20 @@ export function SwapPanel() {
             <Tabs defaultValue="swap" className="w-full">
           <TabsList className="flex justify-between px-4 bg-transparent">
             <div className="flex space-x-4">
-              <TabsTrigger 
-                value="swap" 
+              <TabsTrigger
+                value="swap"
                 className="data-[state=active]:bg-muted shadow-none data-[state=active]:text-muted-foreground data-[state=active]:shadow-none rounded-full px-4 py-2"
               >
-                Swap
+                Buy
               </TabsTrigger>
-              <TabsTrigger 
-                value="limit" 
+              <TabsTrigger
+                value="sell"
+                className="data-[state=active]:bg-muted shadow-none data-[state=active]:text-muted-foreground data-[state=active]:shadow-none rounded-full px-4 py-2"
+              >
+                Sell
+              </TabsTrigger>
+              <TabsTrigger
+                value="limit"
                 className="data-[state=active]:bg-muted shadow-none data-[state=active]:text-muted-foreground data-[state=active]:shadow-none rounded-full px-4 py-2 relative"
               >
                                   <span className="flex items-center gap-2">
@@ -1092,6 +1186,70 @@ export function SwapPanel() {
                       </div>
                     </Alert>
                   )}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="sell" className="mt-0">
+            <div className="p-4 pt-2">
+              <div className="space-y-2 max-w-xl mx-auto">
+                <PriceCard
+                  selectedToken={selectedToken}
+                  userTokens={userTokens}
+                  tokenPriceInput={sellPrice}
+                  onTokenPriceInputChange={(value) => {
+                    if (value === '' || /^[0-9]*\.?[0-9]*$/.test(value)) {
+                      setSellPrice(value);
+                    }
+                  }}
+                  onTokenPriceBlur={() => {
+                    let newPrice = parseFloat(sellPrice);
+                    if (isNaN(newPrice)) {
+                      newPrice = 0;
+                      setSellPrice('0.00');
+                    } else {
+                      setSellPrice(formatTokenPrice(newPrice));
+                    }
+                  }}
+                  useBestOrderPrice={useBestOrderPrice}
+                  setUseBestOrderPrice={setUseBestOrderPrice}
+                  showUsdPrice={showUsdPrice}
+                  setShowUsdPrice={setShowUsdPrice}
+                  onMarketClick={() => {
+                    getTokenPrice(selectedToken.id).then(price => {
+                      if (price) {
+                        setSellPrice(formatTokenPrice(price));
+                      }
+                    });
+                  }}
+                  onOneDollarClick={handleOneDollarClick}
+                  showUsdPriceValue={showUsdPrice && parseFloat(sellPrice) > 0}
+                  usdPriceText={sellPrice && parseFloat(sellPrice) > 0 && xecPrice ? (parseFloat(sellPrice) * xecPrice).toFixed(4) : ''}
+                  onTokenSelect={handleTokenSelect}
+                  onTokenMetaChange={(meta) => setSelectedTokenDecimals(meta.decimals)}
+                />
+
+                <BuyCard
+                  receiveAmount={sellAmount}
+                  setReceiveAmount={setSellAmount}
+                  calculateSpendAmount={() => {}}
+                  selectedToken={selectedToken}
+                  userTokens={userTokens}
+                  onTokenSelect={handleTokenSelect}
+                  onTokenMetaChange={(meta) => setSelectedTokenDecimals(meta.decimals)}
+                  selectedTokenDecimals={selectedTokenDecimals}
+                />
+
+                <div className="space-y-2">
+                  <Button
+                    className="w-full text-md rounded-2xl h-12"
+                    variant="default"
+                    onClick={handleCreateListing}
+                    disabled={isCreatingListing || !isWalletConnected || isGuestMode}
+                  >
+                    {isCreatingListing ? "Creating..." : isWalletConnected ? "Create Listing" : "Connect wallet"}
+                  </Button>
                 </div>
               </div>
             </div>
