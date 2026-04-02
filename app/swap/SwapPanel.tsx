@@ -544,13 +544,13 @@ export function SwapPanel() {
         };
 
         const transactionResult = await createOfflineBuyTransaction(config);
-        
-        if (transactionResult.success && transactionResult.rawTxHex) {
+
+        if (transactionResult.success && 'rawTxHex' in transactionResult && transactionResult.rawTxHex) {
           orderData.raw = transactionResult.rawTxHex;
-          if (transactionResult.selectedUtxos) {
+          if ('selectedUtxos' in transactionResult && transactionResult.selectedUtxos) {
             orderData.selectedUtxos = transactionResult.selectedUtxos;
           }
-          
+
           toast({
             title: "✅ Offline transaction created",
             description: `Raw transaction hash generated and saved to order. Check console for details.`,
