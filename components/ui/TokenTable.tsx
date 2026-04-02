@@ -1390,10 +1390,19 @@ export default function Component() {
         setData(initialTokens)
         setIsLoading(false)
 
-        for (const token of initialTokens) {
-          if (isCancelled) break
-          await loadTokenStats(token.tokenId, token.name)
+        // Concurrency-limited loading: max 5 parallel fetches
+        const CONCURRENCY = 5
+        let index = 0
+        async function worker() {
+          while (index < initialTokens.length) {
+            if (isCancelled) break
+            const token = initialTokens[index++]
+            await loadTokenStats(token.tokenId, token.name)
+          }
         }
+        await Promise.all(
+          Array.from({ length: Math.min(CONCURRENCY, initialTokens.length) }, worker)
+        )
       } catch (_error) {
         setIsLoading(false)
       }
