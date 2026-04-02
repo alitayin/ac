@@ -1,6 +1,7 @@
 import { Agora } from "ecash-agora"
 import { encodeCashAddress } from "ecashaddrjs"
 import { shaRmd160 } from "ecash-lib"
+import * as ecashLib from "ecash-lib"
 import { chronik, fetchTokenDetails, getTokenDecimalsFromDetails, getTokenAmountFromToken } from "./chronik"
 import { tokens } from "@/config/tokens"
 import type { Order } from "./types"
@@ -171,4 +172,76 @@ export const fetchAgoraOrderBook = async (
   }
 }
 
+const derivePubkeyHex = (mnemonic: string): string => {
+  const seed = ecashLib.mnemonicToSeed(mnemonic)
+  const hdRoot = ecashLib.HdNode.fromSeed(seed)
+  const childNode = hdRoot.derivePath("m/44'/1899'/0'/0/0")
+  const pubkey = childNode.pubkey()
+  return Buffer.from(pubkey).toString('hex')
+}
+
+export type UserListingsResponse = {
+  success: boolean
+  data?: {
+    listings: Array<Order & { tokenId: string; tokenName: string }>
+  }
+  error?: string
+}
+
+export const fetchUserListings = async (
+  mnemonic: string,
+): Promise<UserListingsResponse> => {
+  if (!mnemonic) {
+    return {
+      success: false,
+      error: "mnemonic is required",
+    }
+  }
+
+  try {
+    const pubkeyHex = derivePubkeyHex(mnemonic)
+    const offers = await getAgoraClient().activeOffersByPubKey(pubkeyHex)
+    const openOffers = offers.filter((offer: any) => offer.status === 'OPEN')
+
+    const listingsPromises = openOffers.map(async (offer: any) => {
+      try {
+        const tokenId = offer.token?.tokenId
+        if (!tokenId) return null
+
+        const decimals = await getTokenDecimals(tokenId)
+        const divisor = Math.pow(10, decimals || 0)
+        const formattedOffer = formatOffer(offer, divisor)
+
+        if (!formattedOffer) return null
+
+        const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
+        const tokenName = tokenConfig?.name || 'Unknown Token'
+
+        return {
+          ...formattedOffer,
+          tokenId,
+          tokenName,
+        }
+      } catch (error) {
+        return null
+      }
+    })
+
+    const listings = (await Promise.all(listingsPromises)).filter(Boolean) as Array<Order & { tokenId: string; tokenName: string }>
+
+    listings.sort((a, b) => b.price - a.price)
+
+    return {
+      success: true,
+      data: {
+        listings,
+      },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
+}
 

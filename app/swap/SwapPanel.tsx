@@ -18,6 +18,7 @@ import { TOKENS } from '@/config/tokenconfig';
 import { Power, Trash2, CircleAlert, Eraser, ArrowDownUp, ShieldAlert, Layout } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OrderList } from "@/components/ui/orderlist";
+import { ListingList } from "@/components/ui/listinglist";
 import { pushOrdersToServer } from '@/lib/Auto.js';
 import { main as createOfflineBuyTransaction } from '@/lib/offlinebuy.js';
 import Image from "next/image";
@@ -57,15 +58,16 @@ const MIN_ORDER_TOTAL_XEC = 1000;
 
 export function SwapPanel() {
   const { toast } = useToast();
-  const { 
-    isWalletConnected, 
-    ecashAddress, 
-    balance, 
-    userTokens, 
+  const {
+    isWalletConnected,
+    ecashAddress,
+    balance,
+    userTokens,
     connectWallet,
     connectWithCashtab,
     disconnectWallet,
-    isGuestMode
+    isGuestMode,
+    mnemonic
   } = useWallet();
   const [spendAmount, setSpendAmount] = useState<string>('');
   const [receiveAmount, setReceiveAmount] = useState<string>('');
@@ -854,6 +856,12 @@ export function SwapPanel() {
                     )}
                   </span>
               </TabsTrigger>
+              <TabsTrigger
+                value="listing"
+                className="data-[state=active]:bg-muted shadow-none data-[state=active]:text-muted-foreground data-[state=active]:shadow-none rounded-full px-4 py-2"
+              >
+                My listing
+              </TabsTrigger>
             </div>
             <div className="flex items-center space-x-2">
               <TooltipProvider>
@@ -1095,6 +1103,33 @@ export function SwapPanel() {
             ) : (
               <div className="p-8 text-center">
                 <div className="text-muted-foreground mb-4">Please connect your wallet to view your orders</div>
+                <Drawer>
+                  <DrawerTrigger asChild>
+                    <Button>Connect Wallet</Button>
+                  </DrawerTrigger>
+                  <DrawerContent>
+                    <WalletConnectDrawerInner
+                      mnemonicWords={mnemonicWords}
+                      setMnemonicWords={setMnemonicWords}
+                      mnemonicError={mnemonicError}
+                      setMnemonicError={setMnemonicError}
+                      handlePaste={handlePaste}
+                      handleGenerateMnemonic={handleGenerateMnemonic}
+                      handleSaveMnemonic={handleSaveMnemonic}
+                      handleConnectCashtab={handleConnectCashtab}
+                    />
+                  </DrawerContent>
+                </Drawer>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="listing" className="mt-0">
+            {isWalletConnected ? (
+              <ListingList ecashAddress={ecashAddress} mnemonic={mnemonic} />
+            ) : (
+              <div className="p-8 text-center">
+                <div className="text-muted-foreground mb-4">Please connect your wallet to view your listings</div>
                 <Drawer>
                   <DrawerTrigger asChild>
                     <Button>Connect Wallet</Button>
