@@ -38,34 +38,34 @@ export const AutoExecutionProvider = ({
 
 
   useEffect(() => {
+    // Clear any existing interval FIRST to prevent accumulation
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
-
+    // Only start interval if conditions are met
     if (isAutoProcessing && hasActiveOrders()) {
-
+      // Initial execution
       executeOrders();
 
+      // Start polling interval
       intervalRef.current = setInterval(async () => {
-        try {
-          if (!isAutoProcessing || !hasActiveOrders()) {
-            if (intervalRef.current) {
-              clearInterval(intervalRef.current);
-              intervalRef.current = null;
-            }
-            return;
+        // Double-check conditions inside interval callback
+        if (!isAutoProcessing || !hasActiveOrders()) {
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
           }
-
-          await executeOrders();
-        } catch (error) {
+          return;
         }
+
+        await executeOrders();
       }, 3000);
     }
 
+    // Cleanup function - runs when component unmounts or dependencies change
     return () => {
-      // Cleanup interval on unmount or dependency change
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
