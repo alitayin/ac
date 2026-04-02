@@ -48,7 +48,8 @@ export const PriceCard: React.FC<PriceCardProps> = ({
   showTokenSelector = true,
 }) => {
   return (
-    <Card className="rounded-3xl p-4 bg-background border shadow-none transition-all hover:bg-muted/50">
+    <Card className="rounded-3xl py-0 px-0 border-none shadow-none">
+      <div className="space-y-2 bg-background p-4 rounded-2xl border transition-all hover:bg-muted/50">
       <div className="flex items-center justify-between">
         <div className="text-muted-foreground flex items-center">
           <AuroraText className="text-sm">Set price for 1 {selectedToken.name}/XEC</AuroraText>
@@ -158,6 +159,7 @@ export const PriceCard: React.FC<PriceCardProps> = ({
             ${usdPriceText}
           </div>
         )}
+      </div>
       </div>
     </Card>
   );
