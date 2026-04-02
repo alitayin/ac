@@ -7,8 +7,13 @@ import {
   setCachedTokenData,
   clearTokenCache,
   invalidateTokenCache,
+  getCachedTokenSummary,
+  setCachedTokenSummary,
+  deleteSummaryCache,
+  refreshSummaryCacheTimestamps,
   BLOCKS_PER_MONTH,
   CACHE_KEY_PREFIX,
+  SUMMARY_CACHE_KEY_PREFIX,
 } from '@/lib/token-stats'
 import { createMockProcessedTransaction, mockCachedTokenData } from '../helpers/mocks'
 import { Transaction } from '@/lib/types'
@@ -253,6 +258,145 @@ describe('token-stats', () => {
 
       const retrieved = getCachedTokenData(tokenId)
       expect(retrieved?.computedAt).toBe(0)
+    })
+  })
+
+  describe('summary cache functions', () => {
+    it('should save and retrieve cached token summary', () => {
+      const tokenId = 'test-token-id'
+      const summary = {
+        computedAt: Date.now(),
+        data: {
+          latestPrice: 0.5,
+          priceChange24h: 10.5,
+          last24HoursXECAmount: 5000,
+          totalTransactions: 25,
+        },
+      }
+
+      setCachedTokenSummary(tokenId, summary)
+      const retrieved = getCachedTokenSummary(tokenId)
+
+      expect(retrieved).toEqual(summary)
+    })
+
+    it('should return null for non-existent summary cache', () => {
+      const retrieved = getCachedTokenSummary('non-existent')
+      expect(retrieved).toBe(null)
+    })
+
+    it('should return null for invalid summary cache data', () => {
+      localStorage.setItem(`${SUMMARY_CACHE_KEY_PREFIX}_invalid`, 'invalid-json')
+      const retrieved = getCachedTokenSummary('invalid')
+      expect(retrieved).toBe(null)
+    })
+
+    it('should return null for summary cache with missing fields', () => {
+      localStorage.setItem(`${SUMMARY_CACHE_KEY_PREFIX}_incomplete`, JSON.stringify({
+        computedAt: Date.now(),
+        // missing data field
+      }))
+      const retrieved = getCachedTokenSummary('incomplete')
+      expect(retrieved).toBe(null)
+    })
+
+    it('should delete specific summary cache', () => {
+      const tokenId = 'test-token'
+      const summary = {
+        computedAt: Date.now(),
+        data: { latestPrice: 0.5 },
+      }
+
+      setCachedTokenSummary(tokenId, summary)
+      expect(getCachedTokenSummary(tokenId)).not.toBe(null)
+
+      deleteSummaryCache(tokenId)
+      expect(getCachedTokenSummary(tokenId)).toBe(null)
+    })
+
+    it('should refresh summary cache timestamps', () => {
+      const tokenIds = ['token1', 'token2']
+      const oldTime = Date.now() - 10000
+
+      tokenIds.forEach(id => {
+        setCachedTokenSummary(id, {
+          computedAt: oldTime,
+          data: { latestPrice: 0.5 },
+        })
+      })
+
+      refreshSummaryCacheTimestamps(tokenIds)
+
+      tokenIds.forEach(id => {
+        const cached = getCachedTokenSummary(id)
+        expect(cached?.computedAt).toBeGreaterThan(oldTime)
+      })
+    })
+
+    it('should handle refresh for non-existent caches', () => {
+      // Should not throw error
+      expect(() => refreshSummaryCacheTimestamps(['non-existent'])).not.toThrow()
+    })
+  })
+
+  describe('edge cases', () => {
+    it('should handle transactions with zero price', () => {
+      const txs: Transaction[] = [
+        createMockProcessedTransaction({ price: 0, amount: 1000 }),
+      ]
+      const stats = calculateStats(txs, null, null)
+      expect(stats.latestPrice).toBe(0)
+      expect(stats.last24HoursXECAmount).toBe(0)
+    })
+
+    it('should handle transactions with identical prices', () => {
+      const now = Math.floor(Date.now() / 1000)
+      const txs: Transaction[] = [
+        createMockProcessedTransaction({ price: 0.5, amount: 100, timestamp: now }),
+        createMockProcessedTransaction({ price: 0.5, amount: 200, timestamp: now - 3600 }),
+      ]
+      const stats = calculateStats(txs, null, null)
+      expect(stats.priceChange24h).toBe(0)
+    })
+
+    it('should handle very large price values', () => {
+      const tx = createMockProcessedTransaction({ price: 1000000, amount: 1 })
+      const stats = calculateStats([tx], null, null)
+      expect(stats.latestPrice).toBe(1000000)
+    })
+
+    it('should handle very small price values', () => {
+      const tx = createMockProcessedTransaction({ price: 0.00000001, amount: 1000000 })
+      const stats = calculateStats([tx], null, null)
+      expect(stats.latestPrice).toBe(0.00000001)
+    })
+
+    it('should handle transactions exactly at 24h boundary', () => {
+      const now = Math.floor(Date.now() / 1000)
+      const txs: Transaction[] = [
+        createMockProcessedTransaction({ price: 1.0, amount: 100, timestamp: now }),
+        createMockProcessedTransaction({ price: 0.8, amount: 100, timestamp: now - 86400 }),
+      ]
+      const stats = calculateStats(txs, null, null)
+      expect(stats.last24HoursXECAmount).toBeGreaterThan(0)
+    })
+
+    it('should handle empty array in pruneRecentTransactions', () => {
+      const result = pruneRecentTransactions([], 800000, 800000)
+      expect(result.filtered).toEqual([])
+      expect(result.latestBlockHeight).toBe(null)
+    })
+
+    it('should handle transaction exactly at threshold in pruneRecentTransactions', () => {
+      const tipHeight = 800000
+      const txs: Transaction[] = [
+        createMockProcessedTransaction({
+          blockHeight: tipHeight - BLOCKS_PER_MONTH,
+          timestamp: Math.floor(Date.now() / 1000),
+        }),
+      ]
+      const result = pruneRecentTransactions(txs, tipHeight, tipHeight)
+      expect(result.filtered.length).toBe(1)
     })
   })
 })
