@@ -17,7 +17,6 @@ import {
   UI_CONSTANTS 
 } from "@/lib/constants"
 import type { Order, OrderBookProps, BuyOrderResponse } from "@/lib/types"
-import { useWallet } from "@/lib/context/WalletContext"
 
 export default function OrderBook({ orderBook, className = "", tokenId, latestPrice = 0 }: OrderBookProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -28,27 +27,6 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
   const collapsedAskRef = useRef<HTMLDivElement>(null);
   const collapsedBidRef = useRef<HTMLDivElement>(null);
   const xecPrice = useXECPrice();
-  const { isWalletConnected, ecashAddress, userTokens } = useWallet();
-  // Temporary feature switch: disable StarShard holding gate while keeping logic for quick rollback.
-  const ENABLE_STARSHARD_ACCESS_GATE = false;
-  const REQUIRED_TOKEN_ID = TOKEN_IDS.STAR_SHARD;
-  const REQUIRED_MIN_BALANCE = 100_000n;
-
-  const hasRequiredTokenBalance = (() => {
-    try {
-      const balanceStr = userTokens?.[REQUIRED_TOKEN_ID] ?? "0";
-      return BigInt(balanceStr) >= REQUIRED_MIN_BALANCE;
-    } catch {
-      return false;
-    }
-  })();
-
-  const isBuySectionUnlocked = ENABLE_STARSHARD_ACCESS_GATE
-    ? Boolean(isWalletConnected && ecashAddress && hasRequiredTokenBalance)
-    : Boolean(isWalletConnected && ecashAddress);
-  const lockedMessage = !isWalletConnected || !ecashAddress
-    ? "Login to access this feature"
-    : "You need to hold at least 100,000 StarShard to access this feature.";
 
   const fetchBuyOrders = useCallback(async () => {
     try {
@@ -362,11 +340,6 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                 )}
               </div>
 
-              {!isBuySectionUnlocked && (
-                <div className="absolute inset-0 z-20 rounded-xl bg-background/10 backdrop-blur-sm flex items-center justify-center px-4 text-center text-sm text-muted-foreground">
-                  {lockedMessage}
-                </div>
-              )}
             </div>
           </>
         ) : (
@@ -446,11 +419,6 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                 )}
               </div>
 
-              {!isBuySectionUnlocked && (
-                <div className="absolute inset-0 z-20 rounded-xl bg-background/70 backdrop-blur-md flex items-center justify-center px-4 text-center text-sm text-muted-foreground">
-                  {lockedMessage}
-                </div>
-              )}
             </div>
 
             {/* Ask list (actual data) */}
