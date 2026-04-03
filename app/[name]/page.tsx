@@ -25,7 +25,6 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import AddressDistribution from "@/components/ui/AddressDistribution"
 import { useWallet } from "@/lib/context/WalletContext"
 import { useToast } from "@/hooks/use-toast"
-import { Checkbox } from "@/components/ui/checkbox"
 import { TokenSelector } from "@/components/ui/token-selector"
 import { SwapPanel } from "@/components/ui/SwapPanel"
 
@@ -111,7 +110,6 @@ export default function TokenPage() {
     insufficientCount: 0,
     insufficientOrders: []
   })
-  const [orderCheckAcknowledged, setOrderCheckAcknowledged] = useState<boolean>(false)
   const [chronikTokenInfo, setChronikTokenInfo] = useState<any>(null)
   
   const isLoadingStats = useRef<boolean>(false)
@@ -669,7 +667,6 @@ export default function TokenPage() {
           variant: "destructive",
         });
         setShowOrderCheckDialog(false);
-        setOrderCheckAcknowledged(false);
         return;
       }
 
@@ -750,7 +747,6 @@ export default function TokenPage() {
     }
 
     setShowOrderCheckDialog(false);
-    setOrderCheckAcknowledged(false);
   };
 
   const createSwapOrder = () => {
@@ -1116,7 +1112,6 @@ export default function TokenPage() {
           <button
             onClick={() => {
               setShowOrderCheckDialog(false);
-              setOrderCheckAcknowledged(false);
             }}
             className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
           >
@@ -1148,28 +1143,11 @@ export default function TokenPage() {
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          
-          <div className="flex items-start space-x-2 p-3 bg-muted/50 rounded-lg">
-            <Checkbox 
-              id="order-check-acknowledgement" 
-              checked={orderCheckAcknowledged}
-              onCheckedChange={(checked) => {
-                setOrderCheckAcknowledged(checked as boolean);
-              }}
-            />
-            <label
-              htmlFor="order-check-acknowledgement"
-              className="text-sm text-muted-foreground leading-relaxed cursor-pointer"
-            >
-              This is an experimental feature. I understand and accept all risks associated with using this functionality.
-            </label>
-          </div>
 
           <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
             <AlertDialogCancel
               onClick={() => {
                 setShowOrderCheckDialog(false);
-                setOrderCheckAcknowledged(false);
               }}
               className="flex-1 sm:flex-initial"
             >
@@ -1179,7 +1157,6 @@ export default function TokenPage() {
               variant="default"
               onClick={handleAdjustInsufficientOrders}
               className="flex-1 sm:flex-initial"
-              disabled={!orderCheckAcknowledged}
             >
               Confirm
             </Button>

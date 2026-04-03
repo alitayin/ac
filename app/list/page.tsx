@@ -26,37 +26,21 @@ const LabelWithHelp = ({ htmlFor, children }: { htmlFor?: string, children: Reac
 )
 
 export default function ListPage() {
-  const [listingMethod, setListingMethod] = useState("activate-swap")
   const [tokenId, setTokenId] = useState("")
   const [txId, setTxId] = useState("")
   const { toast } = useToast()
   const [isShaking, setIsShaking] = useState(false)
 
   const calculateFee = () => {
-    switch (listingMethod) {
-      case "activate-swap":
-        return 1000000
-      case "regular":
-        return 15000
-      default:
-        return 0
-    }
+    return 1000000
   }
 
   const getListingMethodLabel = () => {
-    switch (listingMethod) {
-      case "activate-swap":
-        return "Activate Swap"
-      case "regular":
-        return "Regular Recommendation"
-      default:
-        return ""
-    }
+    return "Activate Swap"
   }
 
-  // SC for listing packages, SS for swap-related packages
-  const feeTokenLabel = listingMethod === "activate-swap" ? "SS" : "SC"
-  const isSC = listingMethod === "regular"
+  const feeTokenLabel = "SS"
+  const isSC = false
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -73,67 +57,28 @@ export default function ListPage() {
             </div>
 
             <div className="flex flex-col gap-6">
-              {/* Listing Method Selection */}
+              {/* Form fields */}
               <Card className="rounded-xl">
-                <CardContent className="p-4 space-y-4">
-                  <Label className="text-md">Listing Method</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Card 
-                      className={`cursor-pointer transition-all ${
-                        listingMethod === "activate-swap" ? "border-primary ring-2 ring-primary" : ""
-                      }`}
-                      onClick={() => setListingMethod("activate-swap")}
-                    >
-                      <CardContent className="p-4">
-                        <h3 className="font-semibold">Activate Swap</h3>
-                        <p className="text-sm text-gray-500 mt-2">Activate swap function for your token</p>
-                        <p className="text-md font-bold mt-4">1,000,000 SS</p>
-                      </CardContent>
-                    </Card>
-
-                    <Card 
-                      className={`cursor-pointer transition-all ${
-                        listingMethod === "regular" ? "border-primary ring-2 ring-primary" : ""
-                      }`}
-                      onClick={() => setListingMethod("regular")}
-                    >
-                      <CardContent className="p-4">
-                        <h3 className="font-semibold">Regular Recommendation</h3>
-                        <p className="text-sm text-gray-500 mt-2">
-                          Pinned in all eTokens with priority over thousands of eTokens
-                        </p>
-                        <p className="text-md font-bold mt-4">15,000 SC</p>
-                      </CardContent>
-                    </Card>
+                <CardContent className="p-4 space-y-3">
+                  <div className="space-y-2">
+                    <LabelWithHelp htmlFor="tokenId">Token ID</LabelWithHelp>
+                    <Input
+                      id="tokenId"
+                      placeholder="Enter token ID"
+                      value={tokenId}
+                      onChange={(e) => setTokenId(e.target.value)}
+                    />
+                  </div>
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
+                    <p className="text-gray-800 dark:text-gray-200">
+                      Please provide the Token ID here and the Transaction ID in the payment section below.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Form fields based on listing method */}
-              {listingMethod && (
-                <Card className="rounded-xl">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="space-y-2">
-                      <LabelWithHelp htmlFor="tokenId">Token ID</LabelWithHelp>
-                      <Input 
-                        id="tokenId" 
-                        placeholder="Enter token ID"
-                        value={tokenId}
-                        onChange={(e) => setTokenId(e.target.value)}
-                      />
-                    </div>
-                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
-                      <p className="text-gray-800 dark:text-gray-200">
-                        For both Activate Swap and Regular Recommendation, please provide the Token ID here and the Transaction ID in the payment section below.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
               {/* Fees card */}
-              {listingMethod && (
-                <Card className="rounded-xl">
+              <Card className="rounded-xl">
                   <CardHeader>
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-2xl bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center shrink-0">
@@ -208,36 +153,10 @@ export default function ListPage() {
                     </div>
                   </CardContent>
                 </Card>
-              )}
-
-              {/* FAQ card */}
-              <Card className="rounded-xl">
-                <CardHeader>
-                  <CardTitle>Frequently Asked Questions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <p className="font-medium text-gray-800 dark:text-gray-200">Q1: Why is it not shown directly in the listed section?</p>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      This is a user experience improvement to avoid showing too many tokens, while still pinning them in the all eTokens tab.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="font-medium text-gray-800 dark:text-gray-200">
-                      Q2: Can I list only on Swap without paying SC for homepage ranking?
-                    </p>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Yes, you can. These are two independent features.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
 
               {/* Submit button card */}
-              {listingMethod && (
-                <Card className="rounded-xl">
-                  <CardContent className="p-4 space-y-4">
+              <Card className="rounded-xl">
+                <CardContent className="p-4 space-y-4">
                     <div className="flex justify-end">
                       <Button 
                         onClick={() => {
@@ -245,10 +164,7 @@ export default function ListPage() {
 Listing Information:
 ==================
 Listing Method: ${getListingMethodLabel()}
-`
 
-                          if (listingMethod === 'activate-swap') {
-                            formInfo += `
 Token Information:
 ==================
 Token ID: ${tokenId}
@@ -258,18 +174,6 @@ Transaction Information:
 Transaction ID: ${txId}
 Total Fee: ${calculateFee().toLocaleString()} ${feeTokenLabel}
                             `
-                          } else {
-                            formInfo += `
-Token Information:
-==================
-Token ID: ${tokenId}
-
-Payment Information:
-==================
-Transaction ID: ${txId}
-Total Fee: ${calculateFee().toLocaleString()} ${feeTokenLabel}
-                            `
-                          }
 
                           navigator.clipboard.writeText(formInfo)
                           
@@ -297,7 +201,6 @@ Total Fee: ${calculateFee().toLocaleString()} ${feeTokenLabel}
                     </div>
                   </CardContent>
                 </Card>
-              )}
             </div>
           </div>
         </div>

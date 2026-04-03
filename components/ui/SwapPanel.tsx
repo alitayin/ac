@@ -153,7 +153,6 @@ export function SwapPanel({
               className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-500 h-14 text-lg rounded-2xl"
               variant="ghost"
               onClick={createSwapOrder}
-              disabled={!riskAcknowledged}
             >
               Swap🔥
             </Button>
@@ -168,28 +167,6 @@ export function SwapPanel({
           </div>
         )}
       </div>
-
-      {!riskAcknowledged && (
-        <div className="flex items-start space-x-2 mt-3 p-3 bg-muted/50 rounded-lg">
-          <Checkbox
-            id={checkboxId}
-            checked={riskAcknowledged}
-            onCheckedChange={(checked) => {
-              const isChecked = checked as boolean
-              setRiskAcknowledged(isChecked)
-              if (isChecked) {
-                localStorage.setItem("risk_acknowledged", "true")
-              }
-            }}
-          />
-          <label
-            htmlFor={checkboxId}
-            className="text-sm text-muted-foreground leading-relaxed cursor-pointer"
-          >
-            This is an experimental feature. I understand and accept all risks associated with using this functionality.
-          </label>
-        </div>
-      )}
     </div>
   )
 }
