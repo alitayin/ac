@@ -56,12 +56,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useXECPrice } from "@/lib/price"
 import { TokenBadge } from "@/components/ui/tokenbadge"
 import AllEtokensView from "@/components/ui/AllEtokensView"
-import {
-  AdScheduleView,
-  AdStatus,
-  AD_ADDRESS,
-  findCurrentAdSponsoredTokenIdV2,
-} from "@/components/ui/AdScheduleView"
 import { formatNumber, formatPrice } from "@/lib/formatters"
 import { Token, SortType, Transaction } from "@/lib/types"
 import { TOKEN_IDS, UI_CONSTANTS } from "@/lib/constants"
@@ -90,13 +84,7 @@ const WATCHLIST_FREE_LIMIT = 3
 const SS_UNLOCK_THRESHOLD = 1_000_000
 const FILTER_OPTION_STORAGE_KEY = "token_table_filter_option_v1"
 
-type TokenTableRow = Token & {
-  isAd?: boolean
-  adStatus?: AdStatus
-  adTokenId?: string | null
-  adTokenName?: string
-  adTokenTicker?: string
-}
+type TokenTableRow = Token
 
 type FilterOption = "all" | "no-trades-30d" | "low-volume-30d" | "low-trades-30d"
 
@@ -143,9 +131,8 @@ export default function Component() {
   const [tokenUpdatedAt, setTokenUpdatedAt] = React.useState<Map<string, number>>(new Map())
   const [isAddingToWatchlist, setIsAddingToWatchlist] = React.useState(false)
   const [viewMode, setViewMode] = React.useState<
-    "normal" | "all-etokens" | "ad-schedule"
+    "normal" | "all-etokens"
   >("normal")
-  const [isAdGuideOpen, setIsAdGuideOpen] = React.useState(false)
   const searchContainerRef = React.useRef<HTMLDivElement | null>(null)
   const router = useRouter()
   
@@ -162,70 +149,9 @@ export default function Component() {
   const xecPrice = useXECPrice();
   const cancelledRef = React.useRef(false)
 
-  const [adStatus, setAdStatus] = React.useState<AdStatus>("loading")
-  const [adTokenId, setAdTokenId] = React.useState<string | null>(null)
-  const [adTokenName, setAdTokenName] = React.useState<string>("Loading...")
-  const [adTokenTicker, setAdTokenTicker] = React.useState<string>("")
-
   const [largeDatasetTokens, setLargeDatasetTokens] = React.useState<Set<string>>(new Set())
   const [approvedLargeTokens, setApprovedLargeTokens] = React.useState<Set<string>>(new Set())
   const approvedLargeTokensRef = React.useRef<Set<string>>(new Set())
-
-  React.useEffect(() => {
-    if (isChronikLoading || !chronikClient) return
-
-    let cancelled = false
-    const loadAd = async () => {
-      setAdStatus("loading")
-      setAdTokenId(null)
-      setAdTokenName("Loading...")
-      setAdTokenTicker("")
-
-      try {
-        const { tokenId: sponsoredTokenId, tipHeight } =
-          await findCurrentAdSponsoredTokenIdV2()
-        if (cancelled) return
-        if (typeof tipHeight === "number") {
-          setChainTipHeight(tipHeight)
-        }
-
-        if (!sponsoredTokenId) {
-          setAdStatus("empty")
-          setAdTokenId(null)
-          setAdTokenName("No ad today")
-          setAdTokenTicker("")
-          return
-        }
-
-        setAdTokenId(sponsoredTokenId)
-        try {
-          const details = await fetchTokenDetails(sponsoredTokenId, chronikClient)
-          if (cancelled) return
-          const name = details?.genesisInfo?.tokenName || sponsoredTokenId.substring(0, 6)
-          const ticker = details?.genesisInfo?.tokenTicker || ""
-          setAdTokenName(name)
-          setAdTokenTicker(ticker)
-        } catch (_e) {
-          if (cancelled) return
-          setAdTokenName(sponsoredTokenId.substring(0, 6))
-          setAdTokenTicker("")
-        }
-
-        setAdStatus("ready")
-      } catch (_e) {
-        if (cancelled) return
-        setAdStatus("error")
-        setAdTokenId(null)
-        setAdTokenName("Failed to load sponsor")
-        setAdTokenTicker("")
-      }
-    }
-
-    loadAd()
-    return () => {
-      cancelled = true
-    }
-  }, [refreshNonce, chronikClient, isChronikLoading])
 
   React.useEffect(() => {
     if (isChronikLoading || !chronikClient) return
@@ -323,27 +249,11 @@ export default function Component() {
     setShowClearCacheConfirm(false)
   }
 
-  const openAdGuide = (event?: React.MouseEvent) => {
-    event?.stopPropagation()
-    setIsAdGuideOpen(true)
-  }
-
   const columns: ColumnDef<TokenTableRow>[] = [
     {
       id: "index",
       header: "#",
       cell: ({ row }) => {
-        if (row.original.isAd) {
-          return (
-            <button
-              type="button"
-              className="text-sm font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700"
-              onClick={openAdGuide}
-            >
-              AD
-            </button>
-          )
-        }
         const tokenId = row.original.tokenId
         const index = row.index
         const updatedAt = tokenUpdatedAt.get(tokenId)
@@ -378,51 +288,6 @@ export default function Component() {
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => {
-        if (row.original.isAd) {
-          const effectiveTokenId = row.original.adTokenId || ""
-          return (
-            <div
-              className={cn(
-                "flex items-center gap-2 cursor-pointer hover:opacity-80",
-                !effectiveTokenId && "cursor-default hover:opacity-100",
-              )}
-              onClick={() => {
-                if (!effectiveTokenId) return
-                router.push(`/${effectiveTokenId}`)
-              }}
-            >
-              <Avatar className="h-8 w-8 relative overflow-hidden">
-                {effectiveTokenId ? (
-                  <img
-                    src={`https://icons.etokens.cash/32/${effectiveTokenId}.png`}
-                    alt={row.original.adTokenName || "Sponsored"}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <AvatarFallback>AD</AvatarFallback>
-                )}
-              </Avatar>
-              <div className="flex items-center gap-2">
-                <span className="font-medium">
-                  {row.original.adTokenName || "Sponsored"}
-                </span>
-                {row.original.adTokenTicker ? (
-                  <span className="text-xs text-muted-foreground">
-                    {row.original.adTokenTicker}
-                  </span>
-                ) : null}
-                <Badge
-                  variant="default"
-                  className="text-xs whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 cursor-pointer"
-                  onClick={openAdGuide}
-                >
-                  AD
-                </Badge>
-              </div>
-            </div>
-          )
-        }
         const isRowLoading = isLoading || !loadedTokens.has(row.original.tokenId)
         const isIconLoaded = loadedIcons.has(row.original.tokenId)
         const isIconFailed = failedIcons.has(row.original.tokenId)
@@ -613,14 +478,7 @@ export default function Component() {
         </div>
       ),
       cell: ({ row }) => {
-        const isAdRow = row.original.isAd
-        const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
-        const isRowLoading = isAdRow
-          ? !!row.original.adTokenId && (isLoading || !loadedTokens.has(tokenIdForLoad))
-          : isLoading || !loadedTokens.has(tokenIdForLoad)
-        if (isAdRow && !row.original.adTokenId) {
-          return <div className="text-left text-muted-foreground"></div>
-        }
+        const isRowLoading = isLoading || !loadedTokens.has(row.original.tokenId)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -637,14 +495,7 @@ export default function Component() {
       accessorKey: "priceChange24h",
       header: "24h Change",
       cell: ({ row }) => {
-        const isAdRow = row.original.isAd
-        const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
-        const isRowLoading = isAdRow
-          ? !!row.original.adTokenId && (isLoading || !loadedTokens.has(tokenIdForLoad))
-          : isLoading || !loadedTokens.has(tokenIdForLoad)
-        if (isAdRow && !row.original.adTokenId) {
-          return <div className="text-left text-muted-foreground"></div>
-        }
+        const isRowLoading = isLoading || !loadedTokens.has(row.original.tokenId)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -661,14 +512,7 @@ export default function Component() {
       accessorKey: "last24HoursXECAmount",
       header: "24h Volume",
       cell: ({ row }) => {
-        const isAdRow = row.original.isAd
-        const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
-        const isRowLoading = isAdRow
-          ? !!row.original.adTokenId && (isLoading || !loadedTokens.has(tokenIdForLoad))
-          : isLoading || !loadedTokens.has(tokenIdForLoad)
-        if (isAdRow && !row.original.adTokenId) {
-          return <div className="text-left text-muted-foreground"></div>
-        }
+        const isRowLoading = isLoading || !loadedTokens.has(row.original.tokenId)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -683,14 +527,8 @@ export default function Component() {
       accessorKey: "last30DaysXECAmount",
       header: "7D Volume",
       cell: ({ row }) => {
-        const isAdRow = row.original.isAd
-        const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
-        const isRowLoading = isAdRow
-          ? !!row.original.adTokenId && (isLoading || !loadedTokens.has(tokenIdForLoad))
-          : isLoading || !loadedTokens.has(tokenIdForLoad)
-        if (isAdRow && !row.original.adTokenId) {
-          return <div className="text-left text-muted-foreground"></div>
-        }
+        const tokenIdForLoad = row.original.tokenId
+        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -724,14 +562,8 @@ export default function Component() {
       accessorKey: "totalTransactions",
       header: "Sales in 7D",
       cell: ({ row }) => {
-        const isAdRow = row.original.isAd
-        const tokenIdForLoad = isAdRow && row.original.adTokenId ? row.original.adTokenId : row.original.tokenId
-        const isRowLoading = isAdRow
-          ? !!row.original.adTokenId && (isLoading || !loadedTokens.has(tokenIdForLoad))
-          : isLoading || !loadedTokens.has(tokenIdForLoad)
-        if (isAdRow && !row.original.adTokenId) {
-          return <div className="text-left text-muted-foreground"></div>
-        }
+        const tokenIdForLoad = row.original.tokenId
+        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">loading</div>
         }
@@ -1216,43 +1048,6 @@ export default function Component() {
     loadTokenStatsRef.current = loadTokenStats
   }, [loadTokenStats])
 
-  React.useEffect(() => {
-    if (!adTokenId) return
-    const name = adTokenName || adTokenId.substring(0, 6)
-
-    setData((prev) => {
-      if (prev.some((t) => t.tokenId === adTokenId)) return prev
-      return [
-        ...prev,
-        {
-          id: adTokenId,
-          tokenId: adTokenId,
-          name,
-          totalTransactions: 0,
-          last24HoursXECAmount: 0,
-          last30DaysXECAmount: 0,
-          priceChange24h: 0,
-          latestPrice: 0,
-          totalXECAmount: 0,
-          official: false,
-          gratitude: false,
-          community: false,
-          stablecoin: false,
-          apyTag: undefined,
-          watchlist: false,
-        },
-      ]
-    })
-
-    setLoadedTokens((prev) => {
-      const next = new Set(prev)
-      next.delete(adTokenId)
-      return next
-    })
-
-    loadTokenStatsRef.current?.(adTokenId, name, { ignoreFilter: true })
-  }, [adTokenId, adTokenName])
-
   const CUSTOM_TOKENS_KEY = 'custom_watchlist_tokens'
 
   const getCustomTokens = (): string[] => {
@@ -1681,43 +1476,19 @@ export default function Component() {
   }, [data, sortBy, filteredTokens]);
 
   const tableData = React.useMemo(() => {
-    const adMetrics =
-      adTokenId ? data.find((t) => t.tokenId === adTokenId) : undefined
-    const adRow: TokenTableRow = {
-      id: "AD",
-      tokenId: adTokenId || "AD",
-      name: adTokenName || "AD",
-      totalTransactions: adMetrics?.totalTransactions ?? 0,
-      last24HoursXECAmount: adMetrics?.last24HoursXECAmount ?? 0,
-      last30DaysXECAmount: adMetrics?.last30DaysXECAmount ?? 0,
-      priceChange24h: adMetrics?.priceChange24h ?? 0,
-      latestPrice: adMetrics?.latestPrice ?? 0,
-      totalXECAmount: adMetrics?.totalXECAmount ?? 0,
-      official: false,
-      gratitude: false,
-      community: false,
-      stablecoin: false,
-      apyTag: undefined,
-      watchlist: false,
-      isAd: true,
-      adStatus,
-      adTokenId,
-      adTokenName,
-      adTokenTicker,
-    }
-    return [adRow, ...sortedData]
-  }, [sortedData, adStatus, adTokenId, adTokenName, adTokenTicker, data])
+    return sortedData
+  }, [sortedData])
 
   const table = useReactTable({
     data: tableData,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getRowId: (row) => (row.isAd ? "AD" : row.tokenId),
+    getRowId: (row) => row.tokenId,
   })
 
   const MemoizedTableRow = React.memo(
-    function TokenTableRow({ row, router, showUSD, xecPrice }: { 
-      row: any; 
+    function TokenTableRow({ row, router, showUSD, xecPrice }: {
+      row: any;
       router: any;
       showUSD: boolean;
       xecPrice: number;
@@ -1725,17 +1496,7 @@ export default function Component() {
       return (
         <TableRow
           key={row.id}
-          className={cn(
-            row.original.isAd &&
-              "bg-gradient-to-r from-purple-500/10 to-pink-500/10",
-          )}
           onClick={() => {
-            if (row.original.isAd) {
-              if (row.original.adTokenId) {
-                router.push(`/${row.original.adTokenId}`)
-              }
-              return
-            }
             router.push(
               `/${row.original.watchlist ? row.original.tokenId : row.original.name}`,
             )
@@ -1823,29 +1584,6 @@ export default function Component() {
     <>
       <style>{styles}</style>
       <TooltipProvider delayDuration={0} skipDelayDuration={0}>
-      <Dialog open={isAdGuideOpen} onOpenChange={setIsAdGuideOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Ad Creation Guide</DialogTitle>
-            <DialogDescription>Use the same address for all steps:</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 text-sm text-foreground">
-            <ol className="list-decimal space-y-2 pl-5">
-              <li>Hold 300,000 SS (StarShard) and the eToken you want to promote.</li>
-              <li>Send 300,000 SS to the ad payment address (300k SS = 1 day; send more for multiple days).</li>
-              <li>Send 1 unit of your eToken to the ad payment address.</li>
-              <li>Ads run in payment order. Check "Ad Schedule" to see your slot. Your eToken displays when your turn comes.</li>
-              <li>Important: You must send your eToken after payment, or it won't display.</li>
-            </ol>
-            <div className="space-y-1 text-sm font-semibold text-muted-foreground">
-              <p>Ad payment address: <span className="font-mono break-all">{AD_ADDRESS}</span></p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAdGuideOpen(false)}>Got it</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <Card className="relative overflow-hidden">
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
@@ -1860,9 +1598,7 @@ export default function Component() {
             <CardDescription>
               {viewMode === "normal"
                 ? "Agora sales data"
-                : viewMode === "all-etokens"
-                  ? "All active eTokens on Agora"
-                  : "Upcoming ad schedule (next 8 weeks)"}
+                : "All active eTokens on Agora"}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -1889,22 +1625,8 @@ export default function Component() {
               >
                 All eTokens
               </button>
-              <button
-                type="button"
-                aria-label="Ad schedule"
-                title="Ad schedule (next 8 weeks)"
-                onClick={() => setViewMode("ad-schedule")}
-                className={cn(
-                  "text-sm px-3 py-1 rounded-md transition-colors",
-                  viewMode === "ad-schedule"
-                    ? "bg-accent font-medium"
-                    : "hover:bg-accent/50 text-muted-foreground",
-                )}
-              >
-                Ad Schedule
-              </button>
             </div>
-            
+
             {viewMode === 'normal' && (
             <>
             <DropdownMenu>
@@ -2066,10 +1788,6 @@ export default function Component() {
             />
           </div>
 
-          <div className={viewMode === "ad-schedule" ? "block" : "hidden"}>
-            <AdScheduleView />
-          </div>
-          
           <div className={viewMode === "normal" ? "block" : "hidden"}>
             {tableData.length > 0 ? (
               <Table>
