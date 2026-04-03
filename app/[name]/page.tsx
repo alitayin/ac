@@ -253,8 +253,7 @@ export default function TokenPage() {
     };
   }
 
-  const isSwapActivated =
-    !!TOKENS[tokenData.tokenId as keyof typeof TOKENS];
+  const isSwapActivated = true;
 
   useEffect(() => {
     const fetchChronikTokenInfo = async () => {

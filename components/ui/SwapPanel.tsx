@@ -140,32 +140,20 @@ export function SwapPanel({
       </Card>
 
       <div className="flex gap-2">
-        {isSwapActivated ? (
-          <>
-            <Button
-              className="flex-1 bg-pink-100 hover:bg-pink-200 text-pink-500/80 h-14 text-lg rounded-2xl"
-              variant="ghost"
-              onClick={() => window.open(`https://cashtab.com/#/token/${tokenId}`, "_blank")}
-            >
-              Cashtab
-            </Button>
-            <Button
-              className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-500 h-14 text-lg rounded-2xl"
-              variant="ghost"
-              onClick={createSwapOrder}
-            >
-              Swap🔥
-            </Button>
-          </>
-        ) : (
-          <div className="flex-1 bg-yellow-50 dark:bg-yellow-900/40 text-xs sm:text-sm text-yellow-800 dark:text-yellow-100 rounded-2xl px-4 py-3 flex items-center justify-center text-center leading-relaxed">
-            <span>
-              Swap for this token is not yet activated on Agora. You can apply to enable it on the{" "}
-              <a href="/list" className="underline">/list</a>{" "}
-              page.
-            </span>
-          </div>
-        )}
+        <Button
+          className="flex-1 bg-pink-100 hover:bg-pink-200 text-pink-500/80 h-14 text-lg rounded-2xl"
+          variant="ghost"
+          onClick={() => window.open(`https://cashtab.com/#/token/${tokenId}`, "_blank")}
+        >
+          Cashtab
+        </Button>
+        <Button
+          className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-500 h-14 text-lg rounded-2xl"
+          variant="ghost"
+          onClick={createSwapOrder}
+        >
+          Swap🔥
+        </Button>
       </div>
     </div>
   )
