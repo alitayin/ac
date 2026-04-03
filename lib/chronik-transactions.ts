@@ -223,7 +223,7 @@ const processMatchedTransaction = (
 
 export { processMatchedTransaction }
 
-type BatchHandler = (batch: Transaction[], meta: { page: number }) => void
+type BatchHandler = (batch: Transaction[], meta: { page: number; rawPage: number }) => void | boolean
 
 interface FetchOptions {
   pageSize?: number
@@ -298,8 +298,12 @@ export const fetchAgoraTransactionsFromChronik = async (
         }
       })
 
-      if (batch.length > 0 && onBatch) {
-        onBatch(batch, { page })
+      // 每页都调用 onBatch，即使 batch 为空
+      if (onBatch) {
+        const shouldAbort = onBatch(batch, { page: Math.floor(result.length / pageSize), rawPage: page })
+        if (shouldAbort === true) {
+          shouldStop = true
+        }
       }
 
       const reachedTarget = result.length >= targetCount

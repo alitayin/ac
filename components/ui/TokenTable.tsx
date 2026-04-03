@@ -918,16 +918,85 @@ export default function Component() {
           }
         }
         try {
-          const tx7d = await fetchAgoraTransactionsFromChronik(tokenId, undefined, {
-            targetCount: 1400,
-            pageSize: 200,
-            maxBlocksBack: BLOCKS_PER_7_DAYS,
-            stopBelowHeight:
-              typeof effectiveTipHeight === "number"
-                ? Math.max(effectiveTipHeight - BLOCKS_PER_7_DAYS, 0)
-                : undefined,
-            failOnError: false,
-          }, activeChronik)
+          let tx7dCount = 0
+          let rawPagesRead = 0
+          const isUserApproved = approvedLargeTokens.has(tokenId) || approvedLargeTokensRef.current.has(tokenId)
+          console.log(`[7D Load Start] Token: ${name}, isUserApproved: ${isUserApproved}`)
+
+          const tx7d = await fetchAgoraTransactionsFromChronik(
+            tokenId,
+            (batch, meta) => {
+              tx7dCount += batch.length
+              rawPagesRead = meta.rawPage + 1
+              console.log(`[7D Batch] Token: ${name}, rawPage: ${rawPagesRead}, agora txs: ${batch.length}, total agora: ${tx7dCount}`)
+              // 只有在用户未批准时才检查原始页数限制
+              if (!isUserApproved && rawPagesRead >= 5) {
+                console.log(`[7D Abort] Token: ${name}, exceeded 5 raw pages (${rawPagesRead}), stopping`)
+                return true  // 返回 true 通知停止加载
+              }
+              return false
+            },
+            {
+              targetCount: 1400,
+              pageSize: 200,
+              maxBlocksBack: BLOCKS_PER_7_DAYS,
+              stopBelowHeight:
+                typeof effectiveTipHeight === "number"
+                  ? Math.max(effectiveTipHeight - BLOCKS_PER_7_DAYS, 0)
+                  : undefined,
+              failOnError: false,
+            },
+            activeChronik
+          )
+
+          if (!isUserApproved && rawPagesRead >= 5) {
+            console.log(`[Large Dataset] Token ${name} exceeded 5 raw pages in 7D (actual: ${rawPagesRead} pages, ${tx7dCount} agora txs), marking as large dataset`)
+            setLargeDatasetTokens((prev) => {
+              if (prev.has(tokenId)) return prev
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
+            const customTokens = getCustomTokens()
+
+            if (!cancelledRef.current) {
+              applyTokenUpdate(tokenId, {
+                tokenId,
+                name,
+                latestPrice: rawLatestPrice,
+                priceChange24h,
+                last24HoursXECAmount,
+                last30DaysXECAmount: 0,
+                totalTransactions: 0,
+                totalXECAmount: 0,
+                official: tokenConfig?.official || false,
+                gratitude: tokenConfig?.gratitude || false,
+                community: tokenConfig?.community || false,
+                stablecoin: tokenConfig?.stablecoin || false,
+                apyTag: tokenConfig?.apyTag,
+                watchlist: customTokens.includes(tokenId),
+              })
+
+              setLoadedTokens((prev) => {
+                if (prev.has(tokenId)) return prev
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+            }
+
+            loadingTokens.current.delete(tokenId)
+            const timeoutId = loadingTimeouts.current.get(tokenId)
+            if (timeoutId) {
+              clearTimeout(timeoutId)
+              loadingTimeouts.current.delete(tokenId)
+            }
+
+            return
+          }
+
           const confirmed7d = tx7d.filter((tx) => typeof tx.blockHeight === "number")
           last30DaysXECAmount = confirmed7d.reduce(
             (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
