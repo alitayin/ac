@@ -152,6 +152,8 @@ export default function Component() {
   const [largeDatasetTokens, setLargeDatasetTokens] = React.useState<Set<string>>(new Set())
   const [approvedLargeTokens, setApprovedLargeTokens] = React.useState<Set<string>>(new Set())
   const approvedLargeTokensRef = React.useRef<Set<string>>(new Set())
+  const [failedDataTokens, setFailedDataTokens] = React.useState<Set<string>>(new Set())
+  const retryCountRef = React.useRef<Map<string, number>>(new Map())
 
   React.useEffect(() => {
     if (isChronikLoading || !chronikClient) return
@@ -478,10 +480,28 @@ export default function Component() {
         </div>
       ),
       cell: ({ row }) => {
-        const isRowLoading = isLoading || !loadedTokens.has(row.original.tokenId)
+        const tokenIdForLoad = row.original.tokenId
+        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
+
+        const isFailed = failedDataTokens.has(tokenIdForLoad)
+        if (isFailed) {
+          return (
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-red-500 hover:text-white transition-colors border-red-500 text-red-500"
+              onClick={(e) => {
+                e.stopPropagation()
+                retryTokenData(tokenIdForLoad, row.original.name)
+              }}
+            >
+              Try Again
+            </Badge>
+          )
+        }
+
         const price = row.original.latestPrice || 0
         const usdPrice = price * (xecPrice || 0)
         return (
@@ -495,10 +515,28 @@ export default function Component() {
       accessorKey: "priceChange24h",
       header: "24h Change",
       cell: ({ row }) => {
-        const isRowLoading = isLoading || !loadedTokens.has(row.original.tokenId)
+        const tokenIdForLoad = row.original.tokenId
+        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
+
+        const isFailed = failedDataTokens.has(tokenIdForLoad)
+        if (isFailed) {
+          return (
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-red-500 hover:text-white transition-colors border-red-500 text-red-500"
+              onClick={(e) => {
+                e.stopPropagation()
+                retryTokenData(tokenIdForLoad, row.original.name)
+              }}
+            >
+              Try Again
+            </Badge>
+          )
+        }
+
         const change = row.original.priceChange24h || 0
         const color = change >= 0 ? "text-green-500" : "text-red-500"
         return (
@@ -512,10 +550,28 @@ export default function Component() {
       accessorKey: "last24HoursXECAmount",
       header: "24h Volume",
       cell: ({ row }) => {
-        const isRowLoading = isLoading || !loadedTokens.has(row.original.tokenId)
+        const tokenIdForLoad = row.original.tokenId
+        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
+
+        const isFailed = failedDataTokens.has(tokenIdForLoad)
+        if (isFailed) {
+          return (
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-red-500 hover:text-white transition-colors border-red-500 text-red-500"
+              onClick={(e) => {
+                e.stopPropagation()
+                retryTokenData(tokenIdForLoad, row.original.name)
+              }}
+            >
+              Try Again
+            </Badge>
+          )
+        }
+
         return (
           <div className="text-left">
             {formatNumber(row.original.last24HoursXECAmount || 0)} XEC
@@ -535,6 +591,22 @@ export default function Component() {
 
         const isLargeDataset = largeDatasetTokens.has(tokenIdForLoad)
         const isApproved = approvedLargeTokens.has(tokenIdForLoad)
+        const isFailed = failedDataTokens.has(tokenIdForLoad)
+
+        if (isFailed) {
+          return (
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-red-500 hover:text-white transition-colors border-red-500 text-red-500"
+              onClick={(e) => {
+                e.stopPropagation()
+                retryTokenData(tokenIdForLoad, row.original.name)
+              }}
+            >
+              Try Again
+            </Badge>
+          )
+        }
 
         if (isLargeDataset && !isApproved) {
           return (
@@ -570,6 +642,22 @@ export default function Component() {
 
         const isLargeDataset = largeDatasetTokens.has(tokenIdForLoad)
         const isApproved = approvedLargeTokens.has(tokenIdForLoad)
+        const isFailed = failedDataTokens.has(tokenIdForLoad)
+
+        if (isFailed) {
+          return (
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-red-500 hover:text-white transition-colors border-red-500 text-red-500"
+              onClick={(e) => {
+                e.stopPropagation()
+                retryTokenData(tokenIdForLoad, row.original.name)
+              }}
+            >
+              Try Again
+            </Badge>
+          )
+        }
 
         if (isLargeDataset && !isApproved) {
           return (
@@ -654,6 +742,35 @@ export default function Component() {
     }
   }
 
+  const retryTokenData = async (tokenId: string, name: string) => {
+    retryCountRef.current.delete(`${tokenId}:24h`)
+    retryCountRef.current.delete(`${tokenId}:latest`)
+    retryCountRef.current.delete(`${tokenId}:7d`)
+
+    setFailedDataTokens((prev) => {
+      const next = new Set(prev)
+      next.delete(tokenId)
+      return next
+    })
+
+    setErrorTokens((prev) => {
+      const next = new Set(prev)
+      next.delete(tokenId)
+      return next
+    })
+
+    setLoadedTokens((prev) => {
+      const next = new Set(prev)
+      next.delete(tokenId)
+      return next
+    })
+
+    invalidateTokenCache(tokenId)
+    deleteSummaryCache(tokenId)
+
+    await loadTokenStatsRef.current?.(tokenId, name, { ignoreFilter: true })
+  }
+
   const load7DayDataForToken = async (tokenId: string, name: string) => {
     // Update ref immediately for synchronous access
     approvedLargeTokensRef.current.add(tokenId)
@@ -665,6 +782,13 @@ export default function Component() {
     })
 
     setLoadedTokens((prev) => {
+      const next = new Set(prev)
+      next.delete(tokenId)
+      return next
+    })
+
+    // Clear failed state when user manually retries
+    setFailedDataTokens((prev) => {
       const next = new Set(prev)
       next.delete(tokenId)
       return next
@@ -756,6 +880,9 @@ export default function Component() {
       let fetchError = false
       const tx24h: Transaction[] = []
       let pagesRead = 0
+      const retry24hKey = `${tokenId}:24h`
+      const retryLatestKey = `${tokenId}:latest`
+      const retry7dKey = `${tokenId}:7d`
 
       try {
         await fetchAgoraTransactionsFromChronik(
@@ -780,43 +907,15 @@ export default function Component() {
         )
       } catch (err) {
         fetchError = true
-        setErrorTokens((prev) => {
-          const next = new Set(prev)
-          next.add(tokenId)
-          return next
-        })
-        setTimeout(() => {
-          if (
-            !cancelledRef.current &&
-            (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
-          ) {
-            loadingTokens.current.delete(tokenId)
-            const timeoutId = loadingTimeouts.current.get(tokenId)
-            if (timeoutId) {
-              clearTimeout(timeoutId)
-              loadingTimeouts.current.delete(tokenId)
-            }
-            loadTokenStatsRef.current?.(tokenId, name, options)
-          }
-        }, 5000)
+        console.error(`[24h Fetch Error] Token: ${name}, error:`, err)
 
-        return
-      }
+        const currentRetryCount = retryCountRef.current.get(retry24hKey) || 0
 
-      let latestTx: Transaction[] = []
-      try {
-        latestTx = await fetchAgoraTransactionsFromChronik(
-          tokenId,
-          undefined,
-          {
-            targetCount: 1,
-            pageSize: 50,
-            failOnError: false,
-          },
-          activeChronik,
-        )
-      } catch (err) {
-        if (!fetchError) {
+        if (currentRetryCount < 1) {
+          // First retry
+          retryCountRef.current.set(retry24hKey, currentRetryCount + 1)
+          console.log(`[24h Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
+
           setErrorTokens((prev) => {
             const next = new Set(prev)
             next.add(tokenId)
@@ -836,9 +935,108 @@ export default function Component() {
               }
               loadTokenStatsRef.current?.(tokenId, name, options)
             }
-          }, 5000)
+          }, 3000)
 
           return
+        } else {
+          // Second failure - mark as failed
+          console.log(`[24h Failed] Token: ${name}, failed after retry`)
+          retryCountRef.current.delete(retry24hKey)
+
+          setFailedDataTokens((prev) => {
+            const next = new Set(prev)
+            next.add(tokenId)
+            return next
+          })
+
+          setLoadedTokens((prev) => {
+            if (prev.has(tokenId)) return prev
+            const next = new Set(prev)
+            next.add(tokenId)
+            return next
+          })
+
+          setErrorTokens((prev) => {
+            const next = new Set(prev)
+            next.add(tokenId)
+            return next
+          })
+
+          return
+        }
+      }
+
+      let latestTx: Transaction[] = []
+      try {
+        latestTx = await fetchAgoraTransactionsFromChronik(
+          tokenId,
+          undefined,
+          {
+            targetCount: 1,
+            pageSize: 50,
+            failOnError: true,
+          },
+          activeChronik,
+        )
+      } catch (err) {
+        if (!fetchError) {
+          console.error(`[Latest Tx Fetch Error] Token: ${name}, error:`, err)
+
+          const currentRetryCount = retryCountRef.current.get(retryLatestKey) || 0
+
+          if (currentRetryCount < 1) {
+            // First retry
+            retryCountRef.current.set(retryLatestKey, currentRetryCount + 1)
+            console.log(`[Latest Tx Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
+
+            setErrorTokens((prev) => {
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            setTimeout(() => {
+              if (
+                !cancelledRef.current &&
+                (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
+              ) {
+                loadingTokens.current.delete(tokenId)
+                const timeoutId = loadingTimeouts.current.get(tokenId)
+                if (timeoutId) {
+                  clearTimeout(timeoutId)
+                  loadingTimeouts.current.delete(tokenId)
+                }
+                loadTokenStatsRef.current?.(tokenId, name, options)
+              }
+            }, 3000)
+
+            return
+          } else {
+            // Second failure - mark as failed
+            console.log(`[Latest Tx Failed] Token: ${name}, failed after retry`)
+            retryCountRef.current.delete(retryLatestKey)
+
+            setFailedDataTokens((prev) => {
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            setLoadedTokens((prev) => {
+              if (prev.has(tokenId)) return prev
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            setErrorTokens((prev) => {
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            return
+          }
         }
       }
 
@@ -944,7 +1142,7 @@ export default function Component() {
                 typeof effectiveTipHeight === "number"
                   ? Math.max(effectiveTipHeight - BLOCKS_PER_7_DAYS, 0)
                   : undefined,
-              failOnError: false,
+              failOnError: true,
             },
             activeChronik
           )
@@ -1011,29 +1209,67 @@ export default function Component() {
           if (typeof maxHeight === "number") {
             latestProcessedHeight = maxHeight
           }
+
+          // Clear retry count on success
+          retryCountRef.current.delete(retry7dKey)
         } catch (err) {
-          setErrorTokens((prev) => {
-            const next = new Set(prev)
-            next.add(tokenId)
-            return next
-          })
+          console.error(`[7D Fetch Error] Token: ${name}, error:`, err)
 
-          setTimeout(() => {
-            if (
-              !cancelledRef.current &&
-              (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
-            ) {
-              loadingTokens.current.delete(tokenId)
-              const timeoutId = loadingTimeouts.current.get(tokenId)
-              if (timeoutId) {
-                clearTimeout(timeoutId)
-                loadingTimeouts.current.delete(tokenId)
+          const currentRetryCount = retryCountRef.current.get(retry7dKey) || 0
+
+          if (currentRetryCount < 1) {
+            // First retry
+            retryCountRef.current.set(retry7dKey, currentRetryCount + 1)
+            console.log(`[7D Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
+
+            setErrorTokens((prev) => {
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            setTimeout(() => {
+              if (
+                !cancelledRef.current &&
+                (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
+              ) {
+                loadingTokens.current.delete(tokenId)
+                const timeoutId = loadingTimeouts.current.get(tokenId)
+                if (timeoutId) {
+                  clearTimeout(timeoutId)
+                  loadingTimeouts.current.delete(tokenId)
+                }
+                loadTokenStatsRef.current?.(tokenId, name, options)
               }
-              loadTokenStatsRef.current?.(tokenId, name, options)
-            }
-          }, 5000)
+            }, 3000)
 
-          return
+            return
+          } else {
+            // Second failure - mark as failed
+            console.log(`[7D Failed] Token: ${name}, failed after retry`)
+            retryCountRef.current.delete(retry7dKey)
+
+            setFailedDataTokens((prev) => {
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            setLoadedTokens((prev) => {
+              if (prev.has(tokenId)) return prev
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            setErrorTokens((prev) => {
+              const next = new Set(prev)
+              next.add(tokenId)
+              return next
+            })
+
+            return
+          }
         }
       }
 
@@ -1082,6 +1318,18 @@ export default function Component() {
           computedAt: savedAt,
           data: tokenSnapshot,
         })
+
+        setFailedDataTokens((prev) => {
+          if (!prev.has(tokenId)) return prev
+          const next = new Set(prev)
+          next.delete(tokenId)
+          return next
+        })
+
+        // Clear retry count on successful save
+        retryCountRef.current.delete(retry24hKey)
+        retryCountRef.current.delete(retryLatestKey)
+        retryCountRef.current.delete(retry7dKey)
       }
 
       if (!cancelledRef.current) {

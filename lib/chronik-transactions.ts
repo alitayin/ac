@@ -254,6 +254,7 @@ export const fetchAgoraTransactionsFromChronik = async (
   const result: TransactionWithStatus[] = []
   let latestBlockHeight: number | null = null
   const activeChronik = client || chronik
+  let hadError = false
 
   for (let page = 0; ; page++) {
     try {
@@ -312,11 +313,17 @@ export const fetchAgoraTransactionsFromChronik = async (
         break
       }
     } catch (error) {
+      hadError = true
       if (failOnError) {
         throw error
       }
       break
     }
+  }
+
+  // 如果有错误且 failOnError 为 true，说明数据不完整，抛出错误
+  if (hadError && failOnError) {
+    throw new Error('Failed to fetch complete data from chronik')
   }
 
   return result.sort((a, b) => b.timestamp - a.timestamp)
