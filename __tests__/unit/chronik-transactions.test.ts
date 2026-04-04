@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { isAgoraCanceled, detectAgoraTokenId, processMatchedTransaction } from '@/lib/chronik-transactions'
-import { createMockTransaction, createCanceledTransaction } from '../helpers/mocks'
+import { chronikTxAgoraSale, chronikTxAgoraCanceled, chronikTxTokenFromOutput2, chronikTxTokenIdHex, chronikTxTokenIdStr, chronikTxInvalidTimestamps, chronikTxWithoutTxid, chronikHistoryPageTargetCount, chronikHistoryPageShort, chronikHistoryPageMaxBlocksBackFirst, chronikHistoryPageMaxBlocksBackSecond, chronikHistoryPageStopBelowHeight, cloneChronikTx } from '../fixtures/chronik'
 
 // Mock dependencies
 vi.mock('@/lib/chronik', () => ({
@@ -53,13 +53,13 @@ describe('chronik-transactions', () => {
 
   describe('detectAgoraTokenId', () => {
     it('should detect valid Agora transaction and return tokenId', () => {
-      const tx = createMockTransaction()
+      const tx = cloneChronikTx(chronikTxAgoraSale)
       const tokenId = detectAgoraTokenId(tx)
       expect(tokenId).toBe('mock-token-id')
     })
 
     it('should return null for transaction without required markers', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         inputs: [{ inputScript: 'invalid' }],
       })
       const tokenId = detectAgoraTokenId(tx)
@@ -67,13 +67,13 @@ describe('chronik-transactions', () => {
     })
 
     it('should return null for canceled transaction', () => {
-      const tx = createCanceledTransaction()
+      const tx = cloneChronikTx(chronikTxAgoraCanceled)
       const tokenId = detectAgoraTokenId(tx)
       expect(tokenId).toBe(null)
     })
 
     it('should return null for transaction without token output', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           { sats: 100000 },
@@ -86,7 +86,7 @@ describe('chronik-transactions', () => {
     })
 
     it('should return null for transaction with zero token amount', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           { sats: 100000 },
@@ -104,13 +104,13 @@ describe('chronik-transactions', () => {
     })
 
     it('should handle transaction with missing inputs', () => {
-      const tx = { ...createMockTransaction(), inputs: undefined }
+      const tx = { ...cloneChronikTx(chronikTxAgoraSale), inputs: undefined }
       const tokenId = detectAgoraTokenId(tx)
       expect(tokenId).toBe(null)
     })
 
     it('should handle transaction with missing outputs', () => {
-      const tx = { ...createMockTransaction(), outputs: undefined }
+      const tx = { ...cloneChronikTx(chronikTxAgoraSale), outputs: undefined }
       const tokenId = detectAgoraTokenId(tx)
       expect(tokenId).toBe(null)
     })
@@ -121,55 +121,19 @@ describe('chronik-transactions', () => {
     })
 
     it('should detect tokenId from output[2] if output[3] has no token', () => {
-      const tx = createMockTransaction({
-        outputs: [
-          {},
-          { sats: 100000 },
-          {
-            token: {
-              tokenId: 'token-from-output-2',
-              amount: BigInt(5000),
-            },
-          },
-          {},
-        ],
-      })
+      const tx = cloneChronikTx(chronikTxTokenFromOutput2)
       const tokenId = detectAgoraTokenId(tx)
       expect(tokenId).toBe('token-from-output-2')
     })
 
     it('should handle tokenIdHex field', () => {
-      const tx = createMockTransaction({
-        outputs: [
-          {},
-          { sats: 100000 },
-          {},
-          {
-            token: {
-              tokenIdHex: 'token-id-hex-format',
-              amount: BigInt(1000),
-            },
-          },
-        ],
-      })
+      const tx = cloneChronikTx(chronikTxTokenIdHex)
       const tokenId = detectAgoraTokenId(tx)
       expect(tokenId).toBe('token-id-hex-format')
     })
 
     it('should handle tokenIdStr field', () => {
-      const tx = createMockTransaction({
-        outputs: [
-          {},
-          { sats: 100000 },
-          {},
-          {
-            token: {
-              tokenIdStr: 'token-id-str-format',
-              amount: BigInt(1000),
-            },
-          },
-        ],
-      })
+      const tx = cloneChronikTx(chronikTxTokenIdStr)
       const tokenId = detectAgoraTokenId(tx)
       expect(tokenId).toBe('token-id-str-format')
     })
@@ -188,7 +152,7 @@ describe('chronik-transactions', () => {
 
   describe('processMatchedTransaction behavior', () => {
     it('should return null when xecOutput (outputs[1]) is missing', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           undefined, // Missing XEC output
@@ -202,7 +166,7 @@ describe('chronik-transactions', () => {
     })
 
     it('should prefer sats over value field for XEC amount', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           { sats: 50000, value: 99999 }, // sats should win
@@ -217,7 +181,7 @@ describe('chronik-transactions', () => {
     })
 
     it('should fallback to value when sats is undefined', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           { value: 30000 }, // Only value field
@@ -232,7 +196,7 @@ describe('chronik-transactions', () => {
     })
 
     it('should use 0 when both sats and value are missing', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           {}, // No sats or value
@@ -249,7 +213,7 @@ describe('chronik-transactions', () => {
     it('should select earliest valid timestamp from block.timestamp and timeFirstSeen', () => {
       const now = Math.floor(Date.now() / 1000)
 
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         block: { height: 800000, timestamp: now - 100 },
         timeFirstSeen: now - 50,
         outputs: [
@@ -267,7 +231,7 @@ describe('chronik-transactions', () => {
     it('should use timeFirstSeen when block.timestamp is missing', () => {
       const now = Math.floor(Date.now() / 1000)
 
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         block: undefined,
         timeFirstSeen: now - 200,
         outputs: [
@@ -286,7 +250,7 @@ describe('chronik-transactions', () => {
       const now = Math.floor(Date.now() / 1000)
       const futureTime = now + 10000
 
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         block: { height: 800000, timestamp: futureTime },
         timeFirstSeen: futureTime + 5000,
         outputs: [
@@ -304,9 +268,7 @@ describe('chronik-transactions', () => {
     it('should use fallback timestamp when all timestamps are invalid', () => {
       const now = Math.floor(Date.now() / 1000)
 
-      const tx = createMockTransaction({
-        block: { height: 800000, timestamp: -1 },
-        timeFirstSeen: 0,
+      const tx = cloneChronikTx(chronikTxInvalidTimestamps, {
         outputs: [
           {},
           { sats: 10000 },
@@ -320,7 +282,7 @@ describe('chronik-transactions', () => {
     })
 
     it('should fallback to hash when txid is missing', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxWithoutTxid, {
         outputs: [
           {},
           { sats: 10000 },
@@ -328,15 +290,13 @@ describe('chronik-transactions', () => {
           { token: { tokenId: 'test', amount: BigInt(100000) } },
         ],
       })
-      delete (tx as any).txid
-      ;(tx as any).hash = 'fallback-hash-value'
 
       const result = processMatchedTransaction(tx, 100)
       expect(result!.txid).toBe('fallback-hash-value')
     })
 
     it('should return null when both txid and hash are missing', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           { sats: 10000 },
@@ -352,7 +312,7 @@ describe('chronik-transactions', () => {
     })
 
     it('should return null when token amount is zero after division', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           { sats: 10000 },
@@ -366,7 +326,7 @@ describe('chronik-transactions', () => {
     })
 
     it('should return null when token amount is negative', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           { sats: 10000 },
@@ -380,7 +340,7 @@ describe('chronik-transactions', () => {
     })
 
     it('should return null when token amount becomes Infinity', () => {
-      const tx = createMockTransaction({
+      const tx = cloneChronikTx(chronikTxAgoraSale, {
         outputs: [
           {},
           { sats: 10000 },
@@ -405,10 +365,10 @@ describe('chronik-transactions', () => {
         tokenId: vi.fn().mockReturnThis(),
         history: vi.fn()
           .mockResolvedValueOnce({
-            txs: Array(5).fill(createMockTransaction()),
+            txs: chronikHistoryPageTargetCount,
           })
           .mockResolvedValueOnce({
-            txs: Array(5).fill(createMockTransaction()),
+            txs: chronikHistoryPageTargetCount,
           }),
       }
 
@@ -422,7 +382,7 @@ describe('chronik-transactions', () => {
       const mockChronik = {
         tokenId: vi.fn().mockReturnThis(),
         history: vi.fn().mockResolvedValueOnce({
-          txs: Array(50).fill(createMockTransaction()), // Less than default pageSize (200)
+          txs: chronikHistoryPageShort, // Less than default pageSize (200)
         }),
       }
 
@@ -437,15 +397,10 @@ describe('chronik-transactions', () => {
         tokenId: vi.fn().mockReturnThis(),
         history: vi.fn()
           .mockResolvedValueOnce({
-            txs: [
-              createMockTransaction({ block: { height: 800000, timestamp: 1000 } }),
-              createMockTransaction({ block: { height: 799900, timestamp: 1000 } }),
-            ],
+            txs: chronikHistoryPageMaxBlocksBackFirst,
           })
           .mockResolvedValueOnce({
-            txs: [
-              createMockTransaction({ block: { height: 799800, timestamp: 1000 } }), // Should be filtered
-            ],
+            txs: chronikHistoryPageMaxBlocksBackSecond,
           }),
       }
 
@@ -464,11 +419,7 @@ describe('chronik-transactions', () => {
       const mockChronik = {
         tokenId: vi.fn().mockReturnThis(),
         history: vi.fn().mockResolvedValueOnce({
-          txs: [
-            createMockTransaction({ block: { height: 800100, timestamp: 1000 } }),
-            createMockTransaction({ block: { height: 800001, timestamp: 1000 } }),
-            createMockTransaction({ block: { height: 799999, timestamp: 1000 } }), // Below threshold
-          ],
+          txs: chronikHistoryPageStopBelowHeight,
         }),
       }
 

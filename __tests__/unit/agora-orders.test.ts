@@ -1,12 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { agoraPartialOffer, agoraHigherPriceOffer, agoraInvalidMakerPkOffer, agoraFallbackDecimalsOffer, agoraInvalidOffer } from '../fixtures/agora'
+
+const mockActiveOffersByTokenId = vi.fn()
+const mockFetchTokenDetails = vi.fn().mockResolvedValue({
+  genesisInfo: { decimals: 2 },
+})
+const mockGetTokenDecimalsFromDetails = vi.fn(() => 2)
+
+vi.mock('ecash-agora', () => ({
+  Agora: vi.fn(function MockAgora() {
+    return {
+      activeOffersByTokenId: mockActiveOffersByTokenId,
+    }
+  }),
+}))
 
 // Mock the dependencies before importing the module
 vi.mock('@/lib/chronik', () => ({
   chronik: {},
-  fetchTokenDetails: vi.fn().mockResolvedValue({
-    genesisInfo: { decimals: 2 }
-  }),
-  getTokenDecimalsFromDetails: vi.fn(() => 2),
+  fetchTokenDetails: mockFetchTokenDetails,
+  getTokenDecimalsFromDetails: mockGetTokenDecimalsFromDetails,
   getTokenAmountFromToken: vi.fn((token: any) => token.amount || token.atoms || BigInt(0)),
 }))
 
@@ -32,6 +45,13 @@ vi.mock('@/config/tokens', () => ({
 describe('agora-orders', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockActiveOffersByTokenId.mockReset()
+    mockFetchTokenDetails.mockReset()
+    mockFetchTokenDetails.mockResolvedValue({
+      genesisInfo: { decimals: 2 },
+    })
+    mockGetTokenDecimalsFromDetails.mockReset()
+    mockGetTokenDecimalsFromDetails.mockReturnValue(2)
   })
 
   describe('fetchAgoraOrderBook', () => {
@@ -42,17 +62,118 @@ describe('agora-orders', () => {
       expect(result.error).toBe('tokenId is required')
     })
 
-    it('should handle errors gracefully', async () => {
-      // This test verifies error handling exists
-      // Full integration testing would require proper Agora mocking
-      const { fetchAgoraOrderBook } = await import('@/lib/agora-orders')
-      const result = await fetchAgoraOrderBook('test-token-id')
+    it('should format valid offers and calculate stats', async () => {
+      mockActiveOffersByTokenId.mockResolvedValue([agoraPartialOffer])
 
-      // Should either succeed or fail gracefully with an error message
-      expect(result.success !== undefined).toBe(true)
-      if (!result.success) {
-        expect(typeof result.error).toBe('string')
-      }
+      const { fetchAgoraOrderBook } = await import('@/lib/agora-orders')
+      const result = await fetchAgoraOrderBook('mock-token-id')
+
+      expect(result.success).toBe(true)
+      expect(result.data?.orders).toEqual([
+        {
+          price: 0.1,
+          amount: 10000,
+          total: 1000,
+          makerAddress: 'ecash:mock_address_20',
+        },
+      ])
+      expect(result.data?.stats).toEqual({
+        count: 1,
+        min_price: 0.1,
+        max_price: 0.1,
+        avg_price: 0.1,
+        total_amount: 10000,
+        total_value: 1000,
+      })
+    })
+
+    it('should sort orders by descending price and compute aggregate stats', async () => {
+      mockActiveOffersByTokenId.mockResolvedValue([agoraPartialOffer, agoraHigherPriceOffer])
+
+      const { fetchAgoraOrderBook } = await import('@/lib/agora-orders')
+      const result = await fetchAgoraOrderBook('mock-token-id')
+
+      expect(result.success).toBe(true)
+      expect(result.data?.orders).toEqual([
+        {
+          price: 0.3,
+          amount: 5000,
+          total: 1500,
+          makerAddress: 'ecash:mock_address_20',
+        },
+        {
+          price: 0.1,
+          amount: 10000,
+          total: 1000,
+          makerAddress: 'ecash:mock_address_20',
+        },
+      ])
+      expect(result.data?.stats).toEqual({
+        count: 2,
+        min_price: 0.1,
+        max_price: 0.3,
+        avg_price: 0.2,
+        total_amount: 15000,
+        total_value: 2500,
+      })
+    })
+
+    it('should omit makerAddress when makerPk is invalid', async () => {
+      mockActiveOffersByTokenId.mockResolvedValue([agoraInvalidMakerPkOffer])
+
+      const { fetchAgoraOrderBook } = await import('@/lib/agora-orders')
+      const result = await fetchAgoraOrderBook('mock-token-id')
+
+      expect(result.success).toBe(true)
+      expect(result.data?.orders).toEqual([
+        {
+          price: 0.1,
+          amount: 10000,
+          total: 1000,
+          makerAddress: undefined,
+        },
+      ])
+    })
+
+    it('should use fetchTokenDetails decimals fallback for tokens missing from config', async () => {
+      mockActiveOffersByTokenId.mockResolvedValue([agoraFallbackDecimalsOffer])
+      mockFetchTokenDetails.mockResolvedValue({
+        genesisInfo: { decimals: 3 },
+      })
+      mockGetTokenDecimalsFromDetails.mockReturnValue(3)
+
+      const { fetchAgoraOrderBook } = await import('@/lib/agora-orders')
+      const result = await fetchAgoraOrderBook('fallback-token-id')
+
+      expect(result.success).toBe(true)
+      expect(mockFetchTokenDetails).toHaveBeenCalledWith('fallback-token-id')
+      expect(result.data?.orders).toEqual([
+        {
+          price: 0.19998915,
+          amount: 1234.567,
+          total: 246.9,
+          makerAddress: 'ecash:mock_address_20',
+        },
+      ])
+      expect(result.data?.stats).toEqual({
+        count: 1,
+        min_price: 0.19998915,
+        max_price: 0.19998915,
+        avg_price: 0.19998915,
+        total_amount: 1234.567,
+        total_value: 246.9,
+      })
+    })
+
+    it('should filter invalid offers', async () => {
+      mockActiveOffersByTokenId.mockResolvedValue([agoraPartialOffer, agoraInvalidOffer])
+
+      const { fetchAgoraOrderBook } = await import('@/lib/agora-orders')
+      const result = await fetchAgoraOrderBook('mock-token-id')
+
+      expect(result.success).toBe(true)
+      expect(result.data?.orders).toHaveLength(1)
+      expect(result.data?.stats.count).toBe(1)
     })
   })
 })
