@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
 
 interface OrderProcessingContextType {
   isAutoProcessing: boolean;
@@ -65,10 +65,13 @@ export const OrderProcessingProvider = ({
     setIsAutoProcessing(v);
   };
 
+  const contextValue = useMemo(() => ({
+    isAutoProcessing,
+    setIsAutoProcessing: setIsAutoProcessingWithLog
+  }), [isAutoProcessing]);
+
   return (
-    <OrderProcessingContext.Provider
-      value={{ isAutoProcessing, setIsAutoProcessing: setIsAutoProcessingWithLog }}
-    >
+    <OrderProcessingContext.Provider value={contextValue}>
       {children}
     </OrderProcessingContext.Provider>
   );

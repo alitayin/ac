@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import {
   Popover,
@@ -135,9 +135,25 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
         }, [] as Array<Order & { cumulativeAmount: number; cumulativeCost: number }>)
     : [];
 
-  const askMaxAmount = asksWithCumulative.length
-    ? Math.max(...asksWithCumulative.map((o) => o.amount))
-    : 0;
+  const askMaxAmount = useMemo(
+    () => asksWithCumulative.length ? Math.max(...asksWithCumulative.map((o) => o.amount)) : 0,
+    [asksWithCumulative]
+  );
+
+  const buyOrderMaxAmount = useMemo(
+    () => buyOrders.length ? Math.max(...buyOrders.map((o) => o.amount)) : 0,
+    [buyOrders]
+  );
+
+  const lowestAsk = useMemo(
+    () => orderBook?.orders?.length ? Math.min(...orderBook.orders.map((o) => o.price)) : Infinity,
+    [orderBook?.orders]
+  );
+
+  const highestBid = useMemo(
+    () => buyOrders.length ? Math.max(...buyOrders.map((o) => o.price)) : 0,
+    [buyOrders]
+  );
 
   const collapsedAsks = asksWithCumulative
     .slice(0, ORDERBOOK_CONSTANTS.COLLAPSED_ORDERS_COUNT)
@@ -243,8 +259,6 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                   <span className="text-muted-foreground">Spread:</span>
                   <span className="tabular-nums">
                     {(() => {
-                      const lowestAsk = Math.min(...orderBook.orders.map(o => o.price));
-                      const highestBid = Math.max(...buyOrders.map(o => o.price));
                       const spread = lowestAsk - highestBid;
                       const spreadPercentage = (spread / lowestAsk) * 100;
                       return `${spread.toFixed(2)} (${spreadPercentage.toFixed(2)}%)`;
@@ -261,12 +275,8 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                     .sort((a, b) => b.price - a.price)
                     .slice(0, ORDERBOOK_CONSTANTS.COLLAPSED_ORDERS_COUNT)
                     .map((order, index) => {
-                      const maxAmount = Math.max(...buyOrders.map(o => o.amount));
-                      const barWidth = (order.amount / maxAmount) * 100 * UI_CONSTANTS.ORDERBOOK_BAR_MULTIPLIER;
-                      const lowestAsk = orderBook?.orders?.length 
-                    ? Math.min(...orderBook.orders.map(o => o.price))
-                    : Infinity;
-                  const isAbnormalPrice = order.price >= lowestAsk;
+                      const barWidth = (order.amount / buyOrderMaxAmount) * 100 * UI_CONSTANTS.ORDERBOOK_BAR_MULTIPLIER;
+                      const isAbnormalPrice = order.price >= lowestAsk;
 
                       return (
                         <Popover key={index}>
@@ -324,8 +334,8 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                     })
                 ) : (
                   Array.from({ length: ORDERBOOK_CONSTANTS.COLLAPSED_ORDERS_COUNT }, (_, i) => {
-                    const referencePrice = orderBook?.orders?.length 
-                      ? Math.min(...orderBook.orders.map(o => o.price))
+                    const referencePrice = lowestAsk !== Infinity
+                      ? lowestAsk
                       : ORDERBOOK_CONSTANTS.DEFAULT_REFERENCE_PRICE;
                     const price = referencePrice * (1 - ORDERBOOK_CONSTANTS.SPREAD_DECREMENT * (i + 1));
                     return (
@@ -357,9 +367,7 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                     .sort((a, b) => b.price - a.price)
                     .slice(0, ORDERBOOK_CONSTANTS.EXPANDED_ORDERS_COUNT)
                     .map((order, index) => {
-                      const maxAmount = Math.max(...buyOrders.map(o => o.amount));
-                      const barWidth = (order.amount / maxAmount) * 100;
-                      const lowestAsk = Math.min(...orderBook.orders.map(o => o.price));
+                      const barWidth = (order.amount / buyOrderMaxAmount) * 100;
                       const isAbnormalPrice = order.price >= lowestAsk;
 
                       return (
@@ -404,8 +412,8 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                     })
                 ) : (
                   Array.from({ length: ORDERBOOK_CONSTANTS.EXPANDED_ORDERS_COUNT }, (_, i) => {
-                    const referencePrice = orderBook?.orders?.length 
-                      ? Math.min(...orderBook.orders.map(o => o.price))
+                    const referencePrice = lowestAsk !== Infinity
+                      ? lowestAsk
                       : ORDERBOOK_CONSTANTS.DEFAULT_REFERENCE_PRICE;
                     const price = referencePrice * (1 - ORDERBOOK_CONSTANTS.SPREAD_DECREMENT * (i + 1));
                     return (

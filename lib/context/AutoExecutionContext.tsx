@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useEffect, useState, useRef } from "react";
+import React, { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { processOrders } from '@/lib/Auto.js';
 import { useToast } from "@/hooks/use-toast";
 import { useOrderProcessing } from "./OrderProcessingContext";
@@ -26,7 +26,7 @@ export const AutoExecutionProvider = ({
     return Object.keys(orders).length > 0;
   };
 
-  const executeOrders = async () => {
+  const executeOrders = useCallback(async () => {
     try {
       await processOrders();
       return Promise.resolve();
@@ -34,7 +34,7 @@ export const AutoExecutionProvider = ({
       console.error('Failed to process orders:', error);
       return Promise.reject(error);
     }
-  };
+  }, []);
 
 
   useEffect(() => {
@@ -71,10 +71,14 @@ export const AutoExecutionProvider = ({
         intervalRef.current = null;
       }
     };
-  }, [isAutoProcessing]);
+  }, [isAutoProcessing, executeOrders]);
+
+  const contextValue = useMemo(() => ({
+    executeOrders
+  }), [executeOrders]);
 
   return (
-    <AutoExecutionContext.Provider value={{ executeOrders }}>
+    <AutoExecutionContext.Provider value={contextValue}>
       {children}
     </AutoExecutionContext.Provider>
   );

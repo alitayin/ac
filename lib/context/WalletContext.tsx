@@ -1,5 +1,5 @@
 "use client"
-import { createContext, useState, useContext, useEffect, ReactNode, useRef, useCallback } from 'react';
+import { createContext, useState, useContext, useEffect, ReactNode, useRef, useCallback, useMemo } from 'react';
 import * as ecashLib from 'ecash-lib';
 import * as ecashAddrJs from 'ecashaddrjs';
 import { disconnectAddress } from '../websocket-client';
@@ -281,19 +281,21 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     setIsGuestMode(false);
   };
 
+  const contextValue = useMemo(() => ({
+    isWalletConnected,
+    ecashAddress,
+    balance,
+    userTokens,
+    mnemonic,
+    isGuestMode,
+    connectWallet,
+    connectWithCashtab,
+    disconnectWallet,
+    refreshBalance
+  }), [isWalletConnected, ecashAddress, balance, userTokens, mnemonic, isGuestMode, connectWallet, connectWithCashtab, disconnectWallet, refreshBalance]);
+
   return (
-    <WalletContext.Provider value={{
-      isWalletConnected,
-      ecashAddress,
-      balance,
-      userTokens,
-      mnemonic,
-      isGuestMode,
-      connectWallet,
-      connectWithCashtab,
-      disconnectWallet,
-      refreshBalance
-    }}>
+    <WalletContext.Provider value={contextValue}>
       {children}
     </WalletContext.Provider>
   );

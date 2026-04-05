@@ -88,6 +88,9 @@ const setCachedTokenDetails = (tokenId: string, data: any) => {
   }
 }
 
+// In-memory pending requests map for deduplication
+const pendingRequests = new Map<string, Promise<any>>()
+
 export const fetchTokenDetails = async (tokenId: string, client?: ChronikClient) => {
   if (!tokenId) {
     throw new Error("tokenId is required")
@@ -98,14 +101,29 @@ export const fetchTokenDetails = async (tokenId: string, client?: ChronikClient)
     return cached
   }
 
-  const c = client || chronik
-  const tokenData = await c.token(tokenId)
-
-  if (tokenData) {
-    setCachedTokenDetails(tokenId, tokenData)
+  // Check if there's already a pending request for this token
+  const pending = pendingRequests.get(tokenId)
+  if (pending) {
+    return pending
   }
 
-  return tokenData
+  // Create new request and store it
+  const c = client || chronik
+  const requestPromise = c.token(tokenId).then(tokenData => {
+    if (tokenData) {
+      setCachedTokenDetails(tokenId, tokenData)
+    }
+    // Remove from pending after completion
+    pendingRequests.delete(tokenId)
+    return tokenData
+  }).catch(error => {
+    // Remove from pending on error too
+    pendingRequests.delete(tokenId)
+    throw error
+  })
+
+  pendingRequests.set(tokenId, requestPromise)
+  return requestPromise
 }
 
 export const getTokenDecimalsFromDetails = (
