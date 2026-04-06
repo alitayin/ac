@@ -1,8 +1,6 @@
 "use client";
-import React, { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from "react";
+import React, { createContext, useContext, useMemo, useCallback } from "react";
 import { processOrders } from '@/lib/Auto.js';
-import { useToast } from "@/hooks/use-toast";
-import { useOrderProcessing } from "./OrderProcessingContext";
 
 interface AutoExecutionContextType {
   executeOrders: () => Promise<void>;
@@ -15,17 +13,6 @@ export const AutoExecutionProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const { toast } = useToast();
-  const { isAutoProcessing } = useOrderProcessing();
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  const hasActiveOrders = () => {
-    if (typeof window === "undefined") return false;
-    
-    const orders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-    return Object.keys(orders).length > 0;
-  };
-
   const executeOrders = useCallback(async () => {
     try {
       await processOrders();
@@ -37,41 +24,8 @@ export const AutoExecutionProvider = ({
   }, []);
 
 
-  useEffect(() => {
-    // Clear any existing interval FIRST to prevent accumulation
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    // Only start interval if conditions are met
-    if (isAutoProcessing && hasActiveOrders()) {
-      // Initial execution
-      executeOrders();
-
-      // Start polling interval
-      intervalRef.current = setInterval(async () => {
-        // Double-check conditions inside interval callback
-        if (!isAutoProcessing || !hasActiveOrders()) {
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-          return;
-        }
-
-        await executeOrders();
-      }, 3000);
-    }
-
-    // Cleanup function - runs when component unmounts or dependencies change
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [isAutoProcessing, executeOrders]);
+  // Removed polling interval - WebSocket in header.tsx handles real-time order processing
+  // This prevents duplicate processOrders calls and excessive lock contention
 
   const contextValue = useMemo(() => ({
     executeOrders
