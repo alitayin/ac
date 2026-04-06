@@ -1,6 +1,7 @@
 "use client";
-import React, { createContext, useContext, useMemo, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useRef, useMemo, useCallback } from "react";
 import { processOrders } from '@/lib/Auto.js';
+import { useOrderProcessing } from "./OrderProcessingContext";
 
 interface AutoExecutionContextType {
   executeOrders: () => Promise<void>;
@@ -13,6 +14,16 @@ export const AutoExecutionProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
+  const { isAutoProcessing } = useOrderProcessing();
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const hasActiveOrders = () => {
+    if (typeof window === "undefined") return false;
+
+    const orders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
+    return Object.keys(orders).length > 0;
+  };
+
   const executeOrders = useCallback(async () => {
     try {
       await processOrders();
@@ -23,9 +34,41 @@ export const AutoExecutionProvider = ({
     }
   }, []);
 
+  useEffect(() => {
+    // Clear any existing interval FIRST to prevent accumulation
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
 
-  // Removed polling interval - WebSocket in header.tsx handles real-time order processing
-  // This prevents duplicate processOrders calls and excessive lock contention
+    // Only start interval if conditions are met
+    if (isAutoProcessing && hasActiveOrders()) {
+      // Initial execution
+      executeOrders();
+
+      // Start polling interval - 60 seconds
+      intervalRef.current = setInterval(async () => {
+        // Double-check conditions inside interval callback
+        if (!isAutoProcessing || !hasActiveOrders()) {
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          return;
+        }
+
+        await executeOrders();
+      }, 60000); // Changed from 3000ms to 60000ms (60 seconds)
+    }
+
+    // Cleanup function - runs when component unmounts or dependencies change
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isAutoProcessing, executeOrders]);
 
   const contextValue = useMemo(() => ({
     executeOrders
