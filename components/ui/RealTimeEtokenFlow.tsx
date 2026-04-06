@@ -64,12 +64,19 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
   }, [])
 
   const handleTx = React.useCallback(async (txid: string) => {
-    if (seenTxs.current.has(txid)) return
+    if (seenTxs.current.has(txid)) {
+      console.log(`[RealTimeFlow] Skipping duplicate txid: ${txid}`)
+      return
+    }
     seenTxs.current.add(txid)
+    console.log(`[RealTimeFlow] Processing txid: ${txid}`)
 
     try {
       const tx = await chronikClient!.tx(txid)
-      if (!tx) return
+      if (!tx) {
+        console.log(`[RealTimeFlow] No tx data for ${txid}`)
+        return
+      }
 
       const tokenMap = new Map<
         string,
@@ -106,7 +113,10 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
         }
       }
 
-      if (tokenMap.size === 0) return
+      if (tokenMap.size === 0) {
+        console.log(`[RealTimeFlow] No tokens found in tx ${txid}`)
+        return
+      }
 
       const isAgora = !!detectAgoraTokenId(tx)
 
@@ -128,6 +138,8 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
           ? new Date(tx.timeFirstSeen * 1000).toISOString()
           : new Date().toISOString()
 
+      console.log(`[RealTimeFlow] Adding tx ${txid} with ${tokens.length} token(s)`)
+
       setItems((prev) => {
         const next = [
           { txid, time, blockHeight: tx.block?.height ?? null, tokens, isAgora },
@@ -137,7 +149,8 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
         onCountChange?.(sliced.length)
         return sliced
       })
-    } catch {
+    } catch (error) {
+      console.error(`[RealTimeFlow] Error processing tx ${txid}:`, error)
       return
     }
   }, [fetchTokenMeta])
@@ -172,17 +185,22 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
 
     const loadMempoolTxs = async () => {
       try {
+        console.log('[RealTimeFlow] Loading mempool transactions...')
         const mempoolPage = await chronikClient.unconfirmedTxs()
         const txs = mempoolPage?.txs || []
+        console.log(`[RealTimeFlow] Found ${txs.length} total mempool transactions`)
 
         // Process mempool transactions with token outputs
+        let tokenTxCount = 0
         for (const tx of txs) {
           if (tx.outputs?.some((out: any) => out.token)) {
+            tokenTxCount++
             enqueueTx(tx.txid)
           }
         }
+        console.log(`[RealTimeFlow] Enqueued ${tokenTxCount} eToken transactions from mempool`)
       } catch (error) {
-        console.error('Failed to load mempool transactions:', error)
+        console.error('[RealTimeFlow] Failed to load mempool transactions:', error)
       }
     }
 
