@@ -413,7 +413,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
         return (
           <Card 
             key={orderKey} 
-            className="rounded-3xl p-4 bg-background hover:bg-muted/30 hover:shadow-md transition-all duration-200 cursor-pointer"
+            className="rounded-xl p-4 bg-background hover:bg-muted/30 hover:shadow-md transition-all duration-200 cursor-pointer"
             onClick={() => handleCardClick(order)}
           >
             <div className="flex items-center justify-between mb-2">

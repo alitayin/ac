@@ -49,8 +49,8 @@ export function SwapPanel({
     <div className="space-y-4">
       <Badge variant="secondary" className="h-10 rounded-lg">Agora</Badge>
 
-      <Card className="rounded-3xl py-2 px-0 border-none shadow-none">
-        <div className="space-y-2 bg-muted p-4 rounded-2xl transition-all hover:ring-2 hover:ring-primary/50">
+      <Card className="rounded-xl py-2 px-0 border-none shadow-none">
+        <div className="space-y-2 bg-muted p-4 rounded-xl transition-all hover:ring-2 hover:ring-primary/50">
           <div className="text-muted-foreground text-sm">Spend</div>
           <div className="flex items-center justify-between">
             <input
@@ -91,7 +91,7 @@ export function SwapPanel({
           </div>
         </div>
 
-        <div className="space-y-2 bg-background p-4 rounded-2xl border mt-2 transition-all hover:bg-muted/50">
+        <div className="space-y-2 bg-background p-4 rounded-xl border mt-2 transition-all hover:bg-muted/50">
           <div className="text-muted-foreground text-sm">Buy</div>
           <div className="flex items-center justify-between">
             <input
@@ -141,14 +141,14 @@ export function SwapPanel({
 
       <div className="flex gap-2">
         <Button
-          className="flex-1 bg-pink-100 hover:bg-pink-200 text-pink-500/80 h-14 text-lg rounded-2xl"
+          className="flex-1 bg-pink-100 hover:bg-pink-200 text-pink-500/80 h-14 text-lg rounded-xl"
           variant="ghost"
           onClick={() => window.open(`https://cashtab.com/#/token/${tokenId}`, "_blank")}
         >
           Cashtab
         </Button>
         <Button
-          className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-500 h-14 text-lg rounded-2xl"
+          className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-500 h-14 text-lg rounded-xl"
           variant="ghost"
           onClick={createSwapOrder}
         >

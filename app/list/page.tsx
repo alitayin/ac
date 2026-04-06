@@ -81,7 +81,7 @@ export default function ListPage() {
               <Card className="rounded-xl">
                   <CardHeader>
                     <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-2xl bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center shrink-0">
                         <Avatar className="h-8 w-8">
                           <AvatarImage 
                             src={

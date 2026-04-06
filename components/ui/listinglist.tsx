@@ -221,7 +221,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
             const isCancellingThis = isCancelling === listingKey;
 
             return (
-              <Card key={`${listing.tokenId}-${index}`} className="rounded-3xl p-4 bg-background hover:bg-muted/30 hover:shadow-md transition-all duration-200">
+              <Card key={`${listing.tokenId}-${index}`} className="rounded-xl p-4 bg-background hover:bg-muted/30 hover:shadow-md transition-all duration-200">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center">
                     <Avatar className="h-8 w-8 mr-2">

@@ -1919,7 +1919,7 @@ export default function Component() {
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <div className="flex items-center gap-1 border rounded-md p-1">
+            <div className="flex items-center gap-0.5 border rounded-md p-1">
               <button
                 onClick={() => setViewMode('normal')}
                 className={cn(

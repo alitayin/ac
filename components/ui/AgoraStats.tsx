@@ -212,7 +212,7 @@ export default function AgoraStats() {
   return (
     <div className="w-full py-6">
       {error && (
-        <div className="mb-4 p-3 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 rounded text-sm">
+        <div className="mb-4 p-3 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 rounded-lg text-sm font-normal tracking-tight">
           ⚠️ Failed to load real-time data: {error}
         </div>
       )}
