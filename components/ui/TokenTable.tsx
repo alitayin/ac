@@ -1859,9 +1859,9 @@ export default function Component() {
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <CardTitle className="flex items-baseline gap-2">
-              <AuroraText className="text-lg font-bold tracking-tighter">eToken Market</AuroraText>
+              <AuroraText className="text-2xl font-semibold tracking-tight">eToken Market</AuroraText>
             </CardTitle>
-            <CardDescription>Loading market data...</CardDescription>
+            <CardDescription className="font-normal tracking-tight">Loading market data...</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
@@ -1905,14 +1905,14 @@ export default function Component() {
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <CardTitle className="flex items-baseline gap-2">
-              <AuroraText className="text-lg font-bold tracking-tighter">eToken Market</AuroraText>
+              <AuroraText className="text-2xl font-semibold tracking-tight">eToken Market</AuroraText>
               {chainTipHeight && (
-                <span className="text-xs text-muted-foreground font-normal">
+                <span className="text-xs text-muted-foreground font-normal tracking-tight">
                   # {chainTipHeight.toLocaleString()}
                 </span>
               )}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="font-normal tracking-tight">
               {viewMode === "normal"
                 ? "Agora sales data"
                 : "All active eTokens on Agora"}
@@ -1923,9 +1923,9 @@ export default function Component() {
               <button
                 onClick={() => setViewMode('normal')}
                 className={cn(
-                  "text-sm px-3 py-1  rounded-md transition-colors",
-                  viewMode === 'normal' 
-                    ? "bg-accent font-medium" 
+                  "text-sm font-normal tracking-tight px-3 py-1 rounded-md transition-colors",
+                  viewMode === 'normal'
+                    ? "bg-accent font-semibold"
                     : "hover:bg-accent/50 text-muted-foreground"
                 )}
               >
@@ -1934,9 +1934,9 @@ export default function Component() {
               <button
                 onClick={() => setViewMode("all-etokens")}
                 className={cn(
-                  "text-sm px-3 py-1 rounded-md transition-colors",
+                  "text-sm font-normal tracking-tight px-3 py-1 rounded-md transition-colors",
                   viewMode === "all-etokens"
-                    ? "bg-accent font-medium"
+                    ? "bg-accent font-semibold"
                     : "hover:bg-accent/50 text-muted-foreground",
                 )}
               >
@@ -1950,7 +1950,7 @@ export default function Component() {
               <DropdownMenuTrigger asChild>
                 <button
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent transition-colors",
+                    "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-normal tracking-tight hover:bg-accent transition-colors",
                     filterOption !== 'all' && "text-blue-500 border-blue-500"
                   )}
                 >

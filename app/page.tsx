@@ -41,6 +41,7 @@ export default function Home() {
                 variant={view === "table" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setView("table")}
+                className="font-normal tracking-tight"
               >
                 Token Table
               </Button>
@@ -48,6 +49,7 @@ export default function Home() {
                 variant={view === "flow" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setView("flow")}
+                className="font-normal tracking-tight"
               >
                 Real-time eToken Flow
               </Button>

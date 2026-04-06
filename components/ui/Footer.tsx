@@ -60,17 +60,17 @@ export default function Footer() {
         {/* PayButtons */}
         <div className="flex flex-col sm:flex-row gap-8 items-center justify-center w-full">
           <div className="flex flex-col items-center gap-2">
-            <p className="text-xs text-muted-foreground text-center">Support eCash ecosystem development</p>
+            <p className="text-xs font-normal tracking-tight text-muted-foreground text-center">Support eCash ecosystem development</p>
             <div ref={ecoRef} />
           </div>
           <div className="flex flex-col items-center gap-2">
-            <p className="text-xs text-muted-foreground text-center">Tip Alita directly &mdash; she&apos;s volunteering</p>
+            <p className="text-xs font-normal tracking-tight text-muted-foreground text-center">Tip Alita directly &mdash; she&apos;s volunteering</p>
             <div ref={tipRef} />
           </div>
         </div>
 
         {/* Copyright */}
-        <div className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex flex-col items-center gap-1 text-xs font-normal tracking-tight text-muted-foreground">
           <span>© eCash Ecosystem Hub</span>
         </div>
 

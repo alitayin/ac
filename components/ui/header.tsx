@@ -413,7 +413,7 @@ export default function Header({
           </Link>
           <ConfettiButton
             onClick={runConfetti}
-            className="hidden sm:inline rounded bg-blue-100 px-2 py-0 h-6 shadow-none text-xs font-medium text-blue-600"
+            className="hidden sm:inline rounded bg-blue-100 px-2 py-0 h-6 shadow-none text-xs font-normal text-blue-600 tracking-tight"
           >
             <span>{appVersion.version}</span>
           </ConfettiButton>
@@ -424,7 +424,7 @@ export default function Header({
             <div className="relative cursor-pointer group">
               <div className="relative flex items-center sm:gap-2 gap-0 sm:px-4 px-2 sm:py-2 py-1 rounded-lg bg-background border border-input hover:bg-accent hover:text-accent-foreground transition-colors">
                 <ArrowLeftRight className="h-4 w-4" />
-                <span className="text-sm">Swap</span>
+                <span className="text-sm font-normal tracking-tight">Swap</span>
                 <BorderBeam
                   duration={6}
                   size={50}
@@ -484,14 +484,14 @@ export default function Header({
             {isWalletConnected && (
               <Drawer>
                 <DrawerTrigger asChild>
-                  <Button 
-                    variant="default" 
+                  <Button
+                    variant="default"
                     className="rounded-full bg-muted text-mute-foreground hover:bg-primary/90 ml-2"
                   >
                     <div className="flex items-center gap-1 w-full justify-between">
-                      <span className="text-sm block text-center whitespace-nowrap flex-1">
-                        {ecashAddress ? 
-                          `${ecashAddress.substring(ecashAddress.length - 6)}` : 
+                      <span className="text-sm font-normal tracking-tight block text-center whitespace-nowrap flex-1">
+                        {ecashAddress ?
+                          `${ecashAddress.substring(ecashAddress.length - 6)}` :
                           'Unknown'}
                       </span>
                       <span 
@@ -639,12 +639,12 @@ export default function Header({
             {!isWalletConnected && (
               <Drawer open={isLoginDrawerOpen} onOpenChange={setIsLoginDrawerOpen}>
                 <DrawerTrigger asChild>
-                  <Button 
-                    variant="default" 
+                  <Button
+                    variant="default"
                     className="rounded-full bg-muted text-mute-foreground hover:bg-primary/90 ml-2"
                   >
                     <div className="flex items-center gap-1 w-full justify-center">
-                      <span className="text-sm block text-center whitespace-nowrap flex-1">
+                      <span className="text-sm font-normal tracking-tight block text-center whitespace-nowrap flex-1">
                         Login
                       </span>
                     </div>

@@ -45,12 +45,12 @@ interface StatCardProps {
 function StatCard({ title, value, change, isPositive = true }: StatCardProps) {
   const changeColor = change > 0 ? "text-green-500" : change < 0 ? "text-red-500" : "text-gray-500";
   const arrow = change > 0 ? "▲" : change < 0 ? "▼" : "";
-  
+
   return (
-    <div className="flex flex-col space-y-1">
-      <div className="text-sm text-gray-400">{title}</div>
-      <div className="text-lg font-semibold">{value}</div>
-      <div className={`text-xs ${changeColor} flex items-center text-xs gap-1`}>
+    <div className="flex flex-col space-y-1.5">
+      <div className="text-sm text-gray-400 font-normal tracking-tight">{title}</div>
+      <div className="text-2xl font-semibold tracking-tight leading-tight">{value}</div>
+      <div className={`text-xs ${changeColor} flex items-center gap-1 font-normal tracking-tight`}>
         {arrow} {Math.abs(change).toFixed(2)}% today
       </div>
     </div>
