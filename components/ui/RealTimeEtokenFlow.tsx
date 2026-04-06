@@ -54,16 +54,24 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
     if (tokenMetaCache.current.has(tokenId)) {
       return tokenMetaCache.current.get(tokenId)
     }
+    if (!chronikClient) {
+      return null
+    }
     try {
-      const meta = await fetchTokenDetails(tokenId, chronikClient!)
+      const meta = await fetchTokenDetails(tokenId, chronikClient)
       tokenMetaCache.current.set(tokenId, meta)
       return meta
     } catch {
       return null
     }
-  }, [])
+  }, [chronikClient])
 
   const handleTx = React.useCallback(async (txid: string) => {
+    if (!chronikClient) {
+      console.log(`[RealTimeFlow] chronikClient not ready, skipping tx ${txid}`)
+      return
+    }
+
     if (seenTxs.current.has(txid)) {
       console.log(`[RealTimeFlow] Skipping duplicate txid: ${txid}`)
       return
@@ -72,7 +80,7 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
     console.log(`[RealTimeFlow] Processing txid: ${txid}`)
 
     try {
-      const tx = await chronikClient!.tx(txid)
+      const tx = await chronikClient.tx(txid)
       if (!tx) {
         console.log(`[RealTimeFlow] No tx data for ${txid}`)
         return
@@ -153,7 +161,7 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
       console.error(`[RealTimeFlow] Error processing tx ${txid}:`, error)
       return
     }
-  }, [fetchTokenMeta])
+  }, [chronikClient, fetchTokenMeta])
 
   const processQueue = React.useCallback(async () => {
     if (processingRef.current) return
