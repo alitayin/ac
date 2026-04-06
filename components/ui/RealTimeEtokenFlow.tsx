@@ -170,10 +170,29 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
     let ws: ReturnType<typeof chronikClient.ws> | null = null
     cancelledRef.current = false
 
+    const loadMempoolTxs = async () => {
+      try {
+        const mempoolPage = await chronikClient.unconfirmedTxs()
+        const txs = mempoolPage?.txs || []
+
+        // Process mempool transactions with token outputs
+        for (const tx of txs) {
+          if (tx.outputs?.some((out: any) => out.token)) {
+            enqueueTx(tx.txid)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load mempool transactions:', error)
+      }
+    }
+
     const connect = async () => {
       setConnecting(true)
       setWsError(null)
       try {
+        // Load existing mempool transactions first
+        await loadMempoolTxs()
+
         ws = chronikClient.ws({
           onConnect: () => {
             setConnected(true)
