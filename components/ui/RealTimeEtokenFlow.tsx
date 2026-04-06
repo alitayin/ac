@@ -25,7 +25,7 @@ type FlowItem = {
   isAgora: boolean
 }
 
-const MAX_ITEMS = 20
+const MAX_ITEMS = 100
 const CHRONIK_WS_RETRY_MS = 5000
 
 const formatTxid = (txid: string) => {
@@ -284,7 +284,7 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
       <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle className="text-lg">Real-time eToken Flow</CardTitle>
-          <CardDescription>Realtime eToken activity on eCash network</CardDescription>
+          <CardDescription>Real-time eToken activity on eCash network</CardDescription>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <span
@@ -305,7 +305,7 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
         )}
         <div className="max-h-[560px] h-[560px] space-y-2 overflow-y-auto pr-1">
           {items.length === 0 && (
-            <div className="text-sm text-muted-foreground">Waitng for etokens transcation...</div>
+            <div className="text-sm text-muted-foreground">Waiting for eToken transactions...</div>
           )}
           {items.map((item) => (
             <div
