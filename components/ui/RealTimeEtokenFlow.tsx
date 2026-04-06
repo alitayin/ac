@@ -33,7 +33,11 @@ const formatTxid = (txid: string) => {
   return `${txid.slice(0, 8)}...${txid.slice(-4)}`
 }
 
-export default function RealTimeEtokenFlow() {
+type RealTimeEtokenFlowProps = {
+  onCountChange?: (count: number) => void
+}
+
+export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlowProps = {}) {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const [connected, setConnected] = React.useState(false)
   const [wsError, setWsError] = React.useState<string | null>(null)
@@ -129,7 +133,9 @@ export default function RealTimeEtokenFlow() {
           { txid, time, blockHeight: tx.block?.height ?? null, tokens, isAgora },
           ...prev,
         ]
-        return next.slice(0, MAX_ITEMS)
+        const sliced = next.slice(0, MAX_ITEMS)
+        onCountChange?.(sliced.length)
+        return sliced
       })
     } catch {
       return

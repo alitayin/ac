@@ -6,12 +6,14 @@ import PromotionalDialog from "@/components/ui/PromotionalDialog";
 import AgoraStats from "@/components/ui/AgoraStats";
 import RealTimeEtokenFlow from "@/components/ui/RealTimeEtokenFlow";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SwapPanel } from "@/app/swap/SwapPanel";
 import AnnouncementBanner from "@/components/ui/AnnouncementBanner"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 export default function Home() {
   const [view, setView] = useState<"table" | "flow" | "swap">("table");
+  const [flowCount, setFlowCount] = useState(0);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -49,9 +51,17 @@ export default function Home() {
                 variant={view === "flow" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setView("flow")}
-                className="font-normal tracking-tight"
+                className="font-normal tracking-tight flex items-center gap-2"
               >
                 Real-time eToken Flow
+                {flowCount > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 h-5 min-w-[20px] rounded-full px-1.5 text-xs font-semibold"
+                  >
+                    {flowCount}
+                  </Badge>
+                )}
               </Button>
             </div>
 
@@ -65,7 +75,7 @@ export default function Home() {
 
             <div className={view === "flow" ? "block" : "hidden"}>
               <Suspense fallback={<div>loading...</div>}>
-                <RealTimeEtokenFlow />
+                <RealTimeEtokenFlow onCountChange={setFlowCount} />
               </Suspense>
             </div>
 
