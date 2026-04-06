@@ -453,11 +453,6 @@ export default function Header({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
-                  <Link href="/list" className="w-full">
-                    List My eToken
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
                   <Link href="/about" className="w-full">
                     About
                   </Link>
