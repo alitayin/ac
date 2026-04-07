@@ -39,43 +39,41 @@ const usePriceCalculation = () => { /* 价格计算逻辑 */ }
 
 ---
 
-### 2. 性能 - 缺少useMemo导致重复计算
+### 2. 性能 - 缺少useMemo导致重复计算 ✅
 **文件**：`app/swap/SwapPanel.tsx` (行191-247, 728-763)  
 **问题**：`calculateAverageExecutionPrice`和`formatTokenPrice`每次渲染都重新执行  
 **影响**：每次输入都触发昂贵的订单簿遍历计算  
 **风险**：极低（添加memo不影响逻辑）  
 **收益**：计算次数减少30-40%  
 
-**建议**：
-```typescript
-const executionData = useMemo(() => 
-  calculateAverageExecutionPrice(buyAmount, spendAmount, tokenId),
-  [buyAmount, spendAmount, tokenId]
-)
-```
+**已修复**：
+- 使用 `useCallback` 包装 `formatTokenPrice` 函数
+- 添加 `useMemo` 优化以下计算：
+  - `formattedTokenPrice` - 格式化的token价格
+  - `tokenUsdPrice` - USD价格计算
+  - `priceWarningData` - 价格警告比较
+  - `isOrderValid` - 订单验证
+- 创建完整测试覆盖：`__tests__/unit/SwapPanel-memoization.test.tsx` (5个测试)
+- 所有测试通过，构建成功
 
 ---
 
-### 3. 性能 - 订单簿重复请求
+### 3. 性能 - 订单簿重复请求 ✅
 **文件**：`app/swap/SwapPanel.tsx` (行128-369)  
 **问题**：同一个订单簿在多个地方被重复请求（fetchOrderBook、calculateAverageExecutionPrice、getTokenPrice）  
 **影响**：浪费带宽，增加服务器负载  
 **风险**：低（添加缓存层）  
 **收益**：API调用减少40-50%  
 
-**建议**：
-```typescript
-const orderBookCache = useRef(new Map())
-const fetchOrderBookCached = async (tokenId) => {
-  const cached = orderBookCache.current.get(tokenId)
-  if (cached && Date.now() - cached.timestamp < 10000) {
-    return cached.data
-  }
-  const data = await fetchAgoraOrderBook(tokenId)
-  orderBookCache.current.set(tokenId, { data, timestamp: Date.now() })
-  return data
-}
-```
+**已修复**：
+- 创建 `orderBookCacheRef` 使用 `useRef<Map>` 存储缓存
+- 实现 `fetchOrderBookCached` 函数，10秒TTL
+- 更新所有订单簿请求使用缓存版本：
+  - `fetchOrderBook`
+  - `calculateAverageExecutionPriceCore`
+  - `getTokenPrice`
+- 创建完整测试覆盖：`__tests__/unit/SwapPanel-orderbook-cache.test.tsx` (5个测试)
+- 所有测试通过，构建成功
 
 ---
 
@@ -248,17 +246,19 @@ const getCachedData = (key: string, ttl: number) => {
 
 ---
 
-### 11. 性能 - 轮询间隔过于激进
+### 11. 性能 - 轮询间隔过于激进 ✅
 **文件**：`app/swap/SwapPanel.tsx` (行147)  
 **问题**：订单簿每10秒轮询一次  
 **影响**：不必要的API调用，浪费带宽  
 **风险**：极低（调整间隔）  
 **收益**：API调用减少50-70%  
 
-**建议**：
-- 增加到30-60秒
-- 或改用WebSocket实时推送
-- 或实现指数退避策略
+**已修复**：
+- 添加常量 `POLLING_INTERVAL_MS = 30000`
+- 将轮询间隔从10秒改为30秒
+- 创建完整测试覆盖：`__tests__/unit/SwapPanel-polling.test.tsx` (4个测试)
+- 测试验证：30秒间隔、PRO面板隐藏时不轮询、cleanup机制、token切换重启轮询
+- 所有测试通过，构建成功
 
 ---
 

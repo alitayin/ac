@@ -57,6 +57,7 @@ import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions";
 import { Transaction } from "@/lib/types";
 
 const MIN_ORDER_TOTAL_XEC = 100;
+const POLLING_INTERVAL_MS = 30000;
 
 export function SwapPanel() {
   const { toast } = useToast();
@@ -110,6 +111,10 @@ export function SwapPanel() {
   const [sellPrice, setSellPrice] = useState<string>('');
   const [isCreatingListing, setIsCreatingListing] = useState<boolean>(false);
 
+  // Order book cache with 10 second TTL
+  const orderBookCacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
+  const ORDERBOOK_CACHE_TTL_MS = 10000;
+
   const handleGenerateMnemonic = () => {
     try {
       const generatedMnemonic = bip39.generateMnemonic();
@@ -125,27 +130,48 @@ export function SwapPanel() {
     }
   };
 
+  // Cached order book fetch with 10 second TTL
+  const fetchOrderBookCached = useCallback(async (tokenId: string) => {
+    const cached = orderBookCacheRef.current.get(tokenId);
+    const now = Date.now();
+
+    // Return cached data if still valid
+    if (cached && now - cached.timestamp < ORDERBOOK_CACHE_TTL_MS) {
+      return cached.data;
+    }
+
+    // Fetch fresh data
+    try {
+      const data = await fetchAgoraOrderBook(tokenId);
+      if (data.success && data.data) {
+        orderBookCacheRef.current.set(tokenId, { data: data.data, timestamp: now });
+        return data.data;
+      } else {
+        console.warn('Invalid order book data received');
+        return { orders: [] };
+      }
+    } catch (error) {
+      console.error('Error fetching order book:', error);
+      return { orders: [] };
+    }
+  }, []);
+
   // Fetch order book for the selected token
   const fetchOrderBook = useCallback(async () => {
     try {
-      const data = await fetchAgoraOrderBook(selectedToken.id);
-      if (data.success && data.data) {
-        setOrderBook(data.data);
-      } else {
-        console.warn('Invalid order book data received');
-        setOrderBook({ orders: [] });
-      }
+      const data = await fetchOrderBookCached(selectedToken.id);
+      setOrderBook(data);
     } catch (error) {
       console.error('Error fetching order book:', error);
       setOrderBook({ orders: [] });
     }
-  }, [selectedToken.id]);
+  }, [selectedToken.id, fetchOrderBookCached]);
 
   // Fetch order book when token changes or PRO panel is shown
   useEffect(() => {
     if (showProPanel && selectedToken.id) {
       fetchOrderBook();
-      const interval = setInterval(fetchOrderBook, 10000);
+      const interval = setInterval(fetchOrderBook, POLLING_INTERVAL_MS);
       return () => clearInterval(interval);
     }
   }, [showProPanel, selectedToken.id]);
@@ -193,9 +219,9 @@ export function SwapPanel() {
   const calculateAverageExecutionPriceCore = async (buyAmount: number, spendAmount: number, tokenId: string) => {
     try {
 
-      const data = await fetchAgoraOrderBook(tokenId);
+      const data = await fetchOrderBookCached(tokenId);
 
-      if (!data.success || !data.data || !data.data.orders) {
+      if (!data || !data.orders) {
         return { avgPrice: 0, actualAmount: 0, slippagePercent: 0 };
       }
 
@@ -203,7 +229,7 @@ export function SwapPanel() {
       let totalTokensBought = 0;
 
       // Iterate through sell orders until budget or target amount is reached
-      const sortedOrders = [...data.data.orders].sort((a: any, b: any) => a.price - b.price);
+      const sortedOrders = [...data.orders].sort((a: any, b: any) => a.price - b.price);
       for (const order of sortedOrders) {
         if (order.price > tokenPrice) {
           break;
@@ -378,10 +404,10 @@ export function SwapPanel() {
   const getTokenPrice = async (tokenId: string) => {
     if (useBestOrderPrice) {
       try {
-        const data = await fetchAgoraOrderBook(tokenId);
-        
-        if (data.success && data.data && data.data.stats && data.data.stats.min_price) {
-          return data.data.stats.min_price;
+        const data = await fetchOrderBookCached(tokenId);
+
+        if (data && data.stats && data.stats.min_price) {
+          return data.stats.min_price;
         } else {
           return fetchTokenPrice(tokenId);
         }
@@ -424,13 +450,81 @@ export function SwapPanel() {
     }
   };
 
+  const calculateTokenUsdPrice = (): string => {
+    if (!tokenPrice || !xecPrice) return '';
+    return (tokenPrice * xecPrice).toFixed(4);
+  };
+
+  const formatTokenPrice = useCallback((price: number): string => {
+    if (price === 0) return '0.00';
+
+    if (price % 1 === 0) {
+      return price.toFixed(2);
+    }
+
+    const priceStr = price.toString();
+
+    if (priceStr.includes('e')) {
+      return price.toFixed(8);
+    }
+
+    const parts = priceStr.split('.');
+    if (parts.length === 2) {
+      const decimalPart = parts[1];
+      const decimalPlaces = Math.max(2, Math.min(decimalPart.length, 8));
+
+      let formatted = price.toFixed(decimalPlaces);
+      formatted = formatted.replace(/(\.\d*?)0+$/, '$1');
+
+      const currentParts = formatted.split('.');
+      if (currentParts.length === 1 || (currentParts[1] && currentParts[1].length < 2)) {
+        return price.toFixed(2);
+      }
+
+      return formatted;
+    }
+
+    return price.toFixed(2);
+  }, []);
+
+  // Memoize formatted token price
+  const formattedTokenPrice = useMemo(() =>
+    formatTokenPrice(tokenPrice),
+    [tokenPrice, formatTokenPrice]
+  );
+
+  // Memoize USD price calculation
+  const tokenUsdPrice = useMemo(() =>
+    calculateTokenUsdPrice(),
+    [tokenPrice, xecPrice]
+  );
+
+  // Memoize price comparison for warning
+  const priceWarningData = useMemo(() => {
+    if (marketPrice > 0 && tokenPrice > 0) {
+      const percentDiff = ((tokenPrice - marketPrice) / marketPrice) * 100;
+      return {
+        shouldShow: percentDiff > 100,
+        percent: Math.round(percentDiff)
+      };
+    }
+    return { shouldShow: false, percent: 0 };
+  }, [tokenPrice, marketPrice]);
+
+  // Memoize order validation
+  const isOrderValid = useMemo(() => {
+    const validPrice = tokenPrice > 0;
+    const validSpend = spendAmount && parseFloat(spendAmount) > 0;
+    const validReceive = receiveAmount && parseFloat(receiveAmount) > 0;
+    return validPrice && validSpend && validReceive;
+  }, [tokenPrice, spendAmount, receiveAmount]);
+
   const handleTokenSelect = (tokenId: string, tokenName: string) => {
     setSelectedToken({ id: tokenId, name: tokenName });
     getTokenPrice(tokenId).then(price => {
       setTokenPrice(price);
       setTokenPriceInput(formatTokenPrice(price));
       setMarketPrice(price);
-      checkPriceWarning(price, price);
     });
     setSpendAmount('');
     setReceiveAmount('');
@@ -444,19 +538,11 @@ export function SwapPanel() {
     });
   }, [useBestOrderPrice]);
 
-  const checkPriceWarning = (currentPrice: number, marketPriceValue: number) => {
-    if (marketPriceValue > 0 && currentPrice > 0) {
-      const percentDiff = ((currentPrice - marketPriceValue) / marketPriceValue) * 100;
-      if (percentDiff > 100) {
-        setShowPriceWarning(true);
-        setPriceWarningPercent(Math.round(percentDiff));
-      } else {
-        setShowPriceWarning(false);
-      }
-    } else {
-      setShowPriceWarning(false);
-    }
-  };
+  // Update price warning state when memoized data changes
+  useEffect(() => {
+    setShowPriceWarning(priceWarningData.shouldShow);
+    setPriceWarningPercent(priceWarningData.percent);
+  }, [priceWarningData]);
 
   useEffect(() => {
     return () => {
@@ -665,7 +751,7 @@ export function SwapPanel() {
     }
     const currentFee = await calculateNetworkFeeFromUtxos();
     
-    if (!isInputValid()) {
+    if (!isOrderValid) {
       toast({
         title: "Invalid input",
         description: "Please ensure you have entered a valid price, spend amount and buy amount",
@@ -688,14 +774,6 @@ export function SwapPanel() {
     setIsOfflineOrder(false);
     
     setIsConfirmDialogOpen(true);
-  };
-
-  const isInputValid = () => {
-    const validPrice = tokenPrice > 0;
-    const validSpend = spendAmount && parseFloat(spendAmount) > 0;
-    const validReceive = receiveAmount && parseFloat(receiveAmount) > 0;
-    
-    return validPrice && validSpend && validReceive;
   };
 
   const handleClearLocalStorage = () => {
@@ -751,43 +829,6 @@ export function SwapPanel() {
     });
   };
 
-  const calculateTokenUsdPrice = (): string => {
-    if (!tokenPrice || !xecPrice) return '';
-    return (tokenPrice * xecPrice).toFixed(4);
-  };
-
-  const formatTokenPrice = (price: number): string => {
-    if (price === 0) return '0.00';
-    
-    if (price % 1 === 0) {
-      return price.toFixed(2);
-    }
-    
-    const priceStr = price.toString();
-    
-    if (priceStr.includes('e')) {
-      return price.toFixed(8);
-    }
-    
-    const parts = priceStr.split('.');
-    if (parts.length === 2) {
-      const decimalPart = parts[1];
-      const decimalPlaces = Math.max(2, Math.min(decimalPart.length, 8));
-      
-      let formatted = price.toFixed(decimalPlaces);
-      formatted = formatted.replace(/(\.\d*?)0+$/, '$1');
-      
-      const currentParts = formatted.split('.');
-      if (currentParts.length === 1 || (currentParts[1] && currentParts[1].length < 2)) {
-        return price.toFixed(2);
-      }
-      
-      return formatted;
-    }
-    
-    return price.toFixed(2);
-  };
-
   // Keep auto-processing state in sync with wallet status and existing orders
   useEffect(() => {
     if (isWalletConnected) {
@@ -809,7 +850,6 @@ export function SwapPanel() {
       const newPrice = parseFloat(value);
       if (!isNaN(newPrice)) {
         setTokenPrice(newPrice);
-        checkPriceWarning(newPrice, marketPrice);
         setSpendAmount('');
         setReceiveAmount('');
       }
@@ -827,7 +867,6 @@ export function SwapPanel() {
     }
 
     setTokenPrice(newPrice);
-    checkPriceWarning(newPrice, marketPrice);
     setSpendAmount('');
     setReceiveAmount('');
   };
