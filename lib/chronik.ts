@@ -1,4 +1,5 @@
 import { ChronikClient } from "chronik-client"
+import { storageManager } from './storage-manager'
 
 // Legacy synchronous export (keep during migration)
 export const chronik = new ChronikClient([
@@ -64,10 +65,9 @@ const TOKEN_DETAILS_CACHE_KEY = 'token_details_cache'
 
 const getCachedTokenDetails = (tokenId: string): any | null => {
   try {
-    const cacheStr = localStorage.getItem(TOKEN_DETAILS_CACHE_KEY)
-    if (!cacheStr) return null
-    
-    const cache = JSON.parse(cacheStr)
+    const cache = storageManager.get<Record<string, any>>(TOKEN_DETAILS_CACHE_KEY)
+    if (!cache) return null
+
     return cache[tokenId] || null
   } catch (error) {
     console.error('Failed to read token detail cache:', error)
@@ -77,12 +77,11 @@ const getCachedTokenDetails = (tokenId: string): any | null => {
 
 const setCachedTokenDetails = (tokenId: string, data: any) => {
   try {
-    const cacheStr = localStorage.getItem(TOKEN_DETAILS_CACHE_KEY)
-    const cache = cacheStr ? JSON.parse(cacheStr) : {}
-    
+    const cache = storageManager.get<Record<string, any>>(TOKEN_DETAILS_CACHE_KEY) || {}
+
     cache[tokenId] = data
-    
-    localStorage.setItem(TOKEN_DETAILS_CACHE_KEY, JSON.stringify(cache))
+
+    storageManager.set(TOKEN_DETAILS_CACHE_KEY, cache)
   } catch (error) {
     console.error('Failed to save token detail cache:', error)
   }

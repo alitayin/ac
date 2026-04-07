@@ -1,4 +1,5 @@
 import { fetchTokenUtxos, getTokenAmountFromToken } from "@/lib/chronik"
+import { storageManager } from "./storage-manager"
 
 const SUPPLY_CACHE_KEY = "token_supply_cache"
 const SUPPLY_TTL_MS = 24 * 60 * 60 * 1000
@@ -13,9 +14,7 @@ type SupplyCache = Record<string, SupplyCacheEntry>
 const loadSupplyCache = (): SupplyCache => {
   if (typeof window === "undefined") return {}
   try {
-    const raw = window.localStorage.getItem(SUPPLY_CACHE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as SupplyCache
+    const parsed = storageManager.get<SupplyCache>(SUPPLY_CACHE_KEY)
     return parsed && typeof parsed === "object" ? parsed : {}
   } catch {
     return {}
@@ -25,7 +24,7 @@ const loadSupplyCache = (): SupplyCache => {
 const saveSupplyCache = (cache: SupplyCache) => {
   if (typeof window === "undefined") return
   try {
-    window.localStorage.setItem(SUPPLY_CACHE_KEY, JSON.stringify(cache))
+    storageManager.set(SUPPLY_CACHE_KEY, cache)
   } catch {}
 }
 

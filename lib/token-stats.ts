@@ -1,4 +1,5 @@
 import { Transaction } from "@/lib/types"
+import { storageManager } from "./storage-manager"
 
 export const BLOCKS_PER_HOUR = 6
 export const BLOCKS_PER_DAY = BLOCKS_PER_HOUR * 24
@@ -23,9 +24,8 @@ export type CachedTokenData = {
 
 export const getCachedTokenData = (tokenId: string): CachedTokenData | null => {
   try {
-    const raw = localStorage.getItem(`${CACHE_KEY_PREFIX}_${tokenId}`)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
+    const parsed = storageManager.get<CachedTokenData>(`${CACHE_KEY_PREFIX}_${tokenId}` as any)
+    if (!parsed) return null
     if (
       typeof parsed.computedAt !== "number" ||
       typeof parsed.latestProcessedHeight !== "number" ||
@@ -52,40 +52,30 @@ export const getCachedTokenData = (tokenId: string): CachedTokenData | null => {
 
 export const setCachedTokenData = (tokenId: string, data: CachedTokenData) => {
   try {
-    localStorage.setItem(`${CACHE_KEY_PREFIX}_${tokenId}`, JSON.stringify(data))
+    storageManager.set(`${CACHE_KEY_PREFIX}_${tokenId}` as any, data)
   } catch (_err) {}
 }
 
 export const clearTokenCache = () => {
   try {
-    const keys: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (
-        key &&
-        (key.startsWith(CACHE_KEY_PREFIX) || key.startsWith(SUMMARY_CACHE_KEY_PREFIX))
-      ) {
-        keys.push(key)
-      }
-    }
-    keys.forEach((k) => localStorage.removeItem(k))
+    storageManager.clearByPrefix(CACHE_KEY_PREFIX)
+    storageManager.clearByPrefix(SUMMARY_CACHE_KEY_PREFIX)
   } catch (_err) {}
 }
 
 export const invalidateTokenCache = (tokenId: string) => {
   try {
-    const raw = localStorage.getItem(`${CACHE_KEY_PREFIX}_${tokenId}`)
-    if (raw) {
-      const parsed = JSON.parse(raw)
+    const parsed = storageManager.get<CachedTokenData>(`${CACHE_KEY_PREFIX}_${tokenId}` as any)
+    if (parsed) {
       parsed.computedAt = 0
-      localStorage.setItem(`${CACHE_KEY_PREFIX}_${tokenId}`, JSON.stringify(parsed))
+      storageManager.set(`${CACHE_KEY_PREFIX}_${tokenId}` as any, parsed)
     }
   } catch (_err) {}
 }
 
 export const deleteSummaryCache = (tokenId: string) => {
   try {
-    localStorage.removeItem(`${SUMMARY_CACHE_KEY_PREFIX}_${tokenId}`)
+    storageManager.remove(`${SUMMARY_CACHE_KEY_PREFIX}_${tokenId}` as any)
   } catch (_err) {}
 }
 
@@ -211,9 +201,8 @@ export const getCachedTokenSummary = <T = any>(
   tokenId: string,
 ): CachedTokenSummary<T> | null => {
   try {
-    const raw = localStorage.getItem(`${SUMMARY_CACHE_KEY_PREFIX}_${tokenId}`)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
+    const parsed = storageManager.get<CachedTokenSummary<T>>(`${SUMMARY_CACHE_KEY_PREFIX}_${tokenId}` as any)
+    if (!parsed) return null
     if (
       typeof parsed.computedAt !== "number" ||
       typeof parsed.data !== "object" ||
@@ -232,7 +221,7 @@ export const setCachedTokenSummary = <T = any>(
   data: CachedTokenSummary<T>,
 ) => {
   try {
-    localStorage.setItem(`${SUMMARY_CACHE_KEY_PREFIX}_${tokenId}`, JSON.stringify(data))
+    storageManager.set(`${SUMMARY_CACHE_KEY_PREFIX}_${tokenId}` as any, data)
   } catch (_err) {}
 }
 

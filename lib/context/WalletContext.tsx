@@ -5,6 +5,7 @@ import * as ecashAddrJs from 'ecashaddrjs';
 import { disconnectAddress } from '../websocket-client';
 import { CashtabConnect } from 'cashtab-connect';
 import { chronik as sharedChronik } from '../chronik';
+import { storageManager } from '../storage-manager';
 
 interface WalletContextType {
   isWalletConnected: boolean;
@@ -136,17 +137,19 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
   };
 
-  
-  useEffect(() => {
-    const savedMnemonic = localStorage.getItem('wallet_mnemonic');
-    const savedAddress = localStorage.getItem('wallet_address');
-    const savedIsGuest = localStorage.getItem('wallet_is_guest');
 
-    if (savedIsGuest === 'true' && savedAddress) {
-      setIsWalletConnected(true);
-      setEcashAddress(savedAddress);
-      setIsGuestMode(true);
-      setMnemonic('');
+  useEffect(() => {
+    const savedMnemonic = storageManager.get<string>('wallet_mnemonic');
+    const savedAddress = storageManager.get<string>('wallet_address');
+    const savedIsGuest = storageManager.get<string | boolean>('wallet_is_guest');
+
+    if (savedIsGuest === 'true' || savedIsGuest === true) {
+      if (savedAddress) {
+        setIsWalletConnected(true);
+        setEcashAddress(savedAddress);
+        setIsGuestMode(true);
+        setMnemonic('');
+      }
       return;
     }
 
@@ -162,9 +165,9 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
             setEcashAddress(savedAddress);
             setIsGuestMode(false);
           } catch (error) {
-            localStorage.removeItem('wallet_mnemonic');
-            localStorage.removeItem('wallet_address');
-            localStorage.removeItem('wallet_is_guest');
+            storageManager.remove('wallet_mnemonic');
+            storageManager.remove('wallet_address');
+            storageManager.remove('wallet_is_guest');
             setIsWalletConnected(false);
             setMnemonic('');
             setEcashAddress('');
@@ -201,26 +204,26 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       }
 
       ecashLib.mnemonicToEntropy(mnemonicPhrase.trim(), wordListRef.current);
-      
+
       const seed = ecashLib.mnemonicToSeed(mnemonicPhrase);
       const hdRoot = ecashLib.HdNode.fromSeed(seed);
-      
+
       const childNode = hdRoot.derivePath("m/44'/1899'/0'/0/0");
-      
+
       const pubkey = childNode.pubkey();
       const pubkeyHash = ecashLib.shaRmd160(pubkey);
       const address = ecashAddrJs.encodeCashAddress('ecash', 'p2pkh', pubkeyHash);
-      
-      localStorage.removeItem('wallet_is_guest');
-      
-      localStorage.setItem('wallet_mnemonic', mnemonicPhrase);
-      localStorage.setItem('wallet_address', address);
-      
+
+      storageManager.remove('wallet_is_guest');
+
+      storageManager.set('wallet_mnemonic', mnemonicPhrase);
+      storageManager.set('wallet_address', address);
+
       setIsWalletConnected(true);
       setMnemonic(mnemonicPhrase);
       setEcashAddress(address);
       setIsGuestMode(false);
-      
+
       return true;
     } catch (error) {
       console.error('Error generating address:', error);
@@ -228,31 +231,30 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
   };
 
-
   const connectWithCashtab = async (): Promise<boolean> => {
     try {
       const cashtab = new CashtabConnect();
-      
-      
+
+
       await cashtab.waitForExtension(5000);
-      
-   
+
+
       const address = await cashtab.requestAddress();
-      
+
       if (!address) {
         throw new Error('Failed to obtain Cashtab address');
       }
-      
-  
-      localStorage.setItem('wallet_address', address);
-      localStorage.setItem('wallet_is_guest', 'true');
-      localStorage.removeItem('wallet_mnemonic');
-      
+
+
+      storageManager.set('wallet_address', address);
+      storageManager.set('wallet_is_guest', 'true');
+      storageManager.remove('wallet_mnemonic');
+
       setIsWalletConnected(true);
       setEcashAddress(address);
       setIsGuestMode(true);
       setMnemonic('');
-      
+
       return true;
     } catch (error) {
       console.error('Cashtab connection failed:', error);
@@ -260,18 +262,18 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
   };
 
- 
+
   const disconnectWallet = () => {
 
     if (ecashAddress) {
       disconnectAddress(ecashAddress);
     }
-    
 
-    localStorage.removeItem('wallet_mnemonic');
-    localStorage.removeItem('wallet_address');
-    localStorage.removeItem('wallet_is_guest');
-    
+
+    storageManager.remove('wallet_mnemonic');
+    storageManager.remove('wallet_address');
+    storageManager.remove('wallet_is_guest');
+
 
     setIsWalletConnected(false);
     setMnemonic('');

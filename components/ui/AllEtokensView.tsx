@@ -6,15 +6,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
 import { tokens } from "@/config/tokens"
 import { paidTokenIds } from "@/config/paidSC"
 import { TOKEN_IDS } from "@/lib/constants"
@@ -420,112 +411,110 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
       </div>
 
       {totalPages > 1 && (
-        <div className="mt-4">
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (currentPage > 1) {
-                      setCurrentPage(currentPage - 1)
-                    }
-                  }}
-                  className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
-                />
-              </PaginationItem>
+        <div className="mt-6 flex items-center justify-center">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="h-9 px-3"
+            >
+              First
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="h-9 px-3"
+            >
+              Previous
+            </Button>
 
+            <div className="flex items-center gap-1">
               {currentPage > 2 && (
                 <>
-                  <PaginationItem>
-                    <PaginationLink
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setCurrentPage(1)
-                      }}
-                    >
-                      1
-                    </PaginationLink>
-                  </PaginationItem>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    className="h-9 w-9 p-0"
+                  >
+                    1
+                  </Button>
                   {currentPage > 3 && (
-                    <PaginationItem>
-                      <PaginationEllipsis />
-                    </PaginationItem>
+                    <span className="px-2 text-muted-foreground">...</span>
                   )}
                 </>
               )}
 
               {currentPage > 1 && (
-                <PaginationItem>
-                  <PaginationLink
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setCurrentPage(currentPage - 1)
-                    }}
-                  >
-                    {currentPage - 1}
-                  </PaginationLink>
-                </PaginationItem>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  className="h-9 w-9 p-0"
+                >
+                  {currentPage - 1}
+                </Button>
               )}
 
-              <PaginationItem>
-                <PaginationLink href="#" isActive>
-                  {currentPage}
-                </PaginationLink>
-              </PaginationItem>
+              <Button
+                variant="default"
+                size="sm"
+                className="h-9 w-9 p-0 bg-primary text-primary-foreground"
+              >
+                {currentPage}
+              </Button>
 
               {currentPage < totalPages && (
-                <PaginationItem>
-                  <PaginationLink
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setCurrentPage(currentPage + 1)
-                    }}
-                  >
-                    {currentPage + 1}
-                  </PaginationLink>
-                </PaginationItem>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  className="h-9 w-9 p-0"
+                >
+                  {currentPage + 1}
+                </Button>
               )}
 
               {currentPage < totalPages - 1 && (
                 <>
                   {currentPage < totalPages - 2 && (
-                    <PaginationItem>
-                      <PaginationEllipsis />
-                    </PaginationItem>
+                    <span className="px-2 text-muted-foreground">...</span>
                   )}
-                  <PaginationItem>
-                    <PaginationLink
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setCurrentPage(totalPages)
-                      }}
-                    >
-                      {totalPages}
-                    </PaginationLink>
-                  </PaginationItem>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(totalPages)}
+                    className="h-9 w-9 p-0"
+                  >
+                    {totalPages}
+                  </Button>
                 </>
               )}
+            </div>
 
-              <PaginationItem>
-                <PaginationNext
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (currentPage < totalPages) {
-                      setCurrentPage(currentPage + 1)
-                    }
-                  }}
-                  className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="h-9 px-3"
+            >
+              Next
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="h-9 px-3"
+            >
+              Last
+            </Button>
+          </div>
         </div>
       )}
     </div>

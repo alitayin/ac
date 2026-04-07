@@ -1,5 +1,6 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
+import { storageManager } from "../storage-manager";
 
 interface OrderProcessingContextType {
   isAutoProcessing: boolean;
@@ -20,12 +21,12 @@ export const OrderProcessingProvider = ({
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedValue = localStorage.getItem("auto_processing");
-      if (savedValue === 'false') {
+      const savedValue = storageManager.get<string | boolean>('auto_processing');
+      if (savedValue === 'false' || savedValue === false) {
         // On refresh, if there are unfinished orders for the current address, try enabling auto processing once
         try {
-          const address = localStorage.getItem('wallet_address');
-          const ordersRaw = localStorage.getItem('swap_orders') || '{}';
+          const address = storageManager.get<string>('wallet_address');
+          const ordersRaw = storageManager.get<string>('swap_orders') || '{}';
           const orders = JSON.parse(ordersRaw);
           const hasActiveOrders = !!address && Object.entries(orders).some(([key, value]) => {
             const parts = (key as string).split('|');
@@ -40,7 +41,7 @@ export const OrderProcessingProvider = ({
 
           if (hasActiveOrders) {
             setIsAutoProcessing(true);
-            localStorage.setItem('auto_processing', 'true');
+            storageManager.set('auto_processing', 'true');
           } else {
             setIsAutoProcessing(false);
           }
@@ -57,7 +58,7 @@ export const OrderProcessingProvider = ({
 
   useEffect(() => {
     if (typeof window !== "undefined" && initialized) {
-      localStorage.setItem("auto_processing", String(isAutoProcessing));
+      storageManager.set("auto_processing", String(isAutoProcessing));
     }
   }, [isAutoProcessing, initialized]);
 

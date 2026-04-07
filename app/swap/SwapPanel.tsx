@@ -1,8 +1,9 @@
 "use client"
 import type React from "react";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import * as ecashLib from "ecash-lib";
 import * as bip39 from "bip39";
+import { debounce } from "lodash";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useOrderProcessing } from "@/lib/context/OrderProcessingContext";
@@ -188,53 +189,54 @@ export function SwapPanel() {
     }
   };
 
-  const calculateAverageExecutionPrice = async (buyAmount: number, spendAmount: number, tokenId: string) => {
+  // Core calculation function (not debounced)
+  const calculateAverageExecutionPriceCore = async (buyAmount: number, spendAmount: number, tokenId: string) => {
     try {
 
       const data = await fetchAgoraOrderBook(tokenId);
-      
+
       if (!data.success || !data.data || !data.data.orders) {
         return { avgPrice: 0, actualAmount: 0, slippagePercent: 0 };
       }
 
       let remainingSpend = spendAmount;
       let totalTokensBought = 0;
-      
+
       // Iterate through sell orders until budget or target amount is reached
       const sortedOrders = [...data.data.orders].sort((a: any, b: any) => a.price - b.price);
       for (const order of sortedOrders) {
         if (order.price > tokenPrice) {
           break;
         }
-        
+
         if (remainingSpend <= 0) {
           break;
         }
-        
+
         const maxTokensAtThisPrice = remainingSpend / order.price;
         const remainingToBuy = buyAmount - totalTokensBought;
         const tokensFromThisOrder = Math.min(maxTokensAtThisPrice, order.amount, remainingToBuy);
-        
+
         const costForThisOrder = tokensFromThisOrder * order.price;
         remainingSpend -= costForThisOrder;
         totalTokensBought += tokensFromThisOrder;
-        
+
         // Stop when the target purchase amount is reached
         if (totalTokensBought >= buyAmount) {
           break;
         }
       }
-      
+
       const totalCost = spendAmount - remainingSpend;
       const avgPrice = totalTokensBought > 0 ? totalCost / totalTokensBought : 0;
-      
+
       const lowestPrice = sortedOrders[0].price;
       const slippagePercent = ((avgPrice - lowestPrice) / lowestPrice) * 100;
-      
+
       setAvgExecutionPrice(avgPrice);
       setSlippage(slippagePercent);
       setTotalTokensBought(totalTokensBought);
-      
+
       return {
         avgPrice,
         actualAmount: totalTokensBought,
@@ -245,6 +247,30 @@ export function SwapPanel() {
       return { avgPrice: 0, actualAmount: 0, slippagePercent: 0 };
     }
   };
+
+  // Debounced version with 300ms delay
+  const debouncedCalculateRef = useRef<ReturnType<typeof debounce>>();
+
+  const calculateAverageExecutionPrice = useCallback((buyAmount: number, spendAmount: number, tokenId: string) => {
+    if (!debouncedCalculateRef.current) {
+      debouncedCalculateRef.current = debounce(
+        (amount: number, spend: number, token: string) => {
+          calculateAverageExecutionPriceCore(amount, spend, token);
+        },
+        300
+      );
+    }
+    debouncedCalculateRef.current(buyAmount, spendAmount, tokenId);
+  }, [tokenPrice]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debouncedCalculateRef.current) {
+        debouncedCalculateRef.current.cancel();
+      }
+    };
+  }, []);
 
   const calculateReceiveAmount = (inputAmount: string) => {
     if (!inputAmount || isNaN(Number(inputAmount))) {

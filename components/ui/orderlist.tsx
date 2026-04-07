@@ -146,26 +146,46 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
     const loadTokenMeta = async () => {
       if (!availableTokens.length) return;
 
-      for (const token of availableTokens) {
-        const tokenId = token.id;
-        // Skip when decimals already cached
-        if (tokenDecimalsMap[tokenId] !== undefined) continue;
+      // Filter tokens that need loading (not already cached)
+      const tokensToLoad = availableTokens.filter(
+        token => tokenDecimalsMap[token.id] === undefined
+      );
 
-        try {
+      if (!tokensToLoad.length) return;
+
+      // Load all tokens in parallel using Promise.allSettled
+      // This ensures partial failures don't block other tokens
+      const results = await Promise.allSettled(
+        tokensToLoad.map(async (token) => {
+          const tokenId = token.id;
           const detail = await fetchTokenDetails(tokenId);
           // Try decimals from tokens.ts as a fallback
           const tokenInfo = Object.values(tokens).find(t => t.tokenId === tokenId);
           const fallbackDecimals = (tokenInfo as any)?.decimals ?? 0;
           const decimals = getTokenDecimalsFromDetails(detail, fallbackDecimals);
+          return { tokenId, decimals };
+        })
+      );
 
-          setTokenDecimalsMap(prev => ({
-            ...prev,
-            [tokenId]: decimals,
-          }));
-        } catch (error) {
-          console.error(`Failed to load token detail: ${tokenId}`, error);
+      // Process results and update state once with all successful loads
+      const newDecimalsMap: Record<string, number> = {};
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const { tokenId, decimals } = result.value;
+          newDecimalsMap[tokenId] = decimals;
+        } else {
+          const tokenId = tokensToLoad[index].id;
+          console.error(`Failed to load token detail: ${tokenId}`, result.reason);
           // On failure keep default 0 to avoid rendering impact
         }
+      });
+
+      // Batch update state once instead of multiple times
+      if (Object.keys(newDecimalsMap).length > 0) {
+        setTokenDecimalsMap(prev => ({
+          ...prev,
+          ...newDecimalsMap,
+        }));
       }
     };
 
