@@ -35,6 +35,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Internal documentation (not for public repo)
+CLAUDE.md
+IMPROVEMENTS.md
+CODE_ANALYSIS_REPORT.md
+RELEASE_*.md
+TESTING.md
+
 # local improvement notes
 IMPROVEMENTS.md
 CLAUDE.md
