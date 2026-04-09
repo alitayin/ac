@@ -80,8 +80,6 @@ import { watchAgoraTokens } from "@/lib/agora-ws"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/lib/context/WalletContext"
 
-const WATCHLIST_FREE_LIMIT = 3
-const SS_UNLOCK_THRESHOLD = 1_000_000
 const FILTER_OPTION_STORAGE_KEY = "token_table_filter_option_v1"
 
 type TokenTableRow = Token
@@ -108,7 +106,6 @@ export default function Component() {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const { toast } = useToast()
   const { isWalletConnected, userTokens } = useWallet()
-  const [ssDecimals, setSsDecimals] = React.useState<number | null>(null)
 
   const [data, setData] = React.useState<TokenTableRow[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
@@ -154,39 +151,6 @@ export default function Component() {
   const approvedLargeTokensRef = React.useRef<Set<string>>(new Set())
   const [failedDataTokens, setFailedDataTokens] = React.useState<Set<string>>(new Set())
   const retryCountRef = React.useRef<Map<string, number>>(new Map())
-
-  React.useEffect(() => {
-    if (isChronikLoading || !chronikClient) return
-
-    let cancelled = false
-    const loadSsMeta = async () => {
-      try {
-        const detail = await fetchTokenDetails(TOKEN_IDS.STAR_SHARD, chronikClient)
-        const decimals = getTokenDecimalsFromDetails(detail, 0)
-        if (!cancelled) setSsDecimals(decimals)
-      } catch (_e) {
-        if (!cancelled) setSsDecimals(0)
-      }
-    }
-    loadSsMeta()
-    return () => {
-      cancelled = true
-    }
-  }, [chronikClient, isChronikLoading])
-
-  const isSsUnlocked = React.useMemo(() => {
-    if (!isWalletConnected) return false
-    if (ssDecimals === null) return false
-    const rawAtoms = userTokens?.[TOKEN_IDS.STAR_SHARD] || "0"
-    try {
-      const atoms = BigInt(rawAtoms)
-      const factor = 10n ** BigInt(ssDecimals)
-      const required = BigInt(SS_UNLOCK_THRESHOLD) * factor
-      return atoms >= required
-    } catch {
-      return false
-    }
-  }, [isWalletConnected, userTokens, ssDecimals])
 
   React.useEffect(() => {
     if (!searchExpanded) return
@@ -272,7 +236,7 @@ export default function Component() {
                 className="text-sm text-foreground hover:text-primary transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
-                {index}
+                {index + 1}
               </button>
             </TooltipTrigger>
             <TooltipContent>
@@ -1384,18 +1348,8 @@ export default function Component() {
       }
 
       const current = getCustomTokens()
-      
-      if (!current.includes(tokenId)) {
-        if (!isSsUnlocked && current.length >= WATCHLIST_FREE_LIMIT) {
-          toast({
-            variant: "destructive",
-            title: "Watchlist limit reached",
-            description:
-              `Free users can add up to ${WATCHLIST_FREE_LIMIT} custom tokens. Connect wallet and hold at least ${SS_UNLOCK_THRESHOLD.toLocaleString()} SS to unlock unlimited watchlist.`,
-          })
-          return false
-        }
 
+      if (!current.includes(tokenId)) {
         const updated = [...current, tokenId]
         localStorage.setItem(CUSTOM_TOKENS_KEY, JSON.stringify(updated))
       }
@@ -2099,10 +2053,7 @@ export default function Component() {
         </CardHeader>
         <CardContent>
           <div className={viewMode === "all-etokens" ? "block" : "hidden"}>
-            <AllEtokensView
-              watchlistFreeLimit={WATCHLIST_FREE_LIMIT}
-              ssUnlockThreshold={SS_UNLOCK_THRESHOLD}
-            />
+            <AllEtokensView />
           </div>
 
           <div className={viewMode === "normal" ? "block" : "hidden"}>

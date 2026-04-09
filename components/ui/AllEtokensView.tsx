@@ -9,22 +9,13 @@ import { Input } from "@/components/ui/input"
 import { tokens } from "@/config/tokens"
 import { paidTokenIds } from "@/config/paidSC"
 import { TOKEN_IDS } from "@/lib/constants"
-import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import { fetchTokenDetails } from "@/lib/chronik"
 import { useChronik } from "@/lib/context/ChronikContext"
 import { Agora } from "ecash-agora"
 import { useToast } from "@/hooks/use-toast"
-import { useWallet } from "@/lib/context/WalletContext"
 import { Plus } from "lucide-react"
 
-type AllEtokensViewProps = {
-  watchlistFreeLimit: number
-  ssUnlockThreshold: number
-}
-
-const AllEtokensView: React.FC<AllEtokensViewProps> = ({
-  watchlistFreeLimit,
-  ssUnlockThreshold,
-}) => {
+const AllEtokensView: React.FC = () => {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const ITEMS_PER_PAGE = 10
   const [allTokenIds, setAllTokenIds] = React.useState<string[]>([])
@@ -36,41 +27,6 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
   const [isLoadingMoreTokens, setIsLoadingMoreTokens] = React.useState(true)
   const router = useRouter()
   const { toast } = useToast()
-  const { isWalletConnected, userTokens } = useWallet()
-  const [ssDecimals, setSsDecimals] = React.useState<number | null>(null)
-
-  React.useEffect(() => {
-    if (isChronikLoading || !chronikClient) return
-
-    let cancelled = false
-    const loadSsMeta = async () => {
-      try {
-        const detail = await fetchTokenDetails(TOKEN_IDS.STAR_SHARD, chronikClient)
-        const decimals = getTokenDecimalsFromDetails(detail, 0)
-        if (!cancelled) setSsDecimals(decimals)
-      } catch (_e) {
-        if (!cancelled) setSsDecimals(0)
-      }
-    }
-    loadSsMeta()
-    return () => {
-      cancelled = true
-    }
-  }, [chronikClient, isChronikLoading])
-
-  const isSsUnlocked = React.useMemo(() => {
-    if (!isWalletConnected) return false
-    if (ssDecimals === null) return false
-    const rawAtoms = userTokens?.[TOKEN_IDS.STAR_SHARD] || "0"
-    try {
-      const atoms = BigInt(rawAtoms)
-      const factor = 10n ** BigInt(ssDecimals)
-      const required = BigInt(ssUnlockThreshold) * factor
-      return atoms >= required
-    } catch {
-      return false
-    }
-  }, [isWalletConnected, userTokens, ssDecimals, ssUnlockThreshold])
 
   const CUSTOM_TOKENS_KEY = "custom_watchlist_tokens"
 
@@ -124,19 +80,6 @@ const AllEtokensView: React.FC<AllEtokensViewProps> = ({
       const current = stored ? JSON.parse(stored) : []
 
       if (!current.includes(tokenId)) {
-        if (
-          !isSsUnlocked &&
-          Array.isArray(current) &&
-          current.length >= watchlistFreeLimit
-        ) {
-          toast({
-            variant: "destructive",
-            title: "Watchlist limit reached",
-            description: `Free users can add up to ${watchlistFreeLimit} custom tokens. Connect wallet and hold at least ${ssUnlockThreshold.toLocaleString()} SS to unlock unlimited watchlist.`,
-          })
-          return
-        }
-
         const updated = [...current, tokenId]
         localStorage.setItem(CUSTOM_TOKENS_KEY, JSON.stringify(updated))
         setAddedTokens(new Set(updated))

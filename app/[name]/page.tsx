@@ -115,17 +115,6 @@ export default function TokenPage() {
   const isLoadingStats = useRef<boolean>(false)
 
   const AGORA_FEE = 20
-  const STAR_SHARD_TOKEN_ID = TOKEN_IDS.STAR_SHARD
-  const REQUIRED_STAR_SHARD_BALANCE = 500_000n
-
-  const hasStarShardBalance = (() => {
-    try {
-      const balanceStr = userTokens?.[STAR_SHARD_TOKEN_ID] ?? "0"
-      return BigInt(balanceStr) >= REQUIRED_STAR_SHARD_BALANCE
-    } catch {
-      return false
-    }
-  })()
 
   useEffect(() => {
     const hasAcknowledged = localStorage.getItem('risk_acknowledged') === 'true';
