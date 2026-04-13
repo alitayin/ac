@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { tokens } from "@/config/tokens"
-import { paidTokenIds } from "@/config/paidSC"
 import { TOKEN_IDS } from "@/lib/constants"
 import { fetchTokenDetails } from "@/lib/chronik"
 import { useChronik } from "@/lib/context/ChronikContext"
@@ -99,20 +98,13 @@ const AllEtokensView: React.FC = () => {
 
     const loadTokenIds = async () => {
       try {
-        setAllTokenIds(paidTokenIds)
         setIsLoading(false)
         setIsLoadingMoreTokens(true)
 
         const agora = new Agora(chronikClient as any)
         const tokenIds = await agora.offeredFungibleTokenIds()
 
-        const paidInList = paidTokenIds.filter((id) => tokenIds.includes(id))
-        const paidInListSet = new Set(paidInList)
-        const otherTokens = tokenIds.filter((id) => !paidInListSet.has(id))
-
-        const sortedTokenIds = [...paidInList, ...otherTokens]
-
-        setAllTokenIds(sortedTokenIds)
+        setAllTokenIds(tokenIds)
         setIsLoadingMoreTokens(false)
       } catch (_error) {
         setIsLoadingMoreTokens(false)
@@ -315,14 +307,6 @@ const AllEtokensView: React.FC = () => {
                 )}
               </div>
               <div className="flex-shrink-0 flex items-center gap-2 justify-end">
-                {paidTokenIds.includes(token.tokenId) && (
-                  <Badge
-                    variant="default"
-                    className="text-xs whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0"
-                  >
-                    SC Premium
-                  </Badge>
-                )}
                 {addedTokens.has(token.tokenId) ? (
                   <Button
                     size="sm"

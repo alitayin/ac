@@ -1,5 +1,7 @@
 // config/paidSC.ts
-// Paid StarCrystal token IDs
+// DEPRECATED: This file is no longer used for priority sorting in AllEtokensView
+// Kept for historical reference only
+// Previously: Paid StarCrystal token IDs that received premium listing status
 
 export const paidTokenIds: string[] = [
   "03ef0c773ad0c93ce8e645abbf57ac3a76b066aafde95d245e860c4e8dbf67da",
