@@ -6,6 +6,40 @@
 
 ## 2026-04-14
 
+### 移除 All eTokens 优先列表 (Commit: b65f6a7)
+
+**改动内容：**
+- 移除了 `paidTokenIds` 的导入和排序逻辑
+- 删除了 "SC Premium" 徽章显示
+- 所有代币现在平等显示，不再有优先排序
+- 标记 `paidSC.ts` 为已弃用（保留作为历史参考）
+
+**影响：**
+- All eTokens 页面不再区分付费代币和普通代币
+- 所有代币按区块链返回的顺序显示
+
+---
+
+### 升级 ecash-quicksend 到 2.2.0 (Commit: 825077c)
+
+**改动内容：**
+- 从 2.0.2 升级到 2.2.0
+- 新功能：支持在 `sendXec()` 中指定 app prefix 和 message
+- 向后兼容 - 现有 Agora DEX 功能不受影响
+- 依赖更新：
+  - ecash-wallet: ^5.2.0
+  - ecash-lib: ^4.12.0
+  - chronik-client: ^4.1.0
+
+**新增功能：**
+- `sendXec()` 支持 `message` 和 `appPrefixHex` 参数
+- 新导出：`CASHTAB_PREFIX_HEX`, `XEC_APP_MESSAGE_BYTE_LIMIT`, `validateAppPrefixHex()`, `validateAppMessage()`, `buildXecAppActionOutput()`, `parseXecAppActionOutput()`
+
+**验证：**
+- ✅ `npm run build` 通过，无错误
+
+---
+
 ### 更新 CLAUDE.md 工作规范
 
 **改动内容：**
