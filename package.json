@@ -43,7 +43,7 @@
     "cobe": "^0.6.3",
     "ecash-agora": "^2.6.7",
     "ecash-lib": "^4.5.2",
-    "ecash-quicksend": "^2.0.2",
+    "ecash-quicksend": "^2.2.0",
     "ecashaddrjs": "^2.0.0",
     "framer-motion": "^11.18.2",
     "lightweight-charts": "^4.2.1",
