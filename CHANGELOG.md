@@ -6,6 +6,18 @@
 
 ## 2026-04-14
 
+### 全局使用 Geist Mono 字体 (Commit: 67482d0)
+
+**改动内容：**
+- 将 body 字体从 Inter 改为 Geist Mono
+- 将 logo 字体从 Marlin 改为 Geist Mono
+- 整个应用统一使用等宽字体
+
+**验证：**
+- ✅ `npm run build` 通过，无错误
+
+---
+
 ### 全局切换到 Geist 字体 (Commit: 5715204)
 
 **改动内容：**
