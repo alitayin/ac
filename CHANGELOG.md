@@ -6,6 +6,19 @@
 
 ## 2026-04-14
 
+### 全局切换到 Geist 字体 (Commit: 5715204)
+
+**改动内容：**
+- 将 Inter 替换为 Geist Sans（可变字体）
+- 将 Marlin 替换为 Geist Mono（可变字体）
+- 使用本地字体文件（GeistVF.woff, GeistMonoVF.woff）
+- 更新 tailwind.config.ts 配置 font-sans 和 font-mono
+
+**验证：**
+- ✅ `npm run build` 通过，无错误
+
+---
+
 ### 移除 All eTokens 优先列表 (Commit: b65f6a7)
 
 **改动内容：**
