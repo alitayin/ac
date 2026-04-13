@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter } from 'next/font/google'
 import localFont from "next/font/local";
 import Script from "next/script";
 import { Toaster } from "@/components/ui/toaster"
@@ -14,17 +13,16 @@ import { ChronikProvider } from '@/lib/context/ChronikContext';
 
 import "./globals.css";
 
-// Inter is used for general text
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
 });
 
-// Marlin is used only for special headings
-const marlinFont = localFont({
-  src: "./fonts/MarlinSoftSQ-ExtraBold.woff2",
-  variable: "--font-marlin",
-  weight: "200",  // ExtraBold fonts usually expose a single weight
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
 });
 
 export const metadata: Metadata = {
@@ -43,8 +41,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${marlinFont.variable} antialiased`}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className="font-sans antialiased">
         <Script src="https://unpkg.com/@paybutton/paybutton/dist/paybutton.js" strategy="lazyOnload" />
         <ThemeProvider
           attribute="class"
