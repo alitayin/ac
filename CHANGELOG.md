@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-04-15
+
+### 🎉 v4.0.0 发布
+
+**主要改动：**
+- 全局切换到 Geist 字体系列（Geist Sans + Geist Mono）
+- 升级 ecash-quicksend 到 2.2.0
+- 移除 All eTokens 视图中的优先级列表
+- 新增 CHANGELOG.md 用于跟踪代码改动
+
+**验证：**
+- ✅ `npm run build` 通过，无错误
+
+---
+
 ## 2026-04-14
 
 ### 全局使用 Geist Mono 字体 (Commit: 67482d0)
