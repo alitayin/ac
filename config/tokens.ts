@@ -38,7 +38,6 @@ export const tokens: Record<string, TokenConfig> = {
     tokenId: "d1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb",
     telegramUrl: "https://t.me/agoraui",
     feature: "Swap and more features",
-    official: true,
     description: {
       title: "About Star Shard",
       content: "Like Star Crystal, it is filled with profound magical power, and it seems to be designed for swap and maybe also cross‑chain functionality. It exists in greater quantities. Holding it yields a 10% interest return.."
@@ -50,7 +49,6 @@ export const tokens: Record<string, TokenConfig> = {
     tokenId: "0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0",
     telegramUrl: "https://t.me/firmadotcash",
     feature: "Yield-bearing Stablecoin",
-    stablecoin: true,
     description: {
       title: "",
       content: ""
