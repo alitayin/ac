@@ -56,7 +56,7 @@ export interface RealtimePriceData {
 }
 
 // Sort Types
-export type SortType = '24h' | '30d' | 'history';
+export type SortType = '24h' | '7d' | 'history';
 
 // Component Props Types
 export interface TokenComponentProps {
@@ -111,4 +111,3 @@ export interface BuyOrderResponse {
     [key: string]: any;
   }>;
 }
-

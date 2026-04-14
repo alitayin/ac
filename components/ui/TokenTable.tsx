@@ -58,7 +58,7 @@ import { TokenBadge } from "@/components/ui/tokenbadge"
 import AllEtokensView from "@/components/ui/AllEtokensView"
 import { formatNumber, formatPrice } from "@/lib/formatters"
 import { Token, SortType, Transaction } from "@/lib/types"
-import { TOKEN_IDS, UI_CONSTANTS } from "@/lib/constants"
+import { UI_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
 import { fetchBlockchainInfo, fetchTokenDetails, getTokenAmountFromToken, getTokenDecimalsFromDetails } from "@/lib/chronik"
 import { useChronik } from "@/lib/context/ChronikContext"
@@ -91,8 +91,27 @@ type TokenTableRow = Token
 
 type FilterOption = "all" | "no-trades-30d" | "low-volume-30d" | "low-trades-30d"
 
-const getFallbackTokenName = (tokenId: string): string => {
-  return `${tokenId.substring(0, 8)}...`
+type BootstrapTokenCandidate = {
+  tokenId: string
+  fallbackName?: string
+  patch?: Partial<Token>
+}
+
+const getTokenNameFromDetails = (
+  tokenDetails: any,
+  fallbackName?: string,
+): string | null => {
+  const tokenName = tokenDetails?.genesisInfo?.tokenName
+
+  if (typeof tokenName === "string" && tokenName.trim().length > 0) {
+    return tokenName.trim()
+  }
+
+  if (typeof fallbackName === "string" && fallbackName.trim().length > 0) {
+    return fallbackName.trim()
+  }
+
+  return null
 }
 
 const createInitialTokenRow = (
@@ -174,7 +193,7 @@ export default function Component() {
   const filteredTokensRef = React.useRef<Set<string>>(new Set())
   const prevFilteredTokensRef = React.useRef<Set<string>>(new Set())
 
-  const [sortBy, setSortBy] = React.useState<SortType>('30d');
+  const [sortBy, setSortBy] = React.useState<SortType>('7d');
 
   const [highlightFields, setHighlightFields] = React.useState<Map<string, Set<string>>>(new Map());
 
@@ -1572,54 +1591,39 @@ export default function Component() {
       const tokenId = customEvent.detail?.tokenId
       if (!tokenId) return
 
-      setData((prev) => {
-        if (prev.some((t) => t.tokenId === tokenId)) return prev
-        return [
-          ...prev,
-          {
-            id: tokenId,
-            tokenId,
-            name: tokenId.substring(0, 6),
-            totalTransactions: 0,
-            last24HoursXECAmount: 0,
-            last30DaysXECAmount: 0,
-            priceChange24h: 0,
-            latestPrice: 0,
-            totalXECAmount: 0,
-            official: false,
-            gratitude: false,
-            community: false,
-            stablecoin: false,
-            apyTag: undefined,
-            watchlist: true,
-          },
-        ]
-      })
-
-      setLoadedTokens((prev) => {
-        const next = new Set(prev)
-        next.delete(tokenId)
-        return next
-      })
-
       try {
         const details = await fetchTokenDetails(tokenId, chronikClient)
-        const name = details?.genesisInfo?.tokenName || tokenId.substring(0, 6)
+        const name = getTokenNameFromDetails(details)
+        if (!name) return
+
         setData((prev) =>
-          prev.map((t) =>
-            t.tokenId === tokenId
-              ? {
-                  ...t,
-                  name,
+          prev.some((t) => t.tokenId === tokenId)
+            ? prev.map((t) =>
+                t.tokenId === tokenId
+                  ? {
+                      ...t,
+                      name,
+                      watchlist: true,
+                    }
+                  : t,
+              )
+            : [
+                ...prev,
+                createInitialTokenRow(tokenId, name, {
                   watchlist: true,
-                }
-              : t,
-          ),
+                }),
+              ],
         )
+
+        setLoadedTokens((prev) => {
+          const next = new Set(prev)
+          next.delete(tokenId)
+          return next
+        })
+
         loadTokenStatsRef.current?.(tokenId, name, { ignoreFilter: true })
       } catch (_err) {
-        const name = tokenId.substring(0, 6)
-        loadTokenStatsRef.current?.(tokenId, name, { ignoreFilter: true })
+        console.error(`[watchlist] Failed to fetch token info for ${tokenId}`)
       }
     }
 
@@ -1652,91 +1656,104 @@ export default function Component() {
         }
 
         const customTokenIds = getCustomTokens()
-        const initialTokens = Object.values(tokens).map((tokenConfig: any) =>
-          createInitialTokenRow(tokenConfig.tokenId, tokenConfig.name, {
-            official: tokenConfig?.official || false,
-            gratitude: tokenConfig?.gratitude || false,
-            community: tokenConfig?.community || false,
-            stablecoin: tokenConfig?.stablecoin || false,
-            apyTag: tokenConfig?.apyTag,
-            watchlist: customTokenIds.includes(tokenConfig.tokenId),
+        const bootstrapCandidates: BootstrapTokenCandidate[] = Object.values(tokens).map(
+          (tokenConfig: any) => ({
+            tokenId: tokenConfig.tokenId,
+            fallbackName: tokenConfig.name,
+            patch: {
+              official: tokenConfig?.official || false,
+              gratitude: tokenConfig?.gratitude || false,
+              community: tokenConfig?.community || false,
+              stablecoin: tokenConfig?.stablecoin || false,
+              apyTag: tokenConfig?.apyTag,
+              watchlist: customTokenIds.includes(tokenConfig.tokenId),
+            },
           }),
         )
-        const knownTokenIds = new Set(initialTokens.map((token) => token.tokenId))
+        const knownTokenIds = new Set(
+          bootstrapCandidates.map((candidate) => candidate.tokenId),
+        )
 
         for (const customTokenId of customTokenIds) {
           if (knownTokenIds.has(customTokenId)) {
             continue
           }
-          
-          try {
-            const tokenInfo = await fetchTokenDetails(customTokenId, chronikClient)
-            
-            const tokenName =
-              tokenInfo?.genesisInfo?.tokenName || getFallbackTokenName(customTokenId)
-            
-            initialTokens.push(createInitialTokenRow(customTokenId, tokenName, {
-              watchlist: true,
-            }))
-          } catch (_error) {
-            initialTokens.push(createInitialTokenRow(customTokenId, getFallbackTokenName(customTokenId), {
-              watchlist: true,
-            }))
-          }
 
+          bootstrapCandidates.push({
+            tokenId: customTokenId,
+            patch: {
+              watchlist: true,
+            },
+          })
           knownTokenIds.add(customTokenId)
         }
 
-        let supplementalTokenIds: string[] = []
         if (await isEtokenDbAvailable()) {
           try {
-            supplementalTokenIds = (await fetchEtokenDbTopVolumeTokenIds()).filter(
+            const supplementalTokenIds = (await fetchEtokenDbTopVolumeTokenIds()).filter(
               (tokenId) => !knownTokenIds.has(tokenId),
             )
 
             supplementalTokenIds.forEach((tokenId) => {
+              bootstrapCandidates.push({
+                tokenId,
+              })
               knownTokenIds.add(tokenId)
-              initialTokens.push(
-                createInitialTokenRow(tokenId, getFallbackTokenName(tokenId)),
-              )
             })
           } catch (err) {
             console.error("[etokendb token list] Failed to fetch top-volume tokens:", err)
           }
         }
 
+        const hydratedTokens: Array<Token | null> = new Array(
+          bootstrapCandidates.length,
+        ).fill(null)
+        let candidateIndex = 0
+        const hydrateNextCandidate = async () => {
+          while (candidateIndex < bootstrapCandidates.length && !isCancelled) {
+            const currentIndex = candidateIndex++
+            const candidate = bootstrapCandidates[currentIndex]
+
+            try {
+              const tokenInfo = await fetchTokenDetails(candidate.tokenId, chronikClient)
+              const tokenName = getTokenNameFromDetails(
+                tokenInfo,
+                candidate.fallbackName,
+              )
+
+              if (!tokenName) {
+                continue
+              }
+
+              hydratedTokens[currentIndex] = createInitialTokenRow(
+                candidate.tokenId,
+                tokenName,
+                candidate.patch,
+              )
+            } catch (err) {
+              console.error(
+                `[token info] Failed to fetch token info for ${candidate.tokenId}:`,
+                err,
+              )
+            }
+          }
+        }
+
+        await Promise.all([
+          hydrateNextCandidate(),
+          hydrateNextCandidate(),
+          hydrateNextCandidate(),
+          hydrateNextCandidate(),
+        ])
+
+        const initialTokens = hydratedTokens.filter(
+          (token): token is Token => token !== null,
+        )
+
         if (isCancelled) return
         setData(initialTokens)
         setIsLoading(false)
 
-        if (supplementalTokenIds.length > 0) {
-          void (async () => {
-            let supplementalIndex = 0
-            const hydrateNextName = async () => {
-              while (supplementalIndex < supplementalTokenIds.length && !isCancelled) {
-                const currentIndex = supplementalIndex++
-                const tokenId = supplementalTokenIds[currentIndex]
-
-                try {
-                  const tokenInfo = await fetchTokenDetails(tokenId, chronikClient)
-                  const tokenName =
-                    tokenInfo?.genesisInfo?.tokenName || getFallbackTokenName(tokenId)
-
-                  if (!isCancelled) {
-                    applyTokenUpdate(tokenId, {
-                      name: tokenName,
-                    })
-                  }
-                } catch (_error) {}
-              }
-            }
-
-            await Promise.all([hydrateNextName(), hydrateNextName(), hydrateNextName()])
-          })()
-        }
-
-        // Load tokens with concurrency limit of 2
-        const CONCURRENCY_LIMIT = 2
         let index = 0
         const loadNext = async () => {
           while (index < initialTokens.length && !isCancelled) {
@@ -1876,12 +1893,6 @@ export default function Component() {
 
   const sortedData = React.useMemo(() => {
     const filteredData = data.filter(token => !filteredTokens.has(token.tokenId));
-    
-    const starshardToken = filteredData.find(token => token.tokenId === TOKEN_IDS.STAR_SHARD);
-    
-    const officialTokens = filteredData.filter(token => token.official === true && token.tokenId !== TOKEN_IDS.STAR_SHARD);
-    const watchlistTokens = filteredData.filter(token => !token.official && token.watchlist === true && token.tokenId !== TOKEN_IDS.STAR_SHARD);
-    const normalTokens = filteredData.filter(token => !token.official && !token.watchlist && token.tokenId !== TOKEN_IDS.STAR_SHARD);
 
     const sortFunction = (a: Token, b: Token) => {
       if (sortBy === '24h') {
@@ -1892,14 +1903,24 @@ export default function Component() {
       return b.last30DaysXECAmount - a.last30DaysXECAmount;
     };
 
-    const sortedWatchlist = [...watchlistTokens].sort(sortFunction);
-    const sortedNormal = [...normalTokens].sort(sortFunction);
+    return [...filteredData].sort((a, b) => {
+      const primarySort = sortFunction(a, b)
+      if (primarySort !== 0) {
+        return primarySort
+      }
 
-    const result = starshardToken 
-      ? [starshardToken, ...officialTokens, ...sortedWatchlist, ...sortedNormal]
-      : [...officialTokens, ...sortedWatchlist, ...sortedNormal];
-    
-    return result;
+      const officialSort = Number(Boolean(b.official)) - Number(Boolean(a.official))
+      if (officialSort !== 0) {
+        return officialSort
+      }
+
+      const watchlistSort = Number(Boolean(b.watchlist)) - Number(Boolean(a.watchlist))
+      if (watchlistSort !== 0) {
+        return watchlistSort
+      }
+
+      return a.name.localeCompare(b.name)
+    });
   }, [data, sortBy, filteredTokens]);
 
   const tableData = React.useMemo(() => {
@@ -2223,7 +2244,7 @@ export default function Component() {
                           header.id === 'last24HoursXECAmount'
                             ? '24h'
                             : header.id === 'last30DaysXECAmount'
-                            ? '30d'
+                            ? '7d'
                             : header.id === 'totalXECAmount'
                             ? 'history'
                             : null;
