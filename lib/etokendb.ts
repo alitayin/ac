@@ -1,0 +1,299 @@
+import type { ChronikClient } from "chronik-client"
+
+import { resolveTokenDecimals } from "@/lib/chronik"
+
+export const ETOKENDB_UPSTREAM_BASE_URL = "https://etokendb.alitayin.com/api"
+
+const ETOKENDB_API_BASE_PATH = "/api/etokendb"
+const STATUS_CACHE_TTL_MS = 60_000
+const STATUS_TIMEOUT_MS = 4_000
+const TOKEN_TIMEOUT_MS = 8_000
+const TOKEN_ID_PATTERN = /^[a-f0-9]{64}$/i
+const NANOSATS_PER_XEC = 100_000_000_000
+
+type NumericLike = number | string | null | undefined
+
+export type EtokenDbStatusPayload = {
+  ok?: boolean
+  data?: {
+    healthy?: boolean
+    ready?: boolean
+    phase?: string
+    [key: string]: unknown
+  }
+  error?: string
+}
+
+export type EtokenDbTokenPayload = {
+  ok?: boolean
+  data?: {
+    summary?: {
+      tokenId?: string
+      latestPriceNanosatsPerAtom?: NumericLike
+      recent144TradeCount?: NumericLike
+      recent144VolumeSats?: NumericLike
+      recent144PriceChangeBps?: NumericLike
+      recent144PriceChangePct?: NumericLike
+      recent1008TradeCount?: NumericLike
+      recent1008VolumeSats?: NumericLike
+      lastTradeBlockHeight?: NumericLike
+      lastTradeBlockTimestamp?: NumericLike
+      lastSyncedAt?: NumericLike
+      [key: string]: unknown
+    } | null
+    [key: string]: unknown
+  }
+  error?: string
+}
+
+export type EtokenDbMappedTokenSummary = {
+  tokenId: string
+  tokenDecimals: number
+  recent24hTradeCount: number
+  recent7dTradeCount: number
+  last24HoursXECAmount: number
+  last7DaysXECAmount: number
+  latestPriceXec: number
+  priceChange24h: number
+  hasLatestPriceXec: boolean
+  hasPriceChange24h: boolean
+  lastTradeBlockHeight: number | null
+  lastTradeBlockTimestamp: number | null
+  lastSyncedAt: number | null
+}
+
+type MapEtokenDbTokenSummaryOptions = {
+  decimals?: number
+}
+
+type FetchEtokenDbTokenSummaryOptions = {
+  decimals?: number
+  chronikClient?: ChronikClient
+}
+
+let cachedAvailability: { value: boolean; checkedAt: number } | null = null
+let pendingAvailabilityRequest: Promise<boolean> | null = null
+
+const coerceFiniteNumber = (value: NumericLike): number => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  return 0
+}
+
+const coerceCount = (value: NumericLike): number => {
+  return Math.max(0, Math.trunc(coerceFiniteNumber(value)))
+}
+
+const hasValue = (value: NumericLike): boolean => {
+  return value !== null && value !== undefined && `${value}`.trim().length > 0
+}
+
+export const satsToXec = (value: NumericLike): number => {
+  return coerceFiniteNumber(value) / 100
+}
+
+export const nanosatsPerAtomToXec = (
+  value: NumericLike,
+  decimals: number,
+): number => {
+  const nanosatsPerAtom = coerceFiniteNumber(value)
+  if (nanosatsPerAtom <= 0) return 0
+
+  const normalizedDecimals = Math.max(0, Math.trunc(decimals || 0))
+  const nanosatsPerToken = nanosatsPerAtom * Math.pow(10, normalizedDecimals)
+  const xecPerToken = nanosatsPerToken / NANOSATS_PER_XEC
+
+  return Number.isFinite(xecPerToken) ? xecPerToken : 0
+}
+
+export const getEtokenDbPriceChange24h = (
+  pctValue: NumericLike,
+  bpsValue: NumericLike,
+): { value: number; hasValue: boolean } => {
+  if (hasValue(pctValue)) {
+    return {
+      value: coerceFiniteNumber(pctValue),
+      hasValue: true,
+    }
+  }
+
+  if (hasValue(bpsValue)) {
+    return {
+      value: coerceFiniteNumber(bpsValue) / 100,
+      hasValue: true,
+    }
+  }
+
+  return {
+    value: 0,
+    hasValue: false,
+  }
+}
+
+export const isValidEtokenDbTokenId = (tokenId: string): boolean => {
+  return TOKEN_ID_PATTERN.test(tokenId)
+}
+
+const fetchJsonWithTimeout = async <T>(
+  input: string,
+  timeoutMs: number,
+): Promise<T> => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(input, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+    })
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && typeof (payload as any).error === "string"
+          ? (payload as any).error
+          : `Request failed with status ${response.status}`
+      throw new Error(message)
+    }
+
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Invalid JSON response")
+    }
+
+    return payload as T
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const isReadyStatusPayload = (
+  payload: EtokenDbStatusPayload | null | undefined,
+): boolean => {
+  return Boolean(
+    payload?.ok &&
+      payload?.data?.healthy &&
+      payload?.data?.ready &&
+      payload?.data?.phase === "ready",
+  )
+}
+
+export const isEtokenDbAvailable = async (
+  options?: { forceRefresh?: boolean },
+): Promise<boolean> => {
+  const now = Date.now()
+
+  if (
+    !options?.forceRefresh &&
+    cachedAvailability &&
+    now - cachedAvailability.checkedAt < STATUS_CACHE_TTL_MS
+  ) {
+    return cachedAvailability.value
+  }
+
+  if (!options?.forceRefresh && pendingAvailabilityRequest) {
+    return pendingAvailabilityRequest
+  }
+
+  pendingAvailabilityRequest = (async () => {
+    try {
+      const payload = await fetchJsonWithTimeout<EtokenDbStatusPayload>(
+        `${ETOKENDB_API_BASE_PATH}/status`,
+        STATUS_TIMEOUT_MS,
+      )
+      const value = isReadyStatusPayload(payload)
+      cachedAvailability = { value, checkedAt: Date.now() }
+      return value
+    } catch (_error) {
+      cachedAvailability = { value: false, checkedAt: Date.now() }
+      return false
+    } finally {
+      pendingAvailabilityRequest = null
+    }
+  })()
+
+  return pendingAvailabilityRequest
+}
+
+export const resetEtokenDbAvailabilityCache = () => {
+  cachedAvailability = null
+  pendingAvailabilityRequest = null
+}
+
+export const mapEtokenDbTokenSummary = (
+  payload: EtokenDbTokenPayload,
+  options?: MapEtokenDbTokenSummaryOptions,
+): EtokenDbMappedTokenSummary => {
+  const summary = payload?.data?.summary
+
+  if (!payload?.ok || !summary || typeof summary.tokenId !== "string") {
+    throw new Error("Invalid etokendb token payload")
+  }
+
+  const tokenDecimals = Math.max(0, Math.trunc(options?.decimals ?? 0))
+  const latestPriceXec = nanosatsPerAtomToXec(summary.latestPriceNanosatsPerAtom, tokenDecimals)
+  const priceChange = getEtokenDbPriceChange24h(
+    summary.recent144PriceChangePct,
+    summary.recent144PriceChangeBps,
+  )
+  const hasLatestPriceXec =
+    hasValue(summary.latestPriceNanosatsPerAtom) &&
+    coerceFiniteNumber(summary.latestPriceNanosatsPerAtom) > 0
+
+  return {
+    tokenId: summary.tokenId,
+    tokenDecimals,
+    recent24hTradeCount: coerceCount(summary.recent144TradeCount),
+    recent7dTradeCount: coerceCount(summary.recent1008TradeCount),
+    last24HoursXECAmount: satsToXec(summary.recent144VolumeSats),
+    last7DaysXECAmount: satsToXec(summary.recent1008VolumeSats),
+    latestPriceXec,
+    priceChange24h: priceChange.value,
+    hasLatestPriceXec,
+    hasPriceChange24h: priceChange.hasValue,
+    lastTradeBlockHeight:
+      summary.lastTradeBlockHeight === null || summary.lastTradeBlockHeight === undefined
+        ? null
+        : coerceCount(summary.lastTradeBlockHeight),
+    lastTradeBlockTimestamp:
+      summary.lastTradeBlockTimestamp === null ||
+      summary.lastTradeBlockTimestamp === undefined
+        ? null
+        : coerceCount(summary.lastTradeBlockTimestamp),
+    lastSyncedAt:
+      summary.lastSyncedAt === null || summary.lastSyncedAt === undefined
+        ? null
+        : coerceCount(summary.lastSyncedAt),
+  }
+}
+
+export const fetchEtokenDbTokenSummary = async (
+  tokenId: string,
+  options?: FetchEtokenDbTokenSummaryOptions,
+): Promise<EtokenDbMappedTokenSummary> => {
+  if (!isValidEtokenDbTokenId(tokenId)) {
+    throw new Error("Invalid tokenId")
+  }
+
+  const payload = await fetchJsonWithTimeout<EtokenDbTokenPayload>(
+    `${ETOKENDB_API_BASE_PATH}/tokens/${encodeURIComponent(tokenId)}`,
+    TOKEN_TIMEOUT_MS,
+  )
+
+  const decimals =
+    typeof options?.decimals === "number"
+      ? options.decimals
+      : await resolveTokenDecimals(tokenId, options?.chronikClient)
+
+  return mapEtokenDbTokenSummary(payload, { decimals })
+}

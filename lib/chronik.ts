@@ -1,4 +1,5 @@
 import { ChronikClient } from "chronik-client"
+import { tokens } from "@/config/tokens"
 import { storageManager } from './storage-manager'
 
 // Legacy synchronous export (keep during migration)
@@ -63,7 +64,7 @@ export const getTokenAmountFromToken = (token: any): bigint => {
 
 const TOKEN_DETAILS_CACHE_KEY = 'token_details_cache'
 
-const getCachedTokenDetails = (tokenId: string): any | null => {
+export const getCachedTokenDetails = (tokenId: string): any | null => {
   try {
     const cache = storageManager.get<Record<string, any>>(TOKEN_DETAILS_CACHE_KEY)
     if (!cache) return null
@@ -134,3 +135,26 @@ export const getTokenDecimalsFromDetails = (
   return typeof chronikDecimals === "number" ? chronikDecimals : fallbackDecimals
 }
 
+export const resolveTokenDecimals = async (
+  tokenId: string,
+  client?: ChronikClient,
+): Promise<number> => {
+  if (!tokenId) return 0
+
+  const tokenConfig = Object.values(tokens).find((token) => token.tokenId === tokenId)
+  if (typeof tokenConfig?.decimals === "number") {
+    return tokenConfig.decimals
+  }
+
+  const cached = getCachedTokenDetails(tokenId)
+  if (cached) {
+    return getTokenDecimalsFromDetails(cached, 0)
+  }
+
+  try {
+    const tokenDetails = await fetchTokenDetails(tokenId, client)
+    return getTokenDecimalsFromDetails(tokenDetails, 0)
+  } catch (_error) {
+    return 0
+  }
+}

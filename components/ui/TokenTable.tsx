@@ -62,6 +62,7 @@ import { TOKEN_IDS, UI_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
 import { fetchBlockchainInfo, fetchTokenDetails, getTokenAmountFromToken, getTokenDecimalsFromDetails } from "@/lib/chronik"
 import { useChronik } from "@/lib/context/ChronikContext"
+import { fetchEtokenDbTokenSummary, isEtokenDbAvailable } from "@/lib/etokendb"
 import {
   clearTokenCache,
   getCachedTokenData,
@@ -135,6 +136,7 @@ export default function Component() {
   
   const loadingTokens = React.useRef<Set<string>>(new Set())
   const loadingTimeouts = React.useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const wsReloadTimeouts = React.useRef<Map<string, NodeJS.Timeout>>(new Map())
   const clearCacheConfirmRef = React.useRef<HTMLDivElement | null>(null)
   const filteredTokensRef = React.useRef<Set<string>>(new Set())
   const prevFilteredTokensRef = React.useRef<Set<string>>(new Set())
@@ -202,6 +204,15 @@ export default function Component() {
       localStorage.setItem(FILTER_OPTION_STORAGE_KEY, filterOption)
     } catch (_error) {}
   }, [filterOption])
+
+  React.useEffect(() => {
+    return () => {
+      wsReloadTimeouts.current.forEach((timeoutId) => {
+        clearTimeout(timeoutId)
+      })
+      wsReloadTimeouts.current.clear()
+    }
+  }, [])
 
   const clearCacheAndReload = () => {
     clearTokenCache()
@@ -820,11 +831,52 @@ export default function Component() {
         }
         return
       }
+
+      const activeChronik = chronikClient!
+
+      let etokenDbSummary: Awaited<ReturnType<typeof fetchEtokenDbTokenSummary>> | null = null
+      if (await isEtokenDbAvailable()) {
+        try {
+          etokenDbSummary = await fetchEtokenDbTokenSummary(tokenId, {
+            chronikClient: activeChronik,
+          })
+          setLargeDatasetTokens((prev) => {
+            if (!prev.has(tokenId)) return prev
+            const next = new Set(prev)
+            next.delete(tokenId)
+            return next
+          })
+        } catch (err) {
+          console.error(`[etokendb Fetch Error] Token: ${name}, error:`, err)
+        }
+      }
+
+      const currentToken = data.find((token) => token.tokenId === tokenId)
+      const cachedTokenSnapshot =
+        summaryCached && typeof summaryCached.data === "object" && summaryCached.data !== null
+          ? (summaryCached.data as Partial<Token>)
+          : null
+      const currentHasPrice =
+        typeof currentToken?.latestPrice === "number" && currentToken.latestPrice > 0
+      const cachedHasPrice =
+        typeof cachedTokenSnapshot?.latestPrice === "number" &&
+        cachedTokenSnapshot.latestPrice > 0
+      const fallbackLatestPrice =
+        currentHasPrice
+          ? currentToken!.latestPrice
+          : cachedHasPrice
+            ? cachedTokenSnapshot!.latestPrice!
+            : 0
+      const fallbackPriceChange24h =
+        currentHasPrice && typeof currentToken?.priceChange24h === "number"
+          ? currentToken.priceChange24h
+          : typeof cachedTokenSnapshot?.priceChange24h === "number"
+            ? cachedTokenSnapshot.priceChange24h
+            : 0
       
       const cached = getCachedTokenData(tokenId)
       const cacheValid = !!cached && now - cached.computedAt < CACHE_TTL_MS
 
-      const activeChronik = chronikClient!
       let effectiveTipHeight = chainTipHeight
       if (typeof effectiveTipHeight !== "number") {
         try {
@@ -847,218 +899,82 @@ export default function Component() {
       const retry24hKey = `${tokenId}:24h`
       const retryLatestKey = `${tokenId}:latest`
       const retry7dKey = `${tokenId}:7d`
+      const shouldUseEtokenDbLatestPrice = Boolean(etokenDbSummary?.hasLatestPriceXec)
+      const shouldUseEtokenDbPriceChange = Boolean(etokenDbSummary?.hasPriceChange24h)
+      const needsChronik24h =
+        !etokenDbSummary || !shouldUseEtokenDbLatestPrice || !shouldUseEtokenDbPriceChange
+      const needsChronikLatestTx = !shouldUseEtokenDbLatestPrice
 
-      try {
-        await fetchAgoraTransactionsFromChronik(
-          tokenId,
-          (batch, meta) => {
-            tx24h.push(...batch)
-            if (meta?.page !== undefined) {
-              pagesRead = meta.page + 1
-            }
-          },
-          {
-            targetCount: 400,
-            pageSize: 200,
-            maxBlocksBack: BLOCKS_PER_DAY,
-            stopBelowHeight:
-              typeof effectiveTipHeight === "number"
-                ? Math.max(effectiveTipHeight - BLOCKS_PER_DAY, 0)
-                : undefined,
-            failOnError: true,
-          },
-          activeChronik,
-        )
-      } catch (err) {
-        fetchError = true
-        console.error(`[24h Fetch Error] Token: ${name}, error:`, err)
-
-        const currentRetryCount = retryCountRef.current.get(retry24hKey) || 0
-
-        if (currentRetryCount < 1) {
-          // First retry
-          retryCountRef.current.set(retry24hKey, currentRetryCount + 1)
-          console.log(`[24h Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
-
-          setErrorTokens((prev) => {
-            const next = new Set(prev)
-            next.add(tokenId)
-            return next
-          })
-
-          setTimeout(() => {
-            if (
-              !cancelledRef.current &&
-              (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
-            ) {
-              loadingTokens.current.delete(tokenId)
-              const timeoutId = loadingTimeouts.current.get(tokenId)
-              if (timeoutId) {
-                clearTimeout(timeoutId)
-                loadingTimeouts.current.delete(tokenId)
+      if (needsChronik24h) {
+        try {
+          await fetchAgoraTransactionsFromChronik(
+            tokenId,
+            (batch, meta) => {
+              tx24h.push(...batch)
+              if (meta?.page !== undefined) {
+                pagesRead = meta.page + 1
               }
-              loadTokenStatsRef.current?.(tokenId, name, options)
-            }
-          }, 3000)
+            },
+            {
+              targetCount: 400,
+              pageSize: 200,
+              maxBlocksBack: BLOCKS_PER_DAY,
+              stopBelowHeight:
+                typeof effectiveTipHeight === "number"
+                  ? Math.max(effectiveTipHeight - BLOCKS_PER_DAY, 0)
+                  : undefined,
+              failOnError: true,
+            },
+            activeChronik,
+          )
+        } catch (err) {
+          console.error(`[24h Fetch Error] Token: ${name}, error:`, err)
 
-          return
-        } else {
-          // Second failure - mark as failed
-          console.log(`[24h Failed] Token: ${name}, failed after retry`)
-          retryCountRef.current.delete(retry24hKey)
-
-          setFailedDataTokens((prev) => {
-            const next = new Set(prev)
-            next.add(tokenId)
-            return next
-          })
-
-          setLoadedTokens((prev) => {
-            if (prev.has(tokenId)) return prev
-            const next = new Set(prev)
-            next.add(tokenId)
-            return next
-          })
-
-          setErrorTokens((prev) => {
-            const next = new Set(prev)
-            next.add(tokenId)
-            return next
-          })
-
-          return
-        }
-      }
-
-      let latestTx: Transaction[] = []
-      try {
-        latestTx = await fetchAgoraTransactionsFromChronik(
-          tokenId,
-          undefined,
-          {
-            targetCount: 1,
-            pageSize: 50,
-            failOnError: true,
-          },
-          activeChronik,
-        )
-      } catch (err) {
-        if (!fetchError) {
-          console.error(`[Latest Tx Fetch Error] Token: ${name}, error:`, err)
-
-          const currentRetryCount = retryCountRef.current.get(retryLatestKey) || 0
-
-          if (currentRetryCount < 1) {
-            // First retry
-            retryCountRef.current.set(retryLatestKey, currentRetryCount + 1)
-            console.log(`[Latest Tx Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
-
-            setErrorTokens((prev) => {
-              const next = new Set(prev)
-              next.add(tokenId)
-              return next
-            })
-
-            setTimeout(() => {
-              if (
-                !cancelledRef.current &&
-                (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
-              ) {
-                loadingTokens.current.delete(tokenId)
-                const timeoutId = loadingTimeouts.current.get(tokenId)
-                if (timeoutId) {
-                  clearTimeout(timeoutId)
-                  loadingTimeouts.current.delete(tokenId)
-                }
-                loadTokenStatsRef.current?.(tokenId, name, options)
-              }
-            }, 3000)
-
-            return
+          if (etokenDbSummary) {
+            console.warn(
+              `[24h Fetch Warning] Token: ${name}, using etokendb stats with cached price fields`,
+            )
           } else {
-            // Second failure - mark as failed
-            console.log(`[Latest Tx Failed] Token: ${name}, failed after retry`)
-            retryCountRef.current.delete(retryLatestKey)
+            fetchError = true
 
-            setFailedDataTokens((prev) => {
-              const next = new Set(prev)
-              next.add(tokenId)
-              return next
-            })
+            const currentRetryCount = retryCountRef.current.get(retry24hKey) || 0
 
-            setLoadedTokens((prev) => {
-              if (prev.has(tokenId)) return prev
-              const next = new Set(prev)
-              next.add(tokenId)
-              return next
-            })
+            if (currentRetryCount < 1) {
+              // First retry
+              retryCountRef.current.set(retry24hKey, currentRetryCount + 1)
+              console.log(`[24h Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
 
-            setErrorTokens((prev) => {
-              const next = new Set(prev)
-              next.add(tokenId)
-              return next
-            })
+              setErrorTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
 
-            return
-          }
-        }
-      }
+              setTimeout(() => {
+                if (
+                  !cancelledRef.current &&
+                  (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
+                ) {
+                  loadingTokens.current.delete(tokenId)
+                  const timeoutId = loadingTimeouts.current.get(tokenId)
+                  if (timeoutId) {
+                    clearTimeout(timeoutId)
+                    loadingTimeouts.current.delete(tokenId)
+                  }
+                  loadTokenStatsRef.current?.(tokenId, name, options)
+                }
+              }, 3000)
 
-      const {
-        latestPrice: price24h,
-        priceChange24h,
-        last24HoursXECAmount,
-        latestBlockHeight,
-      } = compute24hStats(tx24h, effectiveTipHeight ?? chainTipHeight, null)
+              return
+            } else {
+              // Second failure - mark as failed
+              console.log(`[24h Failed] Token: ${name}, failed after retry`)
+              retryCountRef.current.delete(retry24hKey)
 
-      const rawLatestPrice = price24h > 0 ? price24h : (latestTx[0]?.price || 0)
-
-      if (cacheValid && typeof latestProcessedHeight === "number") {
-        const deltaTx = tx24h.filter(
-          (tx) => typeof tx.blockHeight === "number" && tx.blockHeight > latestProcessedHeight!,
-        )
-        const deltaVolume = deltaTx.reduce(
-          (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
-          0,
-        )
-        last30DaysXECAmount += deltaVolume
-        totalTransactions30d += deltaTx.length
-      }
-
-      if (!cacheValid) {
-        const totalTransactionsScanned = pagesRead * 200
-        console.log(`[Large Dataset Check] Token: ${name}, pages read: ${pagesRead}, total scanned: ${totalTransactionsScanned}`)
-
-        if (pagesRead >= 3) {
-          console.log(`[Large Dataset] Token ${name} required ${pagesRead} pages (${totalTransactionsScanned}+ transactions), marking as large dataset`)
-          setLargeDatasetTokens((prev) => {
-            if (prev.has(tokenId)) return prev
-            const next = new Set(prev)
-            next.add(tokenId)
-            return next
-          })
-
-          if (!approvedLargeTokens.has(tokenId) && !approvedLargeTokensRef.current.has(tokenId)) {
-            console.log(`[Large Dataset] Token ${name} not approved, skipping 7D data fetch`)
-            const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
-            const customTokens = getCustomTokens()
-
-            if (!cancelledRef.current) {
-              applyTokenUpdate(tokenId, {
-                tokenId,
-                name,
-                latestPrice: rawLatestPrice,
-                priceChange24h,
-                last24HoursXECAmount,
-                last30DaysXECAmount: 0,
-                totalTransactions: 0,
-                totalXECAmount: 0,
-                official: tokenConfig?.official || false,
-                gratitude: tokenConfig?.gratitude || false,
-                community: tokenConfig?.community || false,
-                stablecoin: tokenConfig?.stablecoin || false,
-                apyTag: tokenConfig?.apyTag,
-                watchlist: customTokens.includes(tokenId),
+              setFailedDataTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
               })
 
               setLoadedTokens((prev) => {
@@ -1067,52 +983,146 @@ export default function Component() {
                 next.add(tokenId)
                 return next
               })
-            }
 
-            loadingTokens.current.delete(tokenId)
-            const timeoutId = loadingTimeouts.current.get(tokenId)
-            if (timeoutId) {
-              clearTimeout(timeoutId)
-              loadingTimeouts.current.delete(tokenId)
-            }
+              setErrorTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
 
-            return
+              return
+            }
           }
         }
-        try {
-          let tx7dCount = 0
-          let rawPagesRead = 0
-          const isUserApproved = approvedLargeTokens.has(tokenId) || approvedLargeTokensRef.current.has(tokenId)
-          console.log(`[7D Load Start] Token: ${name}, isUserApproved: ${isUserApproved}`)
+      }
 
-          const tx7d = await fetchAgoraTransactionsFromChronik(
+      let latestTx: Transaction[] = []
+      if (needsChronikLatestTx) {
+        try {
+          latestTx = await fetchAgoraTransactionsFromChronik(
             tokenId,
-            (batch, meta) => {
-              tx7dCount += batch.length
-              rawPagesRead = meta.rawPage + 1
-              console.log(`[7D Batch] Token: ${name}, rawPage: ${rawPagesRead}, agora txs: ${batch.length}, total agora: ${tx7dCount}`)
-              // 只有在用户未批准时才检查原始页数限制
-              if (!isUserApproved && rawPagesRead >= 5) {
-                console.log(`[7D Abort] Token: ${name}, exceeded 5 raw pages (${rawPagesRead}), stopping`)
-                return true  // 返回 true 通知停止加载
-              }
-              return false
-            },
+            undefined,
             {
-              targetCount: 1400,
-              pageSize: 200,
-              maxBlocksBack: BLOCKS_PER_7_DAYS,
-              stopBelowHeight:
-                typeof effectiveTipHeight === "number"
-                  ? Math.max(effectiveTipHeight - BLOCKS_PER_7_DAYS, 0)
-                  : undefined,
+              targetCount: 1,
+              pageSize: 50,
               failOnError: true,
             },
-            activeChronik
+            activeChronik,
           )
+        } catch (err) {
+          if (!fetchError && !etokenDbSummary) {
+            console.error(`[Latest Tx Fetch Error] Token: ${name}, error:`, err)
 
-          if (!isUserApproved && rawPagesRead >= 5) {
-            console.log(`[Large Dataset] Token ${name} exceeded 5 raw pages in 7D (actual: ${rawPagesRead} pages, ${tx7dCount} agora txs), marking as large dataset`)
+            const currentRetryCount = retryCountRef.current.get(retryLatestKey) || 0
+
+            if (currentRetryCount < 1) {
+              // First retry
+              retryCountRef.current.set(retryLatestKey, currentRetryCount + 1)
+              console.log(`[Latest Tx Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
+
+              setErrorTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+
+              setTimeout(() => {
+                if (
+                  !cancelledRef.current &&
+                  (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
+                ) {
+                  loadingTokens.current.delete(tokenId)
+                  const timeoutId = loadingTimeouts.current.get(tokenId)
+                  if (timeoutId) {
+                    clearTimeout(timeoutId)
+                    loadingTimeouts.current.delete(tokenId)
+                  }
+                  loadTokenStatsRef.current?.(tokenId, name, options)
+                }
+              }, 3000)
+
+              return
+            } else {
+              // Second failure - mark as failed
+              console.log(`[Latest Tx Failed] Token: ${name}, failed after retry`)
+              retryCountRef.current.delete(retryLatestKey)
+
+              setFailedDataTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+
+              setLoadedTokens((prev) => {
+                if (prev.has(tokenId)) return prev
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+
+              setErrorTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+
+              return
+            }
+          } else if (etokenDbSummary) {
+            console.warn(
+              `[Latest Tx Fetch Warning] Token: ${name}, using etokendb stats with cached price fields`,
+            )
+          }
+        }
+      }
+
+      const {
+        latestPrice: price24h,
+        priceChange24h: chronikPriceChange24h,
+        last24HoursXECAmount: chronik24hVolume,
+        latestBlockHeight,
+      } = compute24hStats(tx24h, effectiveTipHeight ?? chainTipHeight, null)
+
+      const rawLatestPrice =
+        shouldUseEtokenDbLatestPrice
+          ? etokenDbSummary!.latestPriceXec
+          : price24h > 0
+            ? price24h
+            : (latestTx[0]?.price || 0) || fallbackLatestPrice
+      const priceChange24h =
+        shouldUseEtokenDbPriceChange
+          ? etokenDbSummary!.priceChange24h
+          : tx24h.length > 0 || latestTx.length > 0
+            ? chronikPriceChange24h
+            : fallbackPriceChange24h
+      const last24HoursXECAmount = etokenDbSummary?.last24HoursXECAmount ?? chronik24hVolume
+
+      if (etokenDbSummary) {
+        last30DaysXECAmount = etokenDbSummary.last7DaysXECAmount
+        totalTransactions30d = etokenDbSummary.recent7dTradeCount
+        latestProcessedHeight =
+          typeof etokenDbSummary.lastTradeBlockHeight === "number"
+            ? etokenDbSummary.lastTradeBlockHeight
+            : latestProcessedHeight
+      } else {
+        if (cacheValid && typeof latestProcessedHeight === "number") {
+          const deltaTx = tx24h.filter(
+            (tx) => typeof tx.blockHeight === "number" && tx.blockHeight > latestProcessedHeight!,
+          )
+          const deltaVolume = deltaTx.reduce(
+            (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
+            0,
+          )
+          last30DaysXECAmount += deltaVolume
+          totalTransactions30d += deltaTx.length
+        }
+
+        if (!cacheValid) {
+          const totalTransactionsScanned = pagesRead * 200
+          console.log(`[Large Dataset Check] Token: ${name}, pages read: ${pagesRead}, total scanned: ${totalTransactionsScanned}`)
+
+          if (pagesRead >= 3) {
+            console.log(`[Large Dataset] Token ${name} required ${pagesRead} pages (${totalTransactionsScanned}+ transactions), marking as large dataset`)
             setLargeDatasetTokens((prev) => {
               if (prev.has(tokenId)) return prev
               const next = new Set(prev)
@@ -1120,25 +1130,185 @@ export default function Component() {
               return next
             })
 
-            const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
-            const customTokens = getCustomTokens()
+            if (!approvedLargeTokens.has(tokenId) && !approvedLargeTokensRef.current.has(tokenId)) {
+              console.log(`[Large Dataset] Token ${name} not approved, skipping 7D data fetch`)
+              const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
+              const customTokens = getCustomTokens()
 
-            if (!cancelledRef.current) {
-              applyTokenUpdate(tokenId, {
-                tokenId,
-                name,
-                latestPrice: rawLatestPrice,
-                priceChange24h,
-                last24HoursXECAmount,
-                last30DaysXECAmount: 0,
-                totalTransactions: 0,
-                totalXECAmount: 0,
-                official: tokenConfig?.official || false,
-                gratitude: tokenConfig?.gratitude || false,
-                community: tokenConfig?.community || false,
-                stablecoin: tokenConfig?.stablecoin || false,
-                apyTag: tokenConfig?.apyTag,
-                watchlist: customTokens.includes(tokenId),
+              if (!cancelledRef.current) {
+                applyTokenUpdate(tokenId, {
+                  tokenId,
+                  name,
+                  latestPrice: rawLatestPrice,
+                  priceChange24h,
+                  last24HoursXECAmount,
+                  last30DaysXECAmount: 0,
+                  totalTransactions: 0,
+                  totalXECAmount: 0,
+                  official: tokenConfig?.official || false,
+                  gratitude: tokenConfig?.gratitude || false,
+                  community: tokenConfig?.community || false,
+                  stablecoin: tokenConfig?.stablecoin || false,
+                  apyTag: tokenConfig?.apyTag,
+                  watchlist: customTokens.includes(tokenId),
+                })
+
+                setLoadedTokens((prev) => {
+                  if (prev.has(tokenId)) return prev
+                  const next = new Set(prev)
+                  next.add(tokenId)
+                  return next
+                })
+              }
+
+              loadingTokens.current.delete(tokenId)
+              const timeoutId = loadingTimeouts.current.get(tokenId)
+              if (timeoutId) {
+                clearTimeout(timeoutId)
+                loadingTimeouts.current.delete(tokenId)
+              }
+
+              return
+            }
+          }
+          try {
+            let tx7dCount = 0
+            let rawPagesRead = 0
+            const isUserApproved = approvedLargeTokens.has(tokenId) || approvedLargeTokensRef.current.has(tokenId)
+            console.log(`[7D Load Start] Token: ${name}, isUserApproved: ${isUserApproved}`)
+
+            const tx7d = await fetchAgoraTransactionsFromChronik(
+              tokenId,
+              (batch, meta) => {
+                tx7dCount += batch.length
+                rawPagesRead = meta.rawPage + 1
+                console.log(`[7D Batch] Token: ${name}, rawPage: ${rawPagesRead}, agora txs: ${batch.length}, total agora: ${tx7dCount}`)
+                // 只有在用户未批准时才检查原始页数限制
+                if (!isUserApproved && rawPagesRead >= 5) {
+                  console.log(`[7D Abort] Token: ${name}, exceeded 5 raw pages (${rawPagesRead}), stopping`)
+                  return true  // 返回 true 通知停止加载
+                }
+                return false
+              },
+              {
+                targetCount: 1400,
+                pageSize: 200,
+                maxBlocksBack: BLOCKS_PER_7_DAYS,
+                stopBelowHeight:
+                  typeof effectiveTipHeight === "number"
+                    ? Math.max(effectiveTipHeight - BLOCKS_PER_7_DAYS, 0)
+                    : undefined,
+                failOnError: true,
+              },
+              activeChronik
+            )
+
+            if (!isUserApproved && rawPagesRead >= 5) {
+              console.log(`[Large Dataset] Token ${name} exceeded 5 raw pages in 7D (actual: ${rawPagesRead} pages, ${tx7dCount} agora txs), marking as large dataset`)
+              setLargeDatasetTokens((prev) => {
+                if (prev.has(tokenId)) return prev
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+
+              const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
+              const customTokens = getCustomTokens()
+
+              if (!cancelledRef.current) {
+                applyTokenUpdate(tokenId, {
+                  tokenId,
+                  name,
+                  latestPrice: rawLatestPrice,
+                  priceChange24h,
+                  last24HoursXECAmount,
+                  last30DaysXECAmount: 0,
+                  totalTransactions: 0,
+                  totalXECAmount: 0,
+                  official: tokenConfig?.official || false,
+                  gratitude: tokenConfig?.gratitude || false,
+                  community: tokenConfig?.community || false,
+                  stablecoin: tokenConfig?.stablecoin || false,
+                  apyTag: tokenConfig?.apyTag,
+                  watchlist: customTokens.includes(tokenId),
+                })
+
+                setLoadedTokens((prev) => {
+                  if (prev.has(tokenId)) return prev
+                  const next = new Set(prev)
+                  next.add(tokenId)
+                  return next
+                })
+              }
+
+              loadingTokens.current.delete(tokenId)
+              const timeoutId = loadingTimeouts.current.get(tokenId)
+              if (timeoutId) {
+                clearTimeout(timeoutId)
+                loadingTimeouts.current.delete(tokenId)
+              }
+
+              return
+            }
+
+            const confirmed7d = tx7d.filter((tx) => typeof tx.blockHeight === "number")
+            last30DaysXECAmount = confirmed7d.reduce(
+              (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
+              0,
+            )
+            totalTransactions30d = confirmed7d.length
+            const maxHeight = confirmed7d.reduce<number | null>((max, tx) => {
+              if (typeof tx.blockHeight !== "number") return max
+              if (max === null) return tx.blockHeight
+              return Math.max(max, tx.blockHeight)
+            }, null)
+            if (typeof maxHeight === "number") {
+              latestProcessedHeight = maxHeight
+            }
+
+            // Clear retry count on success
+            retryCountRef.current.delete(retry7dKey)
+          } catch (err) {
+            console.error(`[7D Fetch Error] Token: ${name}, error:`, err)
+
+            const currentRetryCount = retryCountRef.current.get(retry7dKey) || 0
+
+            if (currentRetryCount < 1) {
+              // First retry
+              retryCountRef.current.set(retry7dKey, currentRetryCount + 1)
+              console.log(`[7D Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
+
+              setErrorTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+
+              setTimeout(() => {
+                if (
+                  !cancelledRef.current &&
+                  (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
+                ) {
+                  loadingTokens.current.delete(tokenId)
+                  const timeoutId = loadingTimeouts.current.get(tokenId)
+                  if (timeoutId) {
+                    clearTimeout(timeoutId)
+                    loadingTimeouts.current.delete(tokenId)
+                  }
+                  loadTokenStatsRef.current?.(tokenId, name, options)
+                }
+              }, 3000)
+
+              return
+            } else {
+              // Second failure - mark as failed
+              console.log(`[7D Failed] Token: ${name}, failed after retry`)
+              retryCountRef.current.delete(retry7dKey)
+
+              setFailedDataTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
               })
 
               setLoadedTokens((prev) => {
@@ -1147,92 +1317,15 @@ export default function Component() {
                 next.add(tokenId)
                 return next
               })
+
+              setErrorTokens((prev) => {
+                const next = new Set(prev)
+                next.add(tokenId)
+                return next
+              })
+
+              return
             }
-
-            loadingTokens.current.delete(tokenId)
-            const timeoutId = loadingTimeouts.current.get(tokenId)
-            if (timeoutId) {
-              clearTimeout(timeoutId)
-              loadingTimeouts.current.delete(tokenId)
-            }
-
-            return
-          }
-
-          const confirmed7d = tx7d.filter((tx) => typeof tx.blockHeight === "number")
-          last30DaysXECAmount = confirmed7d.reduce(
-            (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
-            0,
-          )
-          totalTransactions30d = confirmed7d.length
-          const maxHeight = confirmed7d.reduce<number | null>((max, tx) => {
-            if (typeof tx.blockHeight !== "number") return max
-            if (max === null) return tx.blockHeight
-            return Math.max(max, tx.blockHeight)
-          }, null)
-          if (typeof maxHeight === "number") {
-            latestProcessedHeight = maxHeight
-          }
-
-          // Clear retry count on success
-          retryCountRef.current.delete(retry7dKey)
-        } catch (err) {
-          console.error(`[7D Fetch Error] Token: ${name}, error:`, err)
-
-          const currentRetryCount = retryCountRef.current.get(retry7dKey) || 0
-
-          if (currentRetryCount < 1) {
-            // First retry
-            retryCountRef.current.set(retry7dKey, currentRetryCount + 1)
-            console.log(`[7D Retry] Token: ${name}, retry attempt: ${currentRetryCount + 1}`)
-
-            setErrorTokens((prev) => {
-              const next = new Set(prev)
-              next.add(tokenId)
-              return next
-            })
-
-            setTimeout(() => {
-              if (
-                !cancelledRef.current &&
-                (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
-              ) {
-                loadingTokens.current.delete(tokenId)
-                const timeoutId = loadingTimeouts.current.get(tokenId)
-                if (timeoutId) {
-                  clearTimeout(timeoutId)
-                  loadingTimeouts.current.delete(tokenId)
-                }
-                loadTokenStatsRef.current?.(tokenId, name, options)
-              }
-            }, 3000)
-
-            return
-          } else {
-            // Second failure - mark as failed
-            console.log(`[7D Failed] Token: ${name}, failed after retry`)
-            retryCountRef.current.delete(retry7dKey)
-
-            setFailedDataTokens((prev) => {
-              const next = new Set(prev)
-              next.add(tokenId)
-              return next
-            })
-
-            setLoadedTokens((prev) => {
-              if (prev.has(tokenId)) return prev
-              const next = new Set(prev)
-              next.add(tokenId)
-              return next
-            })
-
-            setErrorTokens((prev) => {
-              const next = new Set(prev)
-              next.add(tokenId)
-              return next
-            })
-
-            return
           }
         }
       }
@@ -1629,7 +1722,7 @@ export default function Component() {
   }, [refreshNonce, chronikClient, isChronikLoading])
 
   React.useEffect(() => {
-    const tokenIds = Object.values(tokens).map((t) => t.tokenId)
+    const tokenIds = data.map((t) => t.tokenId)
     const unsubscribe = watchAgoraTokens(tokenIds, (tokenId) => {
       if (cancelledRef.current) return
       if (filteredTokensRef.current.has(tokenId)) return
@@ -1639,13 +1732,31 @@ export default function Component() {
         Object.values(tokens).find((t) => t.tokenId === tokenId)?.name ||
         tokenId.substring(0, 6)
 
-      setLoadedTokens((prev) => {
-        const next = new Set(prev)
-        next.delete(tokenId)
-        return next
-      })
+      const scheduleReload = async () => {
+        const delayMs = (await isEtokenDbAvailable()) ? 2000 : 0
+        const existingTimeout = wsReloadTimeouts.current.get(tokenId)
+        if (existingTimeout) {
+          clearTimeout(existingTimeout)
+        }
 
-      loadTokenStatsRef.current?.(tokenId, name)
+        const timeoutId = setTimeout(() => {
+          wsReloadTimeouts.current.delete(tokenId)
+          if (cancelledRef.current) return
+          if (filteredTokensRef.current.has(tokenId)) return
+
+          setLoadedTokens((prev) => {
+            const next = new Set(prev)
+            next.delete(tokenId)
+            return next
+          })
+
+          loadTokenStatsRef.current?.(tokenId, name)
+        }, delayMs)
+
+        wsReloadTimeouts.current.set(tokenId, timeoutId)
+      }
+
+      void scheduleReload()
     })
 
     return () => {
