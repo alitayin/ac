@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { tokens } from "@/config/tokens"
 import { TOKEN_IDS } from "@/lib/constants"
 import { fetchTokenDetails } from "@/lib/chronik"
@@ -14,9 +15,51 @@ import { Agora } from "ecash-agora"
 import { useToast } from "@/hooks/use-toast"
 import { Plus } from "lucide-react"
 
+const ITEMS_PER_PAGE = 10
+
+const AllEtokensLoadingSkeleton: React.FC = () => {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between px-3">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-64" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <Skeleton className="h-4 w-20" />
+      </div>
+
+      <div className="px-3 text-sm text-muted-foreground">
+        Loading token list...
+      </div>
+
+      <div className="overflow-x-auto pb-1">
+        <div className="flex min-w-[640px] flex-col gap-1">
+          {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
+            <div
+              key={index}
+              className="flex items-center gap-4 rounded-lg border p-2"
+            >
+              <Skeleton className="size-4 flex-shrink-0 rounded-full" />
+              <div className="w-40 flex-shrink-0">
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+              <Skeleton className="hidden h-4 w-16 flex-shrink-0 sm:block" />
+              <Skeleton className="hidden h-4 w-20 flex-shrink-0 sm:block" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-8 w-24 flex-shrink-0" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const AllEtokensView: React.FC = () => {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
-  const ITEMS_PER_PAGE = 10
   const [allTokenIds, setAllTokenIds] = React.useState<string[]>([])
   const [activeTokens, setActiveTokens] = React.useState<any[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
@@ -98,15 +141,16 @@ const AllEtokensView: React.FC = () => {
 
     const loadTokenIds = async () => {
       try {
-        setIsLoading(false)
+        setIsLoading(true)
         setIsLoadingMoreTokens(true)
 
         const agora = new Agora(chronikClient as any)
         const tokenIds = await agora.offeredFungibleTokenIds()
 
         setAllTokenIds(tokenIds)
-        setIsLoadingMoreTokens(false)
       } catch (_error) {
+      } finally {
+        setIsLoading(false)
         setIsLoadingMoreTokens(false)
       }
     }
@@ -219,12 +263,14 @@ const AllEtokensView: React.FC = () => {
     loadCurrentPageTokens()
   }, [allTokenIds, currentPage, chronikClient])
 
-  if (isLoading || isChronikLoading || !chronikClient) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-muted-foreground">Loading token list...</div>
-      </div>
-    )
+  const isInitialLoading =
+    isChronikLoading ||
+    !chronikClient ||
+    isLoading ||
+    (isLoadingMoreTokens && allTokenIds.length === 0)
+
+  if (isInitialLoading) {
+    return <AllEtokensLoadingSkeleton />
   }
 
   const totalTokens = allTokenIds.length
@@ -449,4 +495,3 @@ const AllEtokensView: React.FC = () => {
 }
 
 export default AllEtokensView
-
