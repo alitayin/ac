@@ -2060,7 +2060,7 @@ export default function Component() {
                     : "hover:bg-accent/50 text-muted-foreground"
                 )}
               >
-                Listed Tokens
+                7D Active Tokens
               </button>
               <button
                 onClick={() => setViewMode("all-etokens")}

@@ -38,17 +38,6 @@ export const tokens: Record<string, TokenConfig> = {
       • Total Supply: 5,120,000 tokens (Fixed supply)`
     }
   },
-  SabongCash: {
-    name: "SabongCash",
-    symbol: "SAB",
-    tokenId: "6d4e8cb81f7415c25ae2a425e9c6e2fd2648755fe9169ca208c1e349eadd9db5", 
-    telegramUrl: "https://t.me/+1kSyU-gw4OFlMTM5",
-    feature: "Utility Token for remote Sabong",
-    description: {
-      title: "",
-      content: ""
-    }
-  },
   grp: {
     name: "GRP",
     symbol: "GRP", 
@@ -116,17 +105,6 @@ export const tokens: Record<string, TokenConfig> = {
     decimals: 2,
     youtubeUrl: "https://www.youtube.com/@ImsoXECited",
     youtubeHoverImage: "/imsoexcited.png",
-    description: {
-      title: "",
-      content: ""
-    }
-  },
-  hwt: {
-    name: "TridentbyHodlWars",
-    symbol: "HWT",
-    tokenId: "8814140e9d5dc359fe437d881c2c324b4e37c71bfd23226309940d742651e14b",
-    telegramUrl: "https://t.me/hodl_wars",
-    feature: "Hodl Wars Reward Token",
     description: {
       title: "",
       content: ""

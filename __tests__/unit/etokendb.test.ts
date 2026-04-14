@@ -172,7 +172,7 @@ describe("etokendb", () => {
     ])
 
     expect(fetch).toHaveBeenCalledWith(
-      "/api/etokendb/tokens?sort=recent1008VolumeSats&order=desc&pageSize=25&readyOnly=true",
+      "/api/etokendb/tokens?sort=recent1008VolumeSats&order=desc&pageSize=50&readyOnly=true",
       expect.any(Object),
     )
   })

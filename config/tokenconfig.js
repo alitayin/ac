@@ -8,9 +8,6 @@ const TOKENS = {
     'd1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb': {
         name: 'StarShard',
     },
-    '6d4e8cb81f7415c25ae2a425e9c6e2fd2648755fe9169ca208c1e349eadd9db5': {
-        name: 'SabongCash',
-    },
     'a9b65f7f8f69dd7e83babf6641517c467855f6aedc4349a77a35b8642f50495c': {
         name: 'EAGLE',
     },
