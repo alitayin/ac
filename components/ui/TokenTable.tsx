@@ -62,7 +62,11 @@ import { TOKEN_IDS, UI_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
 import { fetchBlockchainInfo, fetchTokenDetails, getTokenAmountFromToken, getTokenDecimalsFromDetails } from "@/lib/chronik"
 import { useChronik } from "@/lib/context/ChronikContext"
-import { fetchEtokenDbTokenSummary, isEtokenDbAvailable } from "@/lib/etokendb"
+import {
+  fetchEtokenDbTokenSummary,
+  fetchEtokenDbTopVolumeTokenIds,
+  isEtokenDbAvailable,
+} from "@/lib/etokendb"
 import {
   clearTokenCache,
   getCachedTokenData,
@@ -86,6 +90,35 @@ const FILTER_OPTION_STORAGE_KEY = "token_table_filter_option_v1"
 type TokenTableRow = Token
 
 type FilterOption = "all" | "no-trades-30d" | "low-volume-30d" | "low-trades-30d"
+
+const getFallbackTokenName = (tokenId: string): string => {
+  return `${tokenId.substring(0, 8)}...`
+}
+
+const createInitialTokenRow = (
+  tokenId: string,
+  name: string,
+  patch?: Partial<Token>,
+): Token => {
+  return {
+    id: tokenId,
+    tokenId,
+    name,
+    totalTransactions: 0,
+    last24HoursXECAmount: 0,
+    last30DaysXECAmount: 0,
+    priceChange24h: 0,
+    latestPrice: 0,
+    totalXECAmount: 0,
+    official: false,
+    gratitude: false,
+    community: false,
+    stablecoin: false,
+    apyTag: undefined,
+    watchlist: false,
+    ...patch,
+  }
+}
 
 const getStoredFilterOption = (): FilterOption => {
   if (typeof window === "undefined") return "all"
@@ -1619,76 +1652,88 @@ export default function Component() {
         }
 
         const customTokenIds = getCustomTokens()
-
-        const initialTokens = Object.values(tokens).map((tokenConfig: any) => ({
-          id: tokenConfig.tokenId,
-          tokenId: tokenConfig.tokenId,
-          name: tokenConfig.name,
-          totalTransactions: 0,
-          last24HoursXECAmount: 0,
-          last30DaysXECAmount: 0,
-          priceChange24h: 0,
-          latestPrice: 0,
-          totalXECAmount: 0,
-          official: tokenConfig?.official || false,
-          gratitude: tokenConfig?.gratitude || false,
-          community: tokenConfig?.community || false,
-          stablecoin: tokenConfig?.stablecoin || false,
-          apyTag: tokenConfig?.apyTag,
-          watchlist: customTokenIds.includes(tokenConfig.tokenId),
-        }))
+        const initialTokens = Object.values(tokens).map((tokenConfig: any) =>
+          createInitialTokenRow(tokenConfig.tokenId, tokenConfig.name, {
+            official: tokenConfig?.official || false,
+            gratitude: tokenConfig?.gratitude || false,
+            community: tokenConfig?.community || false,
+            stablecoin: tokenConfig?.stablecoin || false,
+            apyTag: tokenConfig?.apyTag,
+            watchlist: customTokenIds.includes(tokenConfig.tokenId),
+          }),
+        )
+        const knownTokenIds = new Set(initialTokens.map((token) => token.tokenId))
 
         for (const customTokenId of customTokenIds) {
-          if (initialTokens.some(t => t.tokenId === customTokenId)) {
+          if (knownTokenIds.has(customTokenId)) {
             continue
           }
           
           try {
             const tokenInfo = await fetchTokenDetails(customTokenId, chronikClient)
             
-            const tokenName = tokenInfo?.genesisInfo?.tokenName || customTokenId.substring(0, 6)
+            const tokenName =
+              tokenInfo?.genesisInfo?.tokenName || getFallbackTokenName(customTokenId)
             
-            initialTokens.push({
-              id: customTokenId,
-              tokenId: customTokenId,
-              name: tokenName,
-              totalTransactions: 0,
-              last24HoursXECAmount: 0,
-              last30DaysXECAmount: 0,
-              priceChange24h: 0,
-              latestPrice: 0,
-              totalXECAmount: 0,
-              official: false,
-              gratitude: false,
-              community: false,
-              stablecoin: false,
-              apyTag: undefined,
+            initialTokens.push(createInitialTokenRow(customTokenId, tokenName, {
               watchlist: true,
-            })
+            }))
           } catch (_error) {
-            initialTokens.push({
-              id: customTokenId,
-              tokenId: customTokenId,
-              name: customTokenId.substring(0, 6),
-              totalTransactions: 0,
-              last24HoursXECAmount: 0,
-              last30DaysXECAmount: 0,
-              priceChange24h: 0,
-              latestPrice: 0,
-              totalXECAmount: 0,
-              official: false,
-              gratitude: false,
-              community: false,
-              stablecoin: false,
-              apyTag: undefined,
+            initialTokens.push(createInitialTokenRow(customTokenId, getFallbackTokenName(customTokenId), {
               watchlist: true,
+            }))
+          }
+
+          knownTokenIds.add(customTokenId)
+        }
+
+        let supplementalTokenIds: string[] = []
+        if (await isEtokenDbAvailable()) {
+          try {
+            supplementalTokenIds = (await fetchEtokenDbTopVolumeTokenIds()).filter(
+              (tokenId) => !knownTokenIds.has(tokenId),
+            )
+
+            supplementalTokenIds.forEach((tokenId) => {
+              knownTokenIds.add(tokenId)
+              initialTokens.push(
+                createInitialTokenRow(tokenId, getFallbackTokenName(tokenId)),
+              )
             })
+          } catch (err) {
+            console.error("[etokendb token list] Failed to fetch top-volume tokens:", err)
           }
         }
 
         if (isCancelled) return
         setData(initialTokens)
         setIsLoading(false)
+
+        if (supplementalTokenIds.length > 0) {
+          void (async () => {
+            let supplementalIndex = 0
+            const hydrateNextName = async () => {
+              while (supplementalIndex < supplementalTokenIds.length && !isCancelled) {
+                const currentIndex = supplementalIndex++
+                const tokenId = supplementalTokenIds[currentIndex]
+
+                try {
+                  const tokenInfo = await fetchTokenDetails(tokenId, chronikClient)
+                  const tokenName =
+                    tokenInfo?.genesisInfo?.tokenName || getFallbackTokenName(tokenId)
+
+                  if (!isCancelled) {
+                    applyTokenUpdate(tokenId, {
+                      name: tokenName,
+                    })
+                  }
+                } catch (_error) {}
+              }
+            }
+
+            await Promise.all([hydrateNextName(), hydrateNextName(), hydrateNextName()])
+          })()
+        }
 
         // Load tokens with concurrency limit of 2
         const CONCURRENCY_LIMIT = 2

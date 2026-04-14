@@ -5,13 +5,39 @@ import { resolveTokenDecimals } from "@/lib/chronik"
 export const ETOKENDB_UPSTREAM_BASE_URL = "https://etokendb.alitayin.com/api"
 
 const ETOKENDB_API_BASE_PATH = "/api/etokendb"
+const ETOKENDB_TOKENS_API_BASE_PATH = `${ETOKENDB_API_BASE_PATH}/tokens`
 const STATUS_CACHE_TTL_MS = 60_000
 const STATUS_TIMEOUT_MS = 4_000
 const TOKEN_TIMEOUT_MS = 8_000
+const TOKEN_LIST_TIMEOUT_MS = 8_000
 const TOKEN_ID_PATTERN = /^[a-f0-9]{64}$/i
 const NANOSATS_PER_XEC = 100_000_000_000
+const ETOKENDB_TOP_VOLUME_PAGE_SIZE = 25
 
 type NumericLike = number | string | null | undefined
+
+export type EtokenDbTokenSummaryRecord = {
+  tokenId?: string
+  isActive?: boolean
+  isReady?: boolean
+  bootstrapCohort?: boolean
+  totalTradeCount?: NumericLike
+  totalVolumeSats?: NumericLike
+  latestPriceNanosatsPerAtom?: NumericLike
+  recent144TradeCount?: NumericLike
+  recent144VolumeSats?: NumericLike
+  recent144PriceChangeBps?: NumericLike
+  recent144PriceChangePct?: NumericLike
+  recent1008TradeCount?: NumericLike
+  recent1008VolumeSats?: NumericLike
+  recent4320TradeCount?: NumericLike
+  recent4320VolumeSats?: NumericLike
+  lastTradeBlockHeight?: NumericLike
+  lastTradeBlockTimestamp?: NumericLike
+  lastSyncedAt?: NumericLike
+  lastWsEventAt?: NumericLike
+  [key: string]: unknown
+}
 
 export type EtokenDbStatusPayload = {
   ok?: boolean
@@ -27,20 +53,19 @@ export type EtokenDbStatusPayload = {
 export type EtokenDbTokenPayload = {
   ok?: boolean
   data?: {
-    summary?: {
-      tokenId?: string
-      latestPriceNanosatsPerAtom?: NumericLike
-      recent144TradeCount?: NumericLike
-      recent144VolumeSats?: NumericLike
-      recent144PriceChangeBps?: NumericLike
-      recent144PriceChangePct?: NumericLike
-      recent1008TradeCount?: NumericLike
-      recent1008VolumeSats?: NumericLike
-      lastTradeBlockHeight?: NumericLike
-      lastTradeBlockTimestamp?: NumericLike
-      lastSyncedAt?: NumericLike
-      [key: string]: unknown
-    } | null
+    summary?: EtokenDbTokenSummaryRecord | null
+    [key: string]: unknown
+  }
+  error?: string
+}
+
+export type EtokenDbTokenListPayload = {
+  ok?: boolean
+  data?: {
+    page?: NumericLike
+    pageSize?: NumericLike
+    total?: NumericLike
+    items?: (EtokenDbTokenSummaryRecord | null)[] | null
     [key: string]: unknown
   }
   error?: string
@@ -296,4 +321,46 @@ export const fetchEtokenDbTokenSummary = async (
       : await resolveTokenDecimals(tokenId, options?.chronikClient)
 
   return mapEtokenDbTokenSummary(payload, { decimals })
+}
+
+export const fetchEtokenDbTopVolumeTokenIds = async (
+  options?: { pageSize?: number },
+): Promise<string[]> => {
+  const pageSize = Math.max(
+    1,
+    Math.trunc(options?.pageSize ?? ETOKENDB_TOP_VOLUME_PAGE_SIZE),
+  )
+  const params = new URLSearchParams({
+    sort: "recent1008VolumeSats",
+    order: "desc",
+    pageSize: `${pageSize}`,
+    readyOnly: "true",
+  })
+
+  const payload = await fetchJsonWithTimeout<EtokenDbTokenListPayload>(
+    `${ETOKENDB_TOKENS_API_BASE_PATH}?${params.toString()}`,
+    TOKEN_LIST_TIMEOUT_MS,
+  )
+
+  if (!payload?.ok || !Array.isArray(payload.data?.items)) {
+    throw new Error("Invalid etokendb token list payload")
+  }
+
+  const seen = new Set<string>()
+  const tokenIds: string[] = []
+
+  payload.data.items.forEach((item) => {
+    const tokenId = item?.tokenId
+    if (typeof tokenId !== "string" || !isValidEtokenDbTokenId(tokenId)) {
+      return
+    }
+    if (seen.has(tokenId)) {
+      return
+    }
+
+    seen.add(tokenId)
+    tokenIds.push(tokenId)
+  })
+
+  return tokenIds
 }

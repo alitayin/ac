@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  fetchEtokenDbTopVolumeTokenIds,
   fetchEtokenDbTokenSummary,
   getEtokenDbPriceChange24h,
   isEtokenDbAvailable,
@@ -136,5 +137,43 @@ describe("etokendb", () => {
       hasPriceChange24h: true,
       lastTradeBlockHeight: 10,
     })
+  })
+
+  it("fetches top-volume token ids through the local proxy and deduplicates them", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            items: [
+              {
+                tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+              },
+              {
+                tokenId: "0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0",
+              },
+              {
+                tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+              },
+              {
+                tokenId: "invalid",
+              },
+            ],
+          },
+        }),
+      }),
+    )
+
+    await expect(fetchEtokenDbTopVolumeTokenIds()).resolves.toEqual([
+      "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+      "0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0",
+    ])
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/etokendb/tokens?sort=recent1008VolumeSats&order=desc&pageSize=25&readyOnly=true",
+      expect.any(Object),
+    )
   })
 })
