@@ -21,34 +21,6 @@ interface TokenConfig {
 }
 
 export const tokens: Record<string, TokenConfig> = {
-  starcrystal: {
-    name: "StarCrystal",
-    symbol: "SC", 
-    tokenId: "ac31bb0bccf33de1683efce4da64f1cb6d8e8d6e098bc01c51d5864deb0e783f",
-    telegramUrl: "https://t.me/agoraui",
-    feature: "Star Crystal",
-    description: {
-      title: "StarCrystal Token Information",
-      content: `StarCrystal, with a total supply of 5,120,000 tokens, is the official eToken of agora.cash, serving as fuel for activities on Agora.cash and participating in revenue sharing and governance.
-
-      Benefits of Holding Star Crystal:
-      • Listing Rights: Star Crystal is required to list your eTokens
-
-      Current Status:
-      • Total Supply: 5,120,000 tokens (Fixed supply)`
-    }
-  },
-  grp: {
-    name: "GRP",
-    symbol: "GRP", 
-    tokenId: "fb4233e8a568993976ed38a81c2671587c5ad09552dedefa78760deed6ff87aa",
-    telegramUrl: "https://t.me/Grumpy_eToken", 
-    feature: "Community eToken",
-    description: {
-      title: "",
-      content: ""
-    }
-  },
   xecx: {
     name: "XECX",
     symbol: "XECX",
@@ -108,17 +80,6 @@ export const tokens: Record<string, TokenConfig> = {
     description: {
       title: "",
       content: ""
-    }
-  },
-  bve: {
-    name: "Blockchain Ventures Equity",
-    symbol: "BVE",
-    tokenId: "96704added2310ba79cddecc7e192c56a8aa29542b7187539fc0327acddc8ac6",
-    telegramUrl: "https://blockchain.ventures/",
-    feature: "Blockchain Ventures Equity token",
-    description: {
-      title: "About Blockchain Ventures Equity (BVE)",
-      content: `BVE is the Blockchain Ventures Equity token, offering equity-style exposure to Blockchain Ventures Corp. and its portfolio (e.g., eCash initiatives and the upcoming Blockchain Poker relaunch). See details at blockchain.ventures.`
     }
   },
 };
