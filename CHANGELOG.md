@@ -6,6 +6,18 @@
 
 ## 2026-04-15
 
+### 🎉 v4.0.1 发布
+
+**主要改动：**
+- 从固定列表中移除 SabongCash 和 TridentbyHodlWars
+- 将按钮标签从 "Listed Tokens" 改为 "7D Active Tokens"
+
+**验证：**
+- ✅ `npx vitest run __tests__/unit/etokendb.test.ts` 通过
+- ✅ `pnpm build` 通过，无错误
+
+---
+
 ### 🎉 v4.0.0 发布
 
 **主要改动：**
