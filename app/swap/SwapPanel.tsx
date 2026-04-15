@@ -1208,6 +1208,19 @@ export function SwapPanel() {
                     onConfirm={createOrder}
                   />
 
+                  <Accordion type="single" collapsible className="w-full rounded-xl border px-4">
+                    <AccordionItem value="buy-tip" className="border-b-0">
+                      <AccordionTrigger className="py-3 text-left text-sm text-muted-foreground hover:no-underline">
+                        Do you know what&apos;s special about Agora.cash Buy?
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-3 text-sm text-muted-foreground">
+                        Agora.cash Buy supports automated trading, allowing you to place a buy order at any
+                        price. You only need to keep your browser online, and when a matching sell order
+                        appears, it can complete automatically.
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+
                   {tokenPrice > marketPrice && tokenPrice > 0 && marketPrice > 0 && receiveAmount && parseFloat(receiveAmount) > 0 && (
                     <div className="mt-2 space-y-1 text-sm">
                       <Accordion type="single" collapsible className="w-full">
@@ -1433,4 +1446,3 @@ export function SwapPanel() {
     </>
   );
 }
-
