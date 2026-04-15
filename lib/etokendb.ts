@@ -76,6 +76,7 @@ export type EtokenDbMappedTokenSummary = {
   tokenDecimals: number
   recent24hTradeCount: number
   recent7dTradeCount: number
+  recent30dTradeCount: number
   last24HoursXECAmount: number
   last7DaysXECAmount: number
   last30DaysVolumeXECAmount: number
@@ -93,6 +94,7 @@ export type EtokenDbTopVolumeToken = {
   tokenId: string
   recent24hTradeCount: number
   recent7dTradeCount: number
+  recent30dTradeCount: number
   last24HoursXECAmount: number
   last7DaysXECAmount: number
   last30DaysVolumeXECAmount: number
@@ -319,6 +321,7 @@ export const mapEtokenDbTokenSummary = (
     tokenDecimals,
     recent24hTradeCount: coerceCount(summary.recent144TradeCount),
     recent7dTradeCount: coerceCount(summary.recent1008TradeCount),
+    recent30dTradeCount: coerceCount(summary.recent4320TradeCount),
     last24HoursXECAmount: satsToXec(summary.recent144VolumeSats),
     last7DaysXECAmount: satsToXec(summary.recent1008VolumeSats),
     last30DaysVolumeXECAmount: satsToXec(summary.recent4320VolumeSats),
@@ -416,6 +419,7 @@ export const fetchEtokenDbTopVolumeTokens = async (
       tokenId,
       recent24hTradeCount: coerceCount(item?.recent144TradeCount),
       recent7dTradeCount: coerceCount(item?.recent1008TradeCount),
+      recent30dTradeCount: coerceCount(item?.recent4320TradeCount),
       last24HoursXECAmount: satsToXec(item?.recent144VolumeSats),
       last7DaysXECAmount: satsToXec(item?.recent1008VolumeSats),
       last30DaysVolumeXECAmount: satsToXec(item?.recent4320VolumeSats),

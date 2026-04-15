@@ -49,6 +49,7 @@ import { useXECPrice } from "@/lib/price";
 import appVersion from "@/version.json";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
 import { watchOrderTokens } from "@/lib/swap-ws";
+import TelegramAgoraBotDialog from "@/components/ui/TelegramAgoraBotDialog";
 import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerInner";
 
 interface HeaderProps {
@@ -457,12 +458,14 @@ export default function Header({
                     About
                   </Link>
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <TelegramAgoraBotDialog />
             
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-full">
                   <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                   <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                   <span className="sr-only">Theme</span>

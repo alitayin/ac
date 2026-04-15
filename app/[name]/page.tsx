@@ -42,25 +42,16 @@ import {
 import { formatNumber } from "@/lib/formatters"
 import { getTokenSupply } from "@/lib/tokenSupply"
 import { TOKENS } from "@/config/tokenconfig";
-import { Transaction } from "@/lib/types"
-import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
-import { fetchBlockchainInfo, fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
 import { TOKEN_IDS, PRICE_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraOrderBook } from "@/lib/agora-orders"
 import { isEtokenDbAvailable } from "@/lib/etokendb"
 import {
-  applyStarShardFloor,
-  getCachedTokenData,
   getCachedTokenSummary,
-  setCachedTokenData,
-  setCachedTokenSummary,
-  CACHE_TTL_MS,
   SUMMARY_CACHE_TTL_MS,
-  BLOCKS_PER_MONTH,
-  BLOCKS_PER_DAY,
-  compute24hStats,
 } from "@/lib/token-stats"
 import { watchAgoraTokens } from "@/lib/agora-ws"
+import { loadTokenPageStats } from "@/lib/token-page-stats"
 
 interface TokenData {
   tokenId: string;
@@ -214,9 +205,14 @@ export default function TokenPage() {
   const isCustomToken = !matchedToken && isValidTokenId;
   const hasValidRoute = Boolean(matchedToken || isValidTokenId);
 
-  const tokenDecimals = isCustomToken && chronikTokenInfo 
-    ? getTokenDecimalsFromDetails(chronikTokenInfo, 0)
-    : (matchedToken as any)?.decimals ?? 0;
+  const configuredTokenDecimals =
+    typeof (matchedToken as any)?.decimals === "number" ? (matchedToken as any).decimals : undefined
+  const resolvedChronikTokenDecimals =
+    isCustomToken && chronikTokenInfo
+      ? getTokenDecimalsFromDetails(chronikTokenInfo, 0)
+      : undefined
+  const tokenDecimals = resolvedChronikTokenDecimals ?? configuredTokenDecimals ?? 0
+  const knownTokenDecimals = resolvedChronikTokenDecimals ?? configuredTokenDecimals
 
   let tokenData: TokenData;
 
@@ -300,7 +296,11 @@ export default function TokenPage() {
     }
   }
 
-  const loadTokenStats = async (tokenId: string, name: string) => {
+  const loadTokenStats = async (
+    tokenId: string,
+    name: string,
+    options?: { etokenDbAvailable?: boolean },
+  ) => {
     if (isLoadingStats.current) {
       return
     }
@@ -308,134 +308,18 @@ export default function TokenPage() {
     isLoadingStats.current = true
     
     try {
-      const now = Date.now()
-      const etokenDbAvailable = await isEtokenDbAvailable()
-      const cached = getCachedTokenData(tokenId)
-      const cacheValid = !!cached && now - cached.computedAt < CACHE_TTL_MS
-
-      let effectiveTipHeight = chainTipHeight
-      if (typeof effectiveTipHeight !== "number") {
-        try {
-          const info = await fetchBlockchainInfo()
-          if (typeof info?.tipHeight === "number") {
-            effectiveTipHeight = info.tipHeight
-            setChainTipHeight(info.tipHeight)
-          }
-        } catch {
-        }
-      }
-
-      let last30DaysXECAmount = cacheValid ? cached!.last30DaysXECAmount : 0
-      let totalTransactions30d = cacheValid ? cached!.totalTransactions : 0
-      let latestProcessedHeight: number | null =
-        typeof cached?.latestProcessedHeight === "number" ? cached.latestProcessedHeight : null
-      let fetchError = false
-      const tx24h: Transaction[] = []
-
-      try {
-        await fetchAgoraTransactionsFromChronik(
-          tokenId,
-          (batch) => {
-            tx24h.push(...batch)
-          },
-          {
-            targetCount: 400,
-            pageSize: 200,
-            maxBlocksBack: BLOCKS_PER_DAY,
-            stopBelowHeight:
-              typeof effectiveTipHeight === "number"
-                ? Math.max(effectiveTipHeight - BLOCKS_PER_DAY, 0)
-                : undefined,
-            failOnError: true,
-          },
-        )
-      } catch (err) {
-        fetchError = true
-      }
-
-      const {
-        latestPrice: rawLatestPrice,
-        priceChange24h,
-        last24HoursXECAmount,
-        latestBlockHeight,
-      } = compute24hStats(tx24h, effectiveTipHeight ?? chainTipHeight, null)
-
-      if (cacheValid && typeof latestProcessedHeight === "number") {
-        const deltaTx = tx24h.filter(
-          (tx) => typeof tx.blockHeight === "number" && tx.blockHeight > latestProcessedHeight!,
-        )
-        const deltaVolume = deltaTx.reduce(
-          (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
-          0,
-        )
-        last30DaysXECAmount += deltaVolume
-        totalTransactions30d += deltaTx.length
-      }
-
-      if (!cacheValid) {
-        try {
-          const tx30d = await fetchAgoraTransactionsFromChronik(tokenId, undefined, {
-            targetCount: 800,
-            pageSize: 200,
-            maxBlocksBack: BLOCKS_PER_MONTH,
-            stopBelowHeight:
-              typeof effectiveTipHeight === "number"
-                ? Math.max(effectiveTipHeight - BLOCKS_PER_MONTH, 0)
-                : undefined,
-            failOnError: false,
-          })
-          const confirmed30d = tx30d.filter((tx) => typeof tx.blockHeight === "number")
-          last30DaysXECAmount = confirmed30d.reduce(
-            (sum, tx) => sum + (tx.price || 0) * (tx.amount || 0),
-            0,
-          )
-          totalTransactions30d = confirmed30d.length
-          const maxHeight = confirmed30d.reduce<number | null>((max, tx) => {
-            if (typeof tx.blockHeight !== "number") return max
-            if (max === null) return tx.blockHeight
-            return Math.max(max, tx.blockHeight)
-          }, null)
-          if (typeof maxHeight === "number") {
-            latestProcessedHeight = maxHeight
-          }
-        } catch {
-        }
-      }
-
-      if (typeof latestBlockHeight === "number") {
-        latestProcessedHeight =
-          typeof latestProcessedHeight === "number"
-            ? Math.max(latestProcessedHeight, latestBlockHeight)
-            : latestBlockHeight
-      }
-
-      const latestPrice = applyStarShardFloor(rawLatestPrice, tokenId)
-      const finalData = {
-        latestPrice,
-        priceChange24h,
-        last24HoursXECAmount,
-        last30DaysXECAmount,
-        totalTransactions: totalTransactions30d,
-        totalXECAmount: last30DaysXECAmount,
+      const etokenDbAvailable = options?.etokenDbAvailable ?? (await isEtokenDbAvailable())
+      const result = await loadTokenPageStats({
         tokenId,
         tokenName: name,
-      }
-      setStats(finalData)
+        chainTipHeight,
+        etokenDbAvailable,
+        tokenDecimals: knownTokenDecimals,
+      })
 
-      if (!fetchError) {
-        setCachedTokenData(tokenId, {
-          computedAt: Date.now(),
-          latestProcessedHeight: latestProcessedHeight || 0,
-          last30DaysXECAmount,
-          totalTransactions: totalTransactions30d,
-        })
-
-        if (!etokenDbAvailable) {
-          setCachedTokenSummary(tokenId, {
-            computedAt: Date.now(),
-            data: finalData,
-          })
-        }
+      setStats(result.stats)
+      if (typeof result.nextChainTipHeight === "number") {
+        setChainTipHeight(result.nextChainTipHeight)
       }
     } finally {
       isLoadingStats.current = false
@@ -454,9 +338,6 @@ export default function TokenPage() {
       }
 
       try {
-        const info = await fetchBlockchainInfo().catch(() => null)
-        setChainTipHeight(typeof info?.tipHeight === "number" ? info.tipHeight : null)
-
         const etokenDbAvailable = await isEtokenDbAvailable()
         const cachedSummary = getCachedTokenSummary(tokenData.tokenId)
         const summaryValid =
@@ -470,7 +351,9 @@ export default function TokenPage() {
         await Promise.all([
           (async () => {
             if (!summaryValid) {
-              await loadTokenStats(tokenData.tokenId, tokenData.name)
+              await loadTokenStats(tokenData.tokenId, tokenData.name, {
+                etokenDbAvailable,
+              })
             }
           })(),
           (async () => {
