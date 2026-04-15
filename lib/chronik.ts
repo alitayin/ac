@@ -63,13 +63,24 @@ export const getTokenAmountFromToken = (token: any): bigint => {
 }
 
 const TOKEN_DETAILS_CACHE_KEY = 'token_details_cache'
+const tokenDetailsMemoryCache = new Map<string, any>()
 
 export const getCachedTokenDetails = (tokenId: string): any | null => {
+  const memoryCached = tokenDetailsMemoryCache.get(tokenId)
+  if (memoryCached) {
+    return memoryCached
+  }
+
   try {
     const cache = storageManager.get<Record<string, any>>(TOKEN_DETAILS_CACHE_KEY)
     if (!cache) return null
 
-    return cache[tokenId] || null
+    const cached = cache[tokenId] || null
+    if (cached) {
+      tokenDetailsMemoryCache.set(tokenId, cached)
+    }
+
+    return cached
   } catch (error) {
     console.error('Failed to read token detail cache:', error)
     return null
@@ -77,6 +88,8 @@ export const getCachedTokenDetails = (tokenId: string): any | null => {
 }
 
 const setCachedTokenDetails = (tokenId: string, data: any) => {
+  tokenDetailsMemoryCache.set(tokenId, data)
+
   try {
     const cache = storageManager.get<Record<string, any>>(TOKEN_DETAILS_CACHE_KEY) || {}
 
@@ -90,6 +103,15 @@ const setCachedTokenDetails = (tokenId: string, data: any) => {
 
 // In-memory pending requests map for deduplication
 const pendingRequests = new Map<string, Promise<any>>()
+
+export const clearTokenDetailsCache = () => {
+  tokenDetailsMemoryCache.clear()
+  pendingRequests.clear()
+
+  try {
+    storageManager.remove(TOKEN_DETAILS_CACHE_KEY as any)
+  } catch (_error) {}
+}
 
 export const fetchTokenDetails = async (tokenId: string, client?: ChronikClient) => {
   if (!tokenId) {

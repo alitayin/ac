@@ -60,7 +60,13 @@ import { formatNumber, formatPrice } from "@/lib/formatters"
 import { Token, SortType, Transaction } from "@/lib/types"
 import { UI_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
-import { fetchBlockchainInfo, fetchTokenDetails, getTokenAmountFromToken, getTokenDecimalsFromDetails } from "@/lib/chronik"
+import {
+  fetchBlockchainInfo,
+  fetchTokenDetails,
+  getCachedTokenDetails,
+  getTokenAmountFromToken,
+  getTokenDecimalsFromDetails,
+} from "@/lib/chronik"
 import { useChronik } from "@/lib/context/ChronikContext"
 import {
   fetchEtokenDbTopVolumeTokens,
@@ -138,6 +144,8 @@ const createInitialTokenRow = (
     latestPrice: 0,
     totalXECAmount: 0,
     has30DayVolume: false,
+    hasInitialMarketData: false,
+    hasResolvedTokenInfo: false,
     official: false,
     gratitude: false,
     community: false,
@@ -146,6 +154,21 @@ const createInitialTokenRow = (
     watchlist: false,
     ...patch,
   }
+}
+
+const getTokenDisplayFallbackName = (
+  tokenId: string,
+  fallbackName?: string,
+): string => {
+  if (typeof fallbackName === "string" && fallbackName.trim().length > 0) {
+    return fallbackName.trim()
+  }
+
+  if (tokenId.length <= 12) {
+    return tokenId
+  }
+
+  return `${tokenId.slice(0, 6)}...${tokenId.slice(-4)}`
 }
 
 const getConfiguredTokenPatch = (
@@ -243,6 +266,12 @@ export default function Component() {
   const approvedLargeTokensRef = React.useRef<Set<string>>(new Set())
   const [failedDataTokens, setFailedDataTokens] = React.useState<Set<string>>(new Set())
   const retryCountRef = React.useRef<Map<string, number>>(new Map())
+  const hasRowMarketData = React.useCallback(
+    (token: TokenTableRow) => {
+      return loadedTokens.has(token.tokenId) || token.hasInitialMarketData === true
+    },
+    [loadedTokens],
+  )
 
   React.useEffect(() => {
     if (!searchExpanded) return
@@ -355,7 +384,7 @@ export default function Component() {
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => {
-        const isRowLoading = isLoading || !loadedTokens.has(row.original.tokenId)
+        const isRowLoading = isLoading || !hasRowMarketData(row.original)
         const isIconLoaded = loadedIcons.has(row.original.tokenId)
         const isIconFailed = failedIcons.has(row.original.tokenId)
 
@@ -546,7 +575,8 @@ export default function Component() {
       ),
       cell: ({ row }) => {
         const tokenIdForLoad = row.original.tokenId
-        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
+        const hasUsableData = hasRowMarketData(row.original)
+        const isRowLoading = isLoading || !hasUsableData
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -567,6 +597,10 @@ export default function Component() {
           )
         }
 
+        if (row.original.hasInitialMarketData && row.original.hasResolvedTokenInfo === false) {
+          return <div className="text-left text-muted-foreground">Loading</div>
+        }
+
         const price = row.original.latestPrice || 0
         const usdPrice = price * (xecPrice || 0)
         return (
@@ -581,7 +615,7 @@ export default function Component() {
       header: "24h Change",
       cell: ({ row }) => {
         const tokenIdForLoad = row.original.tokenId
-        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
+        const isRowLoading = isLoading || !hasRowMarketData(row.original)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -616,7 +650,7 @@ export default function Component() {
       header: "24h Volume",
       cell: ({ row }) => {
         const tokenIdForLoad = row.original.tokenId
-        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
+        const isRowLoading = isLoading || !hasRowMarketData(row.original)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -649,7 +683,7 @@ export default function Component() {
       header: "7D Volume",
       cell: ({ row }) => {
         const tokenIdForLoad = row.original.tokenId
-        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
+        const isRowLoading = isLoading || !hasRowMarketData(row.original)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -700,7 +734,7 @@ export default function Component() {
       header: "30D Volume",
       cell: ({ row }) => {
         const tokenIdForLoad = row.original.tokenId
-        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
+        const isRowLoading = isLoading || !hasRowMarketData(row.original)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">Loading</div>
         }
@@ -737,7 +771,7 @@ export default function Component() {
       header: "Sales in 7D",
       cell: ({ row }) => {
         const tokenIdForLoad = row.original.tokenId
-        const isRowLoading = isLoading || !loadedTokens.has(tokenIdForLoad)
+        const isRowLoading = isLoading || !hasRowMarketData(row.original)
         if (isRowLoading) {
           return <div className="text-left text-muted-foreground">loading</div>
         }
@@ -1703,6 +1737,7 @@ export default function Component() {
                   ? {
                       ...t,
                       name,
+                      hasResolvedTokenInfo: true,
                       watchlist: true,
                     }
                   : t,
@@ -1710,6 +1745,7 @@ export default function Component() {
             : [
                 ...prev,
                 createInitialTokenRow(tokenId, name, {
+                  hasResolvedTokenInfo: true,
                   watchlist: true,
                 }),
               ],
@@ -1756,9 +1792,12 @@ export default function Component() {
         }
 
         const customTokenIds = getCustomTokens()
+        const configuredTokensById = new Map(
+          Object.values(tokens).map((tokenConfig) => [tokenConfig.tokenId, tokenConfig]),
+        )
         const bootstrapCandidateMap = new Map<string, BootstrapTokenCandidate>()
         const bootstrapCandidateOrder: string[] = []
-        const preloadedTokenIds = new Set<string>()
+        const deferredWatchlistTokenIds: string[] = []
         const upsertBootstrapCandidate = (candidate: BootstrapTokenCandidate) => {
           const existing = bootstrapCandidateMap.get(candidate.tokenId)
           if (existing) {
@@ -1788,7 +1827,7 @@ export default function Component() {
               shouldUseConfiguredFallback = false
 
               etokenDbTokens.forEach((token) => {
-                const tokenConfig = Object.values(tokens).find((t) => t.tokenId === token.tokenId)
+                const tokenConfig = configuredTokensById.get(token.tokenId)
                 upsertBootstrapCandidate({
                   tokenId: token.tokenId,
                   fallbackName: tokenConfig?.name,
@@ -1820,98 +1859,181 @@ export default function Component() {
           })
         }
 
-        customTokenIds.forEach((customTokenId) => {
-          upsertBootstrapCandidate({
-            tokenId: customTokenId,
-            patch: {
-              watchlist: true,
-            },
+        if (shouldUseConfiguredFallback) {
+          customTokenIds.forEach((customTokenId) => {
+            upsertBootstrapCandidate({
+              tokenId: customTokenId,
+              patch: {
+                watchlist: true,
+              },
+            })
           })
-        })
+        } else {
+          customTokenIds.forEach((customTokenId) => {
+            if (bootstrapCandidateMap.has(customTokenId)) {
+              upsertBootstrapCandidate({
+                tokenId: customTokenId,
+                patch: {
+                  watchlist: true,
+                },
+              })
+              return
+            }
+
+            deferredWatchlistTokenIds.push(customTokenId)
+          })
+        }
 
         const bootstrapCandidates = bootstrapCandidateOrder
           .map((tokenId) => bootstrapCandidateMap.get(tokenId) || null)
           .filter((candidate): candidate is BootstrapTokenCandidate => candidate !== null)
 
-        const hydratedTokens: Array<Token | null> = new Array(
-          bootstrapCandidates.length,
-        ).fill(null)
-        let candidateIndex = 0
-        const hydrateNextCandidate = async () => {
-          while (candidateIndex < bootstrapCandidates.length && !isCancelled) {
-            const currentIndex = candidateIndex++
-            const candidate = bootstrapCandidates[currentIndex]
+        const initialTokens = bootstrapCandidates.map((candidate) => {
+          const tokenConfig = configuredTokensById.get(candidate.tokenId)
+          const cachedTokenInfo = getCachedTokenDetails(candidate.tokenId)
+          const fallbackDecimals =
+            typeof tokenConfig?.decimals === "number" ? tokenConfig.decimals : 0
+          const tokenDecimals = getTokenDecimalsFromDetails(cachedTokenInfo, fallbackDecimals)
+          const hasResolvedTokenInfo =
+            Boolean(cachedTokenInfo) || typeof tokenConfig?.decimals === "number"
+          const tokenName =
+            getTokenNameFromDetails(cachedTokenInfo, candidate.fallbackName) ||
+            getTokenDisplayFallbackName(candidate.tokenId, candidate.fallbackName)
+          const etokenDbPatch = candidate.etokenDbToken
+            ? {
+                latestPrice:
+                  candidate.etokenDbToken.hasLatestPrice && hasResolvedTokenInfo
+                    ? nanosatsPerAtomToXec(
+                        candidate.etokenDbToken.latestPriceNanosatsPerAtom,
+                        tokenDecimals,
+                      )
+                    : 0,
+                priceChange24h: candidate.etokenDbToken.hasPriceChange24h
+                  ? candidate.etokenDbToken.priceChange24h
+                  : 0,
+                last24HoursXECAmount: candidate.etokenDbToken.last24HoursXECAmount,
+                last30DaysXECAmount: candidate.etokenDbToken.last7DaysXECAmount,
+                last30DaysVolumeXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
+                totalTransactions: candidate.etokenDbToken.recent7dTradeCount,
+                totalXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
+                has30DayVolume: candidate.etokenDbToken.has30DayVolume,
+                hasInitialMarketData: true,
+                hasResolvedTokenInfo,
+              }
+            : {
+                hasInitialMarketData: false,
+                hasResolvedTokenInfo,
+              }
+
+          return createInitialTokenRow(candidate.tokenId, tokenName, {
+            ...(candidate.patch || {}),
+            ...(etokenDbPatch || {}),
+          })
+        })
+
+        if (isCancelled) return
+        setData(initialTokens)
+        setLoadedTokens(new Set())
+        setIsLoading(false)
+
+        const tokensMissingTokenInfo = bootstrapCandidates.filter((candidate) => {
+          if (!candidate.etokenDbToken) {
+            return false
+          }
+
+          const tokenConfig = configuredTokensById.get(candidate.tokenId)
+          if (typeof tokenConfig?.decimals === "number") {
+            return false
+          }
+
+          return !getCachedTokenDetails(candidate.tokenId)
+        })
+
+        const hydrateMissingTokenInfo = async () => {
+          let hydrateIndex = 0
+          const hydrateNextCandidate = async () => {
+            while (hydrateIndex < tokensMissingTokenInfo.length && !isCancelled) {
+              const currentIndex = hydrateIndex++
+              const candidate = tokensMissingTokenInfo[currentIndex]
+
+              try {
+                const tokenInfo = await fetchTokenDetails(candidate.tokenId, chronikClient)
+                const tokenName =
+                  getTokenNameFromDetails(tokenInfo, candidate.fallbackName) ||
+                  getTokenDisplayFallbackName(candidate.tokenId, candidate.fallbackName)
+                const tokenDecimals = getTokenDecimalsFromDetails(tokenInfo, 0)
+                const latestPrice =
+                  candidate.etokenDbToken && candidate.etokenDbToken.hasLatestPrice
+                    ? nanosatsPerAtomToXec(
+                        candidate.etokenDbToken.latestPriceNanosatsPerAtom,
+                        tokenDecimals,
+                      )
+                    : 0
+
+                if (!cancelledRef.current) {
+                  applyTokenUpdate(candidate.tokenId, {
+                    name: tokenName,
+                    latestPrice,
+                    hasResolvedTokenInfo: true,
+                  })
+                }
+              } catch (err) {
+                console.error(
+                  `[token info] Failed to fetch token info for ${candidate.tokenId}:`,
+                  err,
+                )
+              }
+            }
+          }
+
+          await Promise.all([
+            hydrateNextCandidate(),
+            hydrateNextCandidate(),
+            hydrateNextCandidate(),
+            hydrateNextCandidate(),
+          ])
+        }
+
+        void hydrateMissingTokenInfo()
+
+        const loadDeferredWatchlistTokens = async () => {
+          for (const tokenId of deferredWatchlistTokenIds) {
+            if (isCancelled) {
+              return
+            }
 
             try {
-              const tokenInfo = await fetchTokenDetails(candidate.tokenId, chronikClient)
-              const tokenName = getTokenNameFromDetails(
-                tokenInfo,
-                candidate.fallbackName,
-              )
-
-              if (!tokenName) {
+              const details = await fetchTokenDetails(tokenId, chronikClient)
+              const name = getTokenNameFromDetails(details)
+              if (!name) {
                 continue
               }
 
-              const tokenDecimals = getTokenDecimalsFromDetails(tokenInfo, 0)
-              const etokenDbPatch = candidate.etokenDbToken
-                ? {
-                    latestPrice: candidate.etokenDbToken.hasLatestPrice
-                      ? nanosatsPerAtomToXec(
-                          candidate.etokenDbToken.latestPriceNanosatsPerAtom,
-                          tokenDecimals,
-                        )
-                      : 0,
-                    priceChange24h: candidate.etokenDbToken.hasPriceChange24h
-                      ? candidate.etokenDbToken.priceChange24h
-                      : 0,
-                    last24HoursXECAmount: candidate.etokenDbToken.last24HoursXECAmount,
-                    last30DaysXECAmount: candidate.etokenDbToken.last7DaysXECAmount,
-                    last30DaysVolumeXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
-                    totalTransactions: candidate.etokenDbToken.recent7dTradeCount,
-                    totalXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
-                    has30DayVolume: candidate.etokenDbToken.has30DayVolume,
-                  }
-                : null
-
-              hydratedTokens[currentIndex] = createInitialTokenRow(
-                candidate.tokenId,
-                tokenName,
-                {
-                  ...(candidate.patch || {}),
-                  ...(etokenDbPatch || {}),
-                },
-              )
-              if (candidate.etokenDbToken) {
-                preloadedTokenIds.add(candidate.tokenId)
+              if (!cancelledRef.current) {
+                setData((prev) =>
+                  prev.some((token) => token.tokenId === tokenId)
+                    ? prev
+                    : [
+                        ...prev,
+                        createInitialTokenRow(tokenId, name, {
+                          watchlist: true,
+                          hasResolvedTokenInfo: true,
+                        }),
+                      ],
+                )
               }
-            } catch (err) {
-              console.error(
-                `[token info] Failed to fetch token info for ${candidate.tokenId}:`,
-                err,
-              )
+
+              await loadTokenStatsRef.current?.(tokenId, name, { ignoreFilter: true })
+            } catch (_err) {
+              console.error(`[watchlist bootstrap] Failed to fetch token info for ${tokenId}`)
             }
           }
         }
 
-        await Promise.all([
-          hydrateNextCandidate(),
-          hydrateNextCandidate(),
-          hydrateNextCandidate(),
-          hydrateNextCandidate(),
-        ])
-
-        const initialTokens = hydratedTokens.filter(
-          (token): token is Token => token !== null,
-        )
-
-        if (isCancelled) return
-        setData(initialTokens)
-        setLoadedTokens(new Set(preloadedTokenIds))
-        setIsLoading(false)
+        void loadDeferredWatchlistTokens()
 
         const tokensNeedingLoad = initialTokens.filter(
-          (token) => !preloadedTokenIds.has(token.tokenId),
+          (token) => !token.hasInitialMarketData,
         )
 
         if (tokensNeedingLoad.length === 0) {
@@ -2003,7 +2125,7 @@ export default function Component() {
         if (token.watchlist) return
 
         const hasUsableData =
-          loadedTokens.has(token.tokenId) || prevFiltered.has(token.tokenId)
+          hasRowMarketData(token) || prevFiltered.has(token.tokenId)
         if (!hasUsableData) return
         
         if (filterOption === 'no-trades-30d') {
@@ -2023,7 +2145,7 @@ export default function Component() {
 
       return tokensToFilter
     })
-  }, [filterOption, data, loadedTokens])
+  }, [filterOption, data, loadedTokens, hasRowMarketData])
 
   React.useEffect(() => {
     filteredTokensRef.current = filteredTokens
@@ -2131,8 +2253,9 @@ export default function Component() {
       const prevData = prevProps.row.original;
       const nextData = nextProps.row.original;
       
-      const dataFields = ['totalTransactions', 'last24HoursXECAmount', 'last30DaysXECAmount', 
-                          'priceChange24h', 'latestPrice', 'totalXECAmount'] as const;
+      const dataFields = ['totalTransactions', 'last24HoursXECAmount', 'last30DaysXECAmount',
+                          'priceChange24h', 'latestPrice', 'totalXECAmount',
+                          'name', 'hasResolvedTokenInfo', 'hasInitialMarketData'] as const;
       const hasDataChanged = dataFields.some(field => prevData[field] !== nextData[field]);
 
       const hasDisplayModeChanged = prevProps.showUSD !== nextProps.showUSD;
@@ -2209,7 +2332,7 @@ export default function Component() {
             </CardTitle>
             <CardDescription className="font-normal tracking-tight">
               {viewMode === "normal"
-                ? "Agora sales data. Showing the 50 tokens with the highest 7-day trading volume."
+                ? "Agora sales data. Showing the 100 tokens with the highest 7-day trading volume."
                 : "All active eTokens on Agora"}
             </CardDescription>
           </div>

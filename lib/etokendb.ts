@@ -12,7 +12,7 @@ const TOKEN_TIMEOUT_MS = 8_000
 const TOKEN_LIST_TIMEOUT_MS = 8_000
 const TOKEN_ID_PATTERN = /^[a-f0-9]{64}$/i
 const NANOSATS_PER_XEC = 100_000_000_000
-const ETOKENDB_TOP_VOLUME_PAGE_SIZE = 50
+const ETOKENDB_TOP_VOLUME_PAGE_SIZE = 100
 
 type NumericLike = number | string | null | undefined
 

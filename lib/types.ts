@@ -15,6 +15,8 @@ export interface Token {
   latestPrice: number;
   totalXECAmount: number;
   has30DayVolume?: boolean;
+  hasInitialMarketData?: boolean;
+  hasResolvedTokenInfo?: boolean;
   official?: boolean;
   gratitude?: boolean;
   community?: boolean;
