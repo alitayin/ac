@@ -10,7 +10,7 @@ export const BLOCKS_PER_YEAR = BLOCKS_PER_DAY * 365
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 export const SUMMARY_CACHE_TTL_MS = 10 * 60 * 1000
 export const CACHE_KEY_PREFIX = "token_stats_cache_v1"
-export const SUMMARY_CACHE_KEY_PREFIX = "token_summary_cache_v1"
+export const SUMMARY_CACHE_KEY_PREFIX = "token_summary_cache_v3"
 
 export type CachedTokenData = {
   computedAt: number
@@ -266,4 +266,3 @@ export const compute24hStats = (
     latestBlockHeight,
   }
 }
-

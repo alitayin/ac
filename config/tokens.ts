@@ -21,6 +21,45 @@ interface TokenConfig {
 }
 
 export const tokens: Record<string, TokenConfig> = {
+  starcrystal: {
+    name: "StarCrystal",
+    symbol: "SC",
+    tokenId: "ac31bb0bccf33de1683efce4da64f1cb6d8e8d6e098bc01c51d5864deb0e783f",
+    telegramUrl: "https://t.me/agoraui",
+    feature: "Star Crystal",
+    description: {
+      title: "StarCrystal Token Information",
+      content: `StarCrystal, with a total supply of 5,120,000 tokens, is the official eToken of agora.cash, serving as fuel for activities on Agora.cash and participating in revenue sharing and governance.
+
+      Benefits of Holding Star Crystal:
+      • Listing Rights: Star Crystal is required to list your eTokens
+
+      Current Status:
+      • Total Supply: 5,120,000 tokens (Fixed supply)`,
+    },
+  },
+  SabongCash: {
+    name: "SabongCash",
+    symbol: "SAB",
+    tokenId: "6d4e8cb81f7415c25ae2a425e9c6e2fd2648755fe9169ca208c1e349eadd9db5",
+    telegramUrl: "https://t.me/+1kSyU-gw4OFlMTM5",
+    feature: "Utility Token for remote Sabong",
+    description: {
+      title: "",
+      content: "",
+    },
+  },
+  grp: {
+    name: "GRP",
+    symbol: "GRP",
+    tokenId: "fb4233e8a568993976ed38a81c2671587c5ad09552dedefa78760deed6ff87aa",
+    telegramUrl: "https://t.me/Grumpy_eToken",
+    feature: "Community eToken",
+    description: {
+      title: "",
+      content: "",
+    },
+  },
   xecx: {
     name: "XECX",
     symbol: "XECX",
@@ -29,8 +68,8 @@ export const tokens: Record<string, TokenConfig> = {
     feature: "stakedxec",
     description: {
       title: "",
-      content: ""
-    }
+      content: "",
+    },
   },
   starshard: {
     name: "Star Shard",
@@ -40,8 +79,9 @@ export const tokens: Record<string, TokenConfig> = {
     feature: "Swap and more features",
     description: {
       title: "About Star Shard",
-      content: "Like Star Crystal, it is filled with profound magical power, and it seems to be designed for swap and maybe also cross‑chain functionality. It exists in greater quantities. Holding it yields a 10% interest return.."
-    }
+      content:
+        "Like Star Crystal, it is filled with profound magical power, and it seems to be designed for swap and maybe also cross‑chain functionality. It exists in greater quantities. Holding it yields a 10% interest return..",
+    },
   },
   firma: {
     name: "Firma",
@@ -51,8 +91,8 @@ export const tokens: Record<string, TokenConfig> = {
     feature: "Yield-bearing Stablecoin",
     description: {
       title: "",
-      content: ""
-    }
+      content: "",
+    },
   },
   meaning: {
     name: "TheMeaningofLife",
@@ -63,8 +103,8 @@ export const tokens: Record<string, TokenConfig> = {
     decimals: 2,
     description: {
       title: "",
-      content: ""
-    }
+      content: "",
+    },
   },
   xecited: {
     name: "ImsoXECited",
@@ -77,7 +117,30 @@ export const tokens: Record<string, TokenConfig> = {
     youtubeHoverImage: "/imsoexcited.png",
     description: {
       title: "",
-      content: ""
-    }
+      content: "",
+    },
+  },
+  hwt: {
+    name: "TridentbyHodlWars",
+    symbol: "HWT",
+    tokenId: "8814140e9d5dc359fe437d881c2c324b4e37c71bfd23226309940d742651e14b",
+    telegramUrl: "https://t.me/hodl_wars",
+    feature: "Hodl Wars Reward Token",
+    description: {
+      title: "",
+      content: "",
+    },
+  },
+  bve: {
+    name: "Blockchain Ventures Equity",
+    symbol: "BVE",
+    tokenId: "96704added2310ba79cddecc7e192c56a8aa29542b7187539fc0327acddc8ac6",
+    telegramUrl: "https://blockchain.ventures/",
+    feature: "Blockchain Ventures Equity token",
+    description: {
+      title: "About Blockchain Ventures Equity (BVE)",
+      content:
+        "BVE is the Blockchain Ventures Equity token, offering equity-style exposure to Blockchain Ventures Corp. and its portfolio (e.g., eCash initiatives and the upcoming Blockchain Poker relaunch). See details at blockchain.ventures.",
+    },
   },
 };

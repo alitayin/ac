@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  fetchEtokenDbTopVolumeTokens,
   fetchEtokenDbTopVolumeTokenIds,
   fetchEtokenDbTokenSummary,
   getEtokenDbPriceChange24h,
   isEtokenDbAvailable,
+  isEtokenDbAvailableWithRetry,
   mapEtokenDbTokenSummary,
   nanosatsPerAtomToXec,
   resetEtokenDbAvailabilityCache,
@@ -49,6 +51,7 @@ describe("etokendb", () => {
             recent144PriceChangePct: "1.25",
             recent1008TradeCount: 1013,
             recent1008VolumeSats: "858751562877",
+            recent4320VolumeSats: "1599261652671",
             lastTradeBlockHeight: 944789,
             lastTradeBlockTimestamp: 1776194157,
             lastSyncedAt: 1776194900068,
@@ -65,10 +68,12 @@ describe("etokendb", () => {
       recent7dTradeCount: 1013,
       last24HoursXECAmount: 530008069.69,
       last7DaysXECAmount: 8587515628.77,
+      last30DaysVolumeXECAmount: 15992616526.71,
       latestPriceXec: 1,
       priceChange24h: 1.25,
       hasLatestPriceXec: true,
       hasPriceChange24h: true,
+      has30DayVolume: true,
       lastTradeBlockHeight: 944789,
       lastTradeBlockTimestamp: 1776194157,
       lastSyncedAt: 1776194900068,
@@ -97,6 +102,55 @@ describe("etokendb", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/etokendb/status", expect.any(Object))
   })
 
+  it("retries availability checks up to three times with force refresh", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            healthy: false,
+            ready: false,
+            phase: "bootstrapping",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            healthy: false,
+            ready: false,
+            phase: "bootstrapping",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            healthy: true,
+            ready: true,
+            phase: "ready",
+          },
+        }),
+      })
+
+    vi.stubGlobal("fetch", fetchMock)
+    vi.useFakeTimers()
+
+    const availabilityPromise = isEtokenDbAvailableWithRetry()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    await expect(availabilityPromise).resolves.toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+
+    vi.useRealTimers()
+  })
+
   it("fetches and maps token summaries through the local proxy", async () => {
     vi.stubGlobal(
       "fetch",
@@ -113,6 +167,7 @@ describe("etokendb", () => {
               recent144PriceChangeBps: "250",
               recent1008TradeCount: 2,
               recent1008VolumeSats: "450",
+              recent4320VolumeSats: "900",
               lastTradeBlockHeight: 10,
             },
           },
@@ -131,10 +186,12 @@ describe("etokendb", () => {
       recent7dTradeCount: 2,
       last24HoursXECAmount: 1,
       last7DaysXECAmount: 4.5,
+      last30DaysVolumeXECAmount: 9,
       latestPriceXec: 1,
       priceChange24h: 2.5,
       hasLatestPriceXec: true,
       hasPriceChange24h: true,
+      has30DayVolume: true,
       lastTradeBlockHeight: 10,
     })
   })
@@ -175,5 +232,53 @@ describe("etokendb", () => {
       "/api/etokendb/tokens?sort=recent1008VolumeSats&order=desc&pageSize=50&readyOnly=true",
       expect.any(Object),
     )
+  })
+
+  it("fetches top-volume token summaries with 30d volume from the local proxy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            items: [
+              {
+                tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+                latestPriceNanosatsPerAtom: "1000000000",
+                recent144TradeCount: 95,
+                recent144VolumeSats: "77972521579",
+                recent144PriceChangePct: "0.00",
+                recent1008TradeCount: 930,
+                recent1008VolumeSats: "903967987245",
+                recent4320VolumeSats: "1638942806186",
+                lastTradeBlockHeight: 944859,
+                lastTradeBlockTimestamp: 1776231035,
+                lastSyncedAt: 1776231053158,
+              },
+            ],
+          },
+        }),
+      }),
+    )
+
+    await expect(fetchEtokenDbTopVolumeTokens()).resolves.toEqual([
+      {
+        tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+        recent24hTradeCount: 95,
+        recent7dTradeCount: 930,
+        last24HoursXECAmount: 779725215.79,
+        last7DaysXECAmount: 9039679872.45,
+        last30DaysVolumeXECAmount: 16389428061.86,
+        latestPriceNanosatsPerAtom: 1000000000,
+        priceChange24h: 0,
+        hasLatestPrice: true,
+        hasPriceChange24h: true,
+        has30DayVolume: true,
+        lastTradeBlockHeight: 944859,
+        lastTradeBlockTimestamp: 1776231035,
+        lastSyncedAt: 1776231053158,
+      },
+    ])
   })
 })

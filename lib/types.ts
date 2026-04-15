@@ -10,9 +10,11 @@ export interface Token {
   totalTransactions: number;
   last24HoursXECAmount: number;
   last30DaysXECAmount: number;
+  last30DaysVolumeXECAmount: number;
   priceChange24h: number;
   latestPrice: number;
   totalXECAmount: number;
+  has30DayVolume?: boolean;
   official?: boolean;
   gratitude?: boolean;
   community?: boolean;

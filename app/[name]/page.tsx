@@ -1,6 +1,6 @@
 "use client"
 import Header from "@/components/ui/header";
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import RealtimePrice from "@/components/ui/realtimeprice"
@@ -47,6 +47,7 @@ import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
 import { fetchBlockchainInfo, fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
 import { TOKEN_IDS, PRICE_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraOrderBook } from "@/lib/agora-orders"
+import { isEtokenDbAvailable } from "@/lib/etokendb"
 import {
   applyStarShardFloor,
   getCachedTokenData,
@@ -75,7 +76,6 @@ interface TokenData {
 
 export default function TokenPage() {
   const params = useParams()
-  const router = useRouter()
   const { toast } = useToast()
   const { isWalletConnected, ecashAddress, isGuestMode, balance, userTokens } = useWallet()
   const [stats, setStats] = useState<any>(null)
@@ -194,25 +194,25 @@ export default function TokenPage() {
     }
   }
   const normalizeString = (str: string) => str.toLowerCase().trim().replace(/\s+/g, ' ');
-  const name = normalizeString(decodedName);
+  const routeParam = decodedName.trim();
+  const normalizedRouteParam = normalizeString(routeParam);
+  const isValidTokenId = /^[a-f0-9]{64}$/i.test(routeParam);
 
-  const isValidTokenId = name.length >= 50 && name.length <= 70;
-
-  const matchedToken = Object.entries(tokens).find(
-    ([key, value]) => {
-      const normalizedKey = normalizeString(key);
-      const normalizedTokenId = normalizeString(value.tokenId);
-      const normalizedSymbol = normalizeString(value.symbol);
-      const normalizedName = normalizeString(value.name);
-      
-      return normalizedKey === name ||
-        normalizedTokenId === name ||
-        normalizedSymbol === name ||
-        normalizedName === name;
-    }
+  const tokenEntries = Object.entries(tokens);
+  const matchedTokenById = tokenEntries.find(
+    ([, value]) => value.tokenId.toLowerCase() === routeParam.toLowerCase(),
   )?.[1];
+  const matchedTokenByNameOrKey = !matchedTokenById
+    ? tokenEntries.find(([key, value]) => {
+        const normalizedKey = normalizeString(key);
+        const normalizedName = normalizeString(value.name);
+        return normalizedKey === normalizedRouteParam || normalizedName === normalizedRouteParam;
+      })?.[1]
+    : undefined;
+  const matchedToken = matchedTokenById ?? matchedTokenByNameOrKey;
 
   const isCustomToken = !matchedToken && isValidTokenId;
+  const hasValidRoute = Boolean(matchedToken || isValidTokenId);
 
   const tokenDecimals = isCustomToken && chronikTokenInfo 
     ? getTokenDecimalsFromDetails(chronikTokenInfo, 0)
@@ -220,18 +220,22 @@ export default function TokenPage() {
 
   let tokenData: TokenData;
 
-  if (!matchedToken && !isValidTokenId) {
-    tokenData = tokens["starcrystal"];
-  } else if (matchedToken) {
+  if (matchedToken) {
     tokenData = matchedToken;
-  } else {
+  } else if (isValidTokenId) {
     const chronikName = chronikTokenInfo?.genesisInfo?.tokenName;
     const chronikTicker = chronikTokenInfo?.genesisInfo?.tokenTicker;
     
     tokenData = {
-      tokenId: name,
-      name: chronikName || (stats ? (stats.tokenName || name) : "loading"),
-      symbol: chronikTicker || (stats ? (stats.tokenTicker || name) : "loading"),
+      tokenId: routeParam,
+      name: chronikName || (stats ? (stats.tokenName || routeParam) : "loading"),
+      symbol: chronikTicker || (stats ? (stats.tokenTicker || routeParam) : "loading"),
+    };
+  } else {
+    tokenData = {
+      tokenId: "",
+      name: decodedName,
+      symbol: "",
     };
   }
 
@@ -248,7 +252,7 @@ export default function TokenPage() {
     const fetchChronikTokenInfo = async () => {
       if (isCustomToken && isValidTokenId) {
         try {
-          const tokenDetails = await fetchTokenDetails(name);
+          const tokenDetails = await fetchTokenDetails(routeParam);
           setChronikTokenInfo(tokenDetails);
         } catch (error) {
           setChronikTokenInfo(null);
@@ -257,16 +261,16 @@ export default function TokenPage() {
     };
 
     fetchChronikTokenInfo();
-  }, [isCustomToken, isValidTokenId, name]);
+  }, [isCustomToken, isValidTokenId, routeParam]);
 
   useEffect(() => {
-    if (tokenData && tokenData.tokenId) {
+    if (hasValidRoute && tokenData && tokenData.tokenId) {
       setSelectedBuyToken({
         id: tokenData.tokenId,
         name: tokenData.name
       });
     }
-  }, [tokenData.tokenId, tokenData.name]);
+  }, [hasValidRoute, tokenData.tokenId, tokenData.name]);
 
   const fetchOrderBook = async () => {
     try {
@@ -305,6 +309,7 @@ export default function TokenPage() {
     
     try {
       const now = Date.now()
+      const etokenDbAvailable = await isEtokenDbAvailable()
       const cached = getCachedTokenData(tokenId)
       const cacheValid = !!cached && now - cached.computedAt < CACHE_TTL_MS
 
@@ -425,10 +430,12 @@ export default function TokenPage() {
           totalTransactions: totalTransactions30d,
         })
 
-        setCachedTokenSummary(tokenId, {
-          computedAt: Date.now(),
-          data: finalData,
-        })
+        if (!etokenDbAvailable) {
+          setCachedTokenSummary(tokenId, {
+            computedAt: Date.now(),
+            data: finalData,
+          })
+        }
       }
     } finally {
       isLoadingStats.current = false
@@ -442,12 +449,18 @@ export default function TokenPage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!hasValidRoute || !tokenData.tokenId) {
+        return
+      }
+
       try {
         const info = await fetchBlockchainInfo().catch(() => null)
         setChainTipHeight(typeof info?.tipHeight === "number" ? info.tipHeight : null)
 
+        const etokenDbAvailable = await isEtokenDbAvailable()
         const cachedSummary = getCachedTokenSummary(tokenData.tokenId)
         const summaryValid =
+          !etokenDbAvailable &&
           cachedSummary && Date.now() - cachedSummary.computedAt < SUMMARY_CACHE_TTL_MS
         
         if (summaryValid) {
@@ -474,9 +487,13 @@ export default function TokenPage() {
     const interval = setInterval(fetchData, 30000)
     
     return () => clearInterval(interval)
-  }, [tokenData.tokenId])
+  }, [hasValidRoute, tokenData.tokenId, tokenData.name])
 
   useEffect(() => {
+    if (!hasValidRoute || !tokenData.tokenId) {
+      return
+    }
+
     const unsubscribe = watchAgoraTokens([tokenData.tokenId], (id) => {
       if (id === tokenData.tokenId) {
         loadTokenStatsRef.current?.(tokenData.tokenId, tokenData.name)
@@ -484,7 +501,7 @@ export default function TokenPage() {
     })
 
     return () => unsubscribe()
-  }, [tokenData.tokenId, tokenData.name])
+  }, [hasValidRoute, tokenData.tokenId, tokenData.name])
 
   useEffect(() => {
     if (selectedBuyToken) {
@@ -817,6 +834,26 @@ export default function TokenPage() {
 
     setSpendAmount('');
     setReceiveAmount('');
+  }
+
+  if (!hasValidRoute) {
+    return (
+      <>
+        <Header />
+        <div className="container mx-auto max-w-7xl p-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Token Not Found</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                No token matches <span className="font-medium text-foreground">{decodedName}</span>.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    )
   }
 
   return (

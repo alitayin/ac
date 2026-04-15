@@ -78,10 +78,29 @@ export type EtokenDbMappedTokenSummary = {
   recent7dTradeCount: number
   last24HoursXECAmount: number
   last7DaysXECAmount: number
+  last30DaysVolumeXECAmount: number
   latestPriceXec: number
   priceChange24h: number
   hasLatestPriceXec: boolean
   hasPriceChange24h: boolean
+  has30DayVolume: boolean
+  lastTradeBlockHeight: number | null
+  lastTradeBlockTimestamp: number | null
+  lastSyncedAt: number | null
+}
+
+export type EtokenDbTopVolumeToken = {
+  tokenId: string
+  recent24hTradeCount: number
+  recent7dTradeCount: number
+  last24HoursXECAmount: number
+  last7DaysXECAmount: number
+  last30DaysVolumeXECAmount: number
+  latestPriceNanosatsPerAtom: number
+  priceChange24h: number
+  hasLatestPrice: boolean
+  hasPriceChange24h: boolean
+  has30DayVolume: boolean
   lastTradeBlockHeight: number | null
   lastTradeBlockTimestamp: number | null
   lastSyncedAt: number | null
@@ -255,6 +274,26 @@ export const resetEtokenDbAvailabilityCache = () => {
   pendingAvailabilityRequest = null
 }
 
+export const isEtokenDbAvailableWithRetry = async (
+  options?: { attempts?: number; delayMs?: number },
+): Promise<boolean> => {
+  const attempts = Math.max(1, Math.trunc(options?.attempts ?? 3))
+  const delayMs = Math.max(0, Math.trunc(options?.delayMs ?? 1_000))
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const available = await isEtokenDbAvailable({ forceRefresh: attempt > 1 })
+    if (available) {
+      return true
+    }
+
+    if (attempt < attempts && delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+
+  return false
+}
+
 export const mapEtokenDbTokenSummary = (
   payload: EtokenDbTokenPayload,
   options?: MapEtokenDbTokenSummaryOptions,
@@ -282,10 +321,12 @@ export const mapEtokenDbTokenSummary = (
     recent7dTradeCount: coerceCount(summary.recent1008TradeCount),
     last24HoursXECAmount: satsToXec(summary.recent144VolumeSats),
     last7DaysXECAmount: satsToXec(summary.recent1008VolumeSats),
+    last30DaysVolumeXECAmount: satsToXec(summary.recent4320VolumeSats),
     latestPriceXec,
     priceChange24h: priceChange.value,
     hasLatestPriceXec,
     hasPriceChange24h: priceChange.hasValue,
+    has30DayVolume: hasValue(summary.recent4320VolumeSats),
     lastTradeBlockHeight:
       summary.lastTradeBlockHeight === null || summary.lastTradeBlockHeight === undefined
         ? null
@@ -326,6 +367,13 @@ export const fetchEtokenDbTokenSummary = async (
 export const fetchEtokenDbTopVolumeTokenIds = async (
   options?: { pageSize?: number },
 ): Promise<string[]> => {
+  const tokens = await fetchEtokenDbTopVolumeTokens(options)
+  return tokens.map((token) => token.tokenId)
+}
+
+export const fetchEtokenDbTopVolumeTokens = async (
+  options?: { pageSize?: number },
+): Promise<EtokenDbTopVolumeToken[]> => {
   const pageSize = Math.max(
     1,
     Math.trunc(options?.pageSize ?? ETOKENDB_TOP_VOLUME_PAGE_SIZE),
@@ -347,7 +395,7 @@ export const fetchEtokenDbTopVolumeTokenIds = async (
   }
 
   const seen = new Set<string>()
-  const tokenIds: string[] = []
+  const tokens: EtokenDbTopVolumeToken[] = []
 
   payload.data.items.forEach((item) => {
     const tokenId = item?.tokenId
@@ -359,8 +407,37 @@ export const fetchEtokenDbTopVolumeTokenIds = async (
     }
 
     seen.add(tokenId)
-    tokenIds.push(tokenId)
+    const priceChange = getEtokenDbPriceChange24h(
+      item?.recent144PriceChangePct,
+      item?.recent144PriceChangeBps,
+    )
+    const latestPriceNanosatsPerAtom = coerceFiniteNumber(item?.latestPriceNanosatsPerAtom)
+    tokens.push({
+      tokenId,
+      recent24hTradeCount: coerceCount(item?.recent144TradeCount),
+      recent7dTradeCount: coerceCount(item?.recent1008TradeCount),
+      last24HoursXECAmount: satsToXec(item?.recent144VolumeSats),
+      last7DaysXECAmount: satsToXec(item?.recent1008VolumeSats),
+      last30DaysVolumeXECAmount: satsToXec(item?.recent4320VolumeSats),
+      latestPriceNanosatsPerAtom,
+      priceChange24h: priceChange.value,
+      hasLatestPrice: hasValue(item?.latestPriceNanosatsPerAtom) && latestPriceNanosatsPerAtom > 0,
+      hasPriceChange24h: priceChange.hasValue,
+      has30DayVolume: hasValue(item?.recent4320VolumeSats),
+      lastTradeBlockHeight:
+        item?.lastTradeBlockHeight === null || item?.lastTradeBlockHeight === undefined
+          ? null
+          : coerceCount(item?.lastTradeBlockHeight),
+      lastTradeBlockTimestamp:
+        item?.lastTradeBlockTimestamp === null || item?.lastTradeBlockTimestamp === undefined
+          ? null
+          : coerceCount(item?.lastTradeBlockTimestamp),
+      lastSyncedAt:
+        item?.lastSyncedAt === null || item?.lastSyncedAt === undefined
+          ? null
+          : coerceCount(item?.lastSyncedAt),
+    })
   })
 
-  return tokenIds
+  return tokens
 }
