@@ -97,6 +97,10 @@ type BootstrapTokenCandidate = {
   patch?: Partial<Token>
 }
 
+const CONFIGURED_TOKEN_IDS = new Set(
+  Object.values(tokens).map((token) => token.tokenId),
+)
+
 const getTokenNameFromDetails = (
   tokenDetails: any,
   fallbackName?: string,
@@ -112,6 +116,10 @@ const getTokenNameFromDetails = (
   }
 
   return null
+}
+
+const getTokenRouteParam = (token: Pick<Token, "tokenId" | "name">): string => {
+  return CONFIGURED_TOKEN_IDS.has(token.tokenId) ? token.name : token.tokenId
 }
 
 const createInitialTokenRow = (
@@ -348,7 +356,7 @@ export default function Component() {
         return (
           <div 
             className="flex items-center gap-2 cursor-pointer hover:opacity-80"
-            onClick={() => router.push(`/${row.original.watchlist ? row.original.tokenId : row.original.name}`)}
+            onClick={() => router.push(`/${getTokenRouteParam(row.original)}`)}
           >
               <Avatar className="h-8 w-8 relative overflow-hidden">
                 {!isIconLoaded && !isIconFailed && (
@@ -1946,7 +1954,7 @@ export default function Component() {
           key={row.id}
           onClick={() => {
             router.push(
-              `/${row.original.watchlist ? row.original.tokenId : row.original.name}`,
+              `/${getTokenRouteParam(row.original)}`,
             )
           }}
         >
