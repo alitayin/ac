@@ -23,10 +23,11 @@ Open [http://localhost:3000](http://localhost:3000)
 ## Build
 
 ```bash
+npm test
 npm run build
 ```
 
-Always run build locally before pushing to ensure no errors.
+Run tests and build locally before pushing to ensure no errors.
 
 ## Tech Stack
 
@@ -37,4 +38,4 @@ Next.js 14, TypeScript, Tailwind CSS, ecash-lib, ecash-agora, chronik-client
 - Telegram: https://t.me/agoraUI
 - Email: alitaweb3@gmail.com
 
-**Version**: 3.9.1
+**Version**: 4.0.5

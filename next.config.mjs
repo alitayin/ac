@@ -1,7 +1,6 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const CopyPlugin = require('copy-webpack-plugin');
-const path = require('path');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
