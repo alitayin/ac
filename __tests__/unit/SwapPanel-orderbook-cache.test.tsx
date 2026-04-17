@@ -216,4 +216,67 @@ describe('SwapPanel - OrderBook Cache', () => {
     // Should only call API once
     expect(mockFetchAgoraOrderBook).toHaveBeenCalledTimes(1);
   });
+
+  it('should deduplicate concurrent in-flight requests for the same token', async () => {
+    let resolveRequest: ((value: any) => void) | null = null;
+    const mockFetchAgoraOrderBook = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => {
+      const orderBookCacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
+      const pendingOrderBookRequestsRef = useRef<Map<string, Promise<any>>>(new Map());
+
+      const fetchOrderBookCached = useCallback(async (tokenId: string) => {
+        const cached = orderBookCacheRef.current.get(tokenId);
+        const now = Date.now();
+
+        if (cached && now - cached.timestamp < ORDERBOOK_CACHE_TTL_MS) {
+          return cached.data;
+        }
+
+        const pendingRequest = pendingOrderBookRequestsRef.current.get(tokenId);
+        if (pendingRequest) {
+          return pendingRequest;
+        }
+
+        const requestPromise = (async () => {
+          const response = await mockFetchAgoraOrderBook(tokenId);
+          if (response.success && response.data) {
+            orderBookCacheRef.current.set(tokenId, {
+              data: response.data,
+              timestamp: Date.now(),
+            });
+            return response.data;
+          }
+          return { orders: [] };
+        })().finally(() => {
+          pendingOrderBookRequestsRef.current.delete(tokenId);
+        });
+
+        pendingOrderBookRequestsRef.current.set(tokenId, requestPromise);
+        return requestPromise;
+      }, []);
+
+      return { fetchOrderBookCached };
+    });
+
+    const firstRequest = result.current.fetchOrderBookCached('token-1');
+    const secondRequest = result.current.fetchOrderBookCached('token-1');
+
+    expect(mockFetchAgoraOrderBook).toHaveBeenCalledTimes(1);
+
+    resolveRequest?.({
+      success: true,
+      data: { orders: [{ price: 1.5, amount: 100 }], stats: { min_price: 1.5 } },
+    });
+
+    const [firstResult, secondResult] = await Promise.all([firstRequest, secondRequest]);
+
+    expect(firstResult).toEqual(secondResult);
+    expect(mockFetchAgoraOrderBook).toHaveBeenCalledTimes(1);
+  });
 });

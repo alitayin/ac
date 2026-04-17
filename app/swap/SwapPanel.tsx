@@ -98,8 +98,6 @@ export function SwapPanel() {
   const xecPrice = useXECPrice();
   const [deleteCountdown, setDeleteCountdown] = useState<number>(5);
   const [isCountingDown, setIsCountingDown] = useState<boolean>(false);
-  const [showPriceWarning, setShowPriceWarning] = useState<boolean>(false);
-  const [priceWarningPercent, setPriceWarningPercent] = useState<number>(0);
   const [marketPrice, setMarketPrice] = useState<number>(0);
   const [totalTokensBought, setTotalTokensBought] = useState<number>(0);
   const [isOfflineOrder, setIsOfflineOrder] = useState<boolean>(false);
@@ -113,6 +111,7 @@ export function SwapPanel() {
 
   // Order book cache with 10 second TTL
   const orderBookCacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
+  const pendingOrderBookRequestsRef = useRef<Map<string, Promise<any>>>(new Map());
   const ORDERBOOK_CACHE_TTL_MS = 10000;
 
   const handleGenerateMnemonic = () => {
@@ -140,20 +139,35 @@ export function SwapPanel() {
       return cached.data;
     }
 
-    // Fetch fresh data
-    try {
-      const data = await fetchAgoraOrderBook(tokenId);
-      if (data.success && data.data) {
-        orderBookCacheRef.current.set(tokenId, { data: data.data, timestamp: now });
-        return data.data;
-      } else {
-        console.warn('Invalid order book data received');
-        return { orders: [] };
-      }
-    } catch (error) {
-      console.error('Error fetching order book:', error);
-      return { orders: [] };
+    const pendingRequest = pendingOrderBookRequestsRef.current.get(tokenId);
+    if (pendingRequest) {
+      return pendingRequest;
     }
+
+    // Fetch fresh data
+    const requestPromise = (async () => {
+      try {
+        const data = await fetchAgoraOrderBook(tokenId);
+        if (data.success && data.data) {
+          orderBookCacheRef.current.set(tokenId, {
+            data: data.data,
+            timestamp: Date.now(),
+          });
+          return data.data;
+        } else {
+          console.warn('Invalid order book data received');
+          return { orders: [] };
+        }
+      } catch (error) {
+        console.error('Error fetching order book:', error);
+        return { orders: [] };
+      } finally {
+        pendingOrderBookRequestsRef.current.delete(tokenId);
+      }
+    })();
+
+    pendingOrderBookRequestsRef.current.set(tokenId, requestPromise);
+    return requestPromise;
   }, []);
 
   // Fetch order book for the selected token
@@ -537,12 +551,6 @@ export function SwapPanel() {
       setMarketPrice(price);
     });
   }, [useBestOrderPrice]);
-
-  // Update price warning state when memoized data changes
-  useEffect(() => {
-    setShowPriceWarning(priceWarningData.shouldShow);
-    setPriceWarningPercent(priceWarningData.percent);
-  }, [priceWarningData]);
 
   useEffect(() => {
     return () => {
@@ -1257,7 +1265,7 @@ export function SwapPanel() {
 
                 
 
-                  {showPriceWarning && (
+                  {priceWarningData.shouldShow && (
                     <Alert className="relative mt-2 dark:bg-dark-400/50 bg-pink-">
                       <div className="flex items-center">
                         <div className="p-2 dark:bg-pink-400 bg-pink-100 rounded-md">
@@ -1265,7 +1273,7 @@ export function SwapPanel() {
                         </div>
                         <AlertDescription className="flex items-center justify-between flex-1">
                           <div className="ml-2 flex items-center leading-7 tracking-tight">
-                            Price is {priceWarningPercent}% higher than market price
+                            Price is {priceWarningData.percent}% higher than market price
                           </div>
                         </AlertDescription>
                       </div>

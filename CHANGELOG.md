@@ -6,6 +6,21 @@
 
 ## 2026-04-17
 
+### 🎉 v4.0.6 发布
+
+**主要改动：**
+- `AllEtokensView` 改为按页并发加载 token 详情，并批量更新列表状态
+- `SwapPanel` 的 order book 缓存增加并发中的请求去重，减少同 token 重复请求
+- `TokenSelector` 优先读取本地 token 详情缓存，只对缺失 token 并发拉取详情
+- 移除 `SwapPanel` 中价格警告的镜像 state，直接消费 memo 派生值
+- 补充相关单测，覆盖批量加载、缓存命中和 in-flight request deduplication
+
+**验证：**
+- ✅ `npm test` 通过
+- ✅ `npm run build` 通过
+
+---
+
 ### 文档与配置同步整理
 
 **主要改动：**

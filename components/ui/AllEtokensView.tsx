@@ -3,19 +3,42 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { tokens } from "@/config/tokens"
-import { TOKEN_IDS } from "@/lib/constants"
 import { fetchTokenDetails } from "@/lib/chronik"
 import { useChronik } from "@/lib/context/ChronikContext"
 import { Agora } from "ecash-agora"
-import { useToast } from "@/hooks/use-toast"
 import { Plus } from "lucide-react"
 
 const ITEMS_PER_PAGE = 10
+
+type ActiveToken = {
+  tokenId: string
+  tokenTicker: string
+  tokenName: string
+  decimals: number
+  url: string
+  loading: boolean
+}
+
+const getPlaceholderToken = (tokenId: string): ActiveToken => ({
+  tokenId,
+  tokenTicker: "",
+  tokenName: `${tokenId.substring(0, 8)}...`,
+  decimals: 0,
+  url: "",
+  loading: true,
+})
+
+const getResolvedToken = (tokenId: string, tokenDetails?: any): ActiveToken => ({
+  tokenId,
+  tokenTicker: tokenDetails?.genesisInfo?.tokenTicker || "",
+  tokenName: tokenDetails?.genesisInfo?.tokenName || tokenId.substring(0, 6),
+  decimals: tokenDetails?.genesisInfo?.decimals ?? 0,
+  url: tokenDetails?.genesisInfo?.url || "",
+  loading: false,
+})
 
 const AllEtokensLoadingSkeleton: React.FC = () => {
   return (
@@ -61,14 +84,13 @@ const AllEtokensLoadingSkeleton: React.FC = () => {
 const AllEtokensView: React.FC = () => {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const [allTokenIds, setAllTokenIds] = React.useState<string[]>([])
-  const [activeTokens, setActiveTokens] = React.useState<any[]>([])
+  const [activeTokens, setActiveTokens] = React.useState<ActiveToken[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
-  const [loadingTokenIds, setLoadingTokenIds] = React.useState<Set<string>>(new Set())
   const [currentPage, setCurrentPage] = React.useState(1)
   const [addedTokens, setAddedTokens] = React.useState<Set<string>>(new Set())
   const [isLoadingMoreTokens, setIsLoadingMoreTokens] = React.useState(true)
+  const pageRequestIdRef = React.useRef(0)
   const router = useRouter()
-  const { toast } = useToast()
 
   const CUSTOM_TOKENS_KEY = "custom_watchlist_tokens"
 
@@ -162,105 +184,67 @@ const AllEtokensView: React.FC = () => {
     if (!chronikClient || allTokenIds.length === 0) return
 
     const activeChronik = chronikClient
-    const loadCurrentPageTokens = async () => {
-      const startIdx = (currentPage - 1) * ITEMS_PER_PAGE
-      const endIdx = startIdx + ITEMS_PER_PAGE
-      const pageTokenIds = allTokenIds.slice(startIdx, endIdx)
-      const initialTokens = pageTokenIds.map((tokenId: string) => ({
-        tokenId,
-        tokenTicker: "",
-        tokenName: tokenId.substring(0, 8) + "...",
-        decimals: 0,
-        url: "",
-        loading: true,
-      }))
+    const requestId = pageRequestIdRef.current + 1
+    pageRequestIdRef.current = requestId
+    let cancelled = false
 
-      setActiveTokens(initialTokens)
+    const pageTokenIds = allTokenIds.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE,
+    )
 
-      for (const tokenId of pageTokenIds) {
-        setLoadingTokenIds((prev) => new Set(prev).add(tokenId))
+    const initialTokens = pageTokenIds.map((tokenId) => getPlaceholderToken(tokenId))
+    setActiveTokens(initialTokens)
 
-        try {
-          const tokenDetails = await fetchTokenDetails(tokenId, activeChronik)
+    const updateTokenFromRetry = async (tokenId: string, retryKey: string) => {
+      try {
+        const tokenDetails = await fetchTokenDetails(tokenId, activeChronik)
+        if (cancelled || pageRequestIdRef.current !== requestId) return
 
-          setActiveTokens((prev) =>
-            prev.map((token) =>
-              token.tokenId === tokenId
-                ? {
-                    tokenId,
-                    tokenTicker: tokenDetails.genesisInfo?.tokenTicker || "",
-                    tokenName: tokenDetails.genesisInfo?.tokenName || tokenId.substring(0, 6),
-                    decimals: tokenDetails.genesisInfo?.decimals ?? 0,
-                    url: tokenDetails.genesisInfo?.url || "",
-                    loading: false,
-                  }
-                : token,
-            ),
-          )
-        } catch (_error) {
-          const retryKey = `allTokens_${tokenId}_retry`
-          const hasRetried = sessionStorage.getItem(retryKey)
-
-          if (!hasRetried) {
-            sessionStorage.setItem(retryKey, "true")
-
-            setTimeout(async () => {
-              try {
-                const tokenDetails = await fetchTokenDetails(tokenId, activeChronik)
-                setActiveTokens((prev) =>
-                  prev.map((token) =>
-                    token.tokenId === tokenId
-                      ? {
-                          tokenId,
-                          tokenTicker: tokenDetails.genesisInfo?.tokenTicker || "",
-                          tokenName:
-                            tokenDetails.genesisInfo?.tokenName || tokenId.substring(0, 6),
-                          decimals: tokenDetails.genesisInfo?.decimals ?? 0,
-                          url: tokenDetails.genesisInfo?.url || "",
-                          loading: false,
-                        }
-                      : token,
-                  ),
-                )
-                sessionStorage.removeItem(retryKey)
-              } catch (_retryError) {
-                setActiveTokens((prev) =>
-                  prev.map((token) =>
-                    token.tokenId === tokenId
-                      ? {
-                          ...token,
-                          tokenName: tokenId.substring(0, 6),
-                          loading: false,
-                        }
-                      : token,
-                  ),
-                )
-              }
-            }, 5000)
-          } else {
-            setActiveTokens((prev) =>
-              prev.map((token) =>
-                token.tokenId === tokenId
-                  ? {
-                      ...token,
-                      tokenName: tokenId.substring(0, 6),
-                      loading: false,
-                    }
-                  : token,
-              ),
-            )
-          }
-        } finally {
-          setLoadingTokenIds((prev) => {
-            const next = new Set(prev)
-            next.delete(tokenId)
-            return next
-          })
-        }
+        setActiveTokens((prev) =>
+          prev.map((token) =>
+            token.tokenId === tokenId ? getResolvedToken(tokenId, tokenDetails) : token,
+          ),
+        )
+        sessionStorage.removeItem(retryKey)
+      } catch (_retryError) {
       }
     }
 
-    loadCurrentPageTokens()
+    const loadToken = async (tokenId: string): Promise<ActiveToken> => {
+      try {
+        const tokenDetails = await fetchTokenDetails(tokenId, activeChronik)
+        return getResolvedToken(tokenId, tokenDetails)
+      } catch (_error) {
+        const retryKey = `allTokens_${tokenId}_retry`
+        const hasRetried = sessionStorage.getItem(retryKey)
+
+        if (!hasRetried) {
+          sessionStorage.setItem(retryKey, "true")
+          window.setTimeout(() => {
+            void updateTokenFromRetry(tokenId, retryKey)
+          }, 5000)
+        }
+
+        return getResolvedToken(tokenId)
+      }
+    }
+
+    const loadCurrentPageTokens = async () => {
+      const resolvedTokens = await Promise.all(pageTokenIds.map((tokenId) => loadToken(tokenId)))
+
+      if (cancelled || pageRequestIdRef.current !== requestId) {
+        return
+      }
+
+      setActiveTokens(resolvedTokens)
+    }
+
+    void loadCurrentPageTokens()
+
+    return () => {
+      cancelled = true
+    }
   }, [allTokenIds, currentPage, chronikClient])
 
   const isInitialLoading =

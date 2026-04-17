@@ -7,9 +7,20 @@ import {
 } from "@/components/ui/popover";
 import { TOKENS } from '@/config/tokenconfig';
 import { MousePointerClick, ChevronDown } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
-import Link from "next/link";
+
+type TokenDetailsMap = Record<string, any>;
+type DisplayToken = {
+  tokenId: string;
+  token: {
+    name: string;
+  };
+  hasBalance: boolean;
+  formattedAmount: string;
+};
+
+const PRIORITY_TOKEN_ID = 'fb4233e8a568993976ed38a81c2671587c5ad09552dedefa78760deed6ff87aa';
 
 interface TokenSelectorProps {
   selectedToken: {
@@ -37,14 +48,14 @@ export function TokenSelector({
 }: TokenSelectorProps) {
   const [open, setOpen] = useState(false);
   const [showScrollHint, setShowScrollHint] = useState(false);
-  const [tokenDetails, setTokenDetails] = useState<{ [key: string]: any }>({});
-  const tokenDetailsRef = useRef<{ [key: string]: any }>({});
-  
-  const PRIORITY_TOKEN_ID = 'fb4233e8a568993976ed38a81c2671587c5ad09552dedefa78760deed6ff87aa';
+  const [tokenDetails, setTokenDetails] = useState<TokenDetailsMap>({});
+  const tokenDetailsRef = useRef<TokenDetailsMap>({});
+  const loadRequestIdRef = useRef(0);
+  const userTokenIds = useMemo(() => Object.keys(userTokens), [userTokens]);
+  const userTokenCount = userTokenIds.length;
   
   useEffect(() => {
-    const ids = Object.keys(userTokens);
-    if (ids.length === 0) return;
+    if (userTokenIds.length === 0) return;
     
     const loadCachedDetails = () => {
       try {
@@ -52,68 +63,138 @@ export function TokenSelector({
         if (!cacheStr) return;
         
         const cache = JSON.parse(cacheStr);
-        const cachedDetails: {[key: string]: any} = {};
-        ids.forEach(tokenId => {
+        const cachedDetails: TokenDetailsMap = {};
+        userTokenIds.forEach(tokenId => {
           if (cache[tokenId]) {
             cachedDetails[tokenId] = cache[tokenId];
           }
         });
         
         if (Object.keys(cachedDetails).length > 0) {
-          setTokenDetails(cachedDetails);
+          tokenDetailsRef.current = {
+            ...tokenDetailsRef.current,
+            ...cachedDetails,
+          };
+          setTokenDetails(prev => {
+            const next = { ...prev };
+            let hasChanges = false;
+
+            Object.entries(cachedDetails).forEach(([tokenId, detail]) => {
+              if (next[tokenId] !== detail) {
+                next[tokenId] = detail;
+                hasChanges = true;
+              }
+            });
+
+            return hasChanges ? next : prev;
+          });
         }
       } catch (error) {
       }
     };
     
     loadCachedDetails();
-  }, [userTokens]);
+  }, [userTokenIds]);
   
   useEffect(() => {
-    tokenDetailsRef.current = tokenDetails;
-  }, [tokenDetails]);
-  
-  useEffect(() => {
-    const loadTokenDetails = async () => {
-      const ids = Object.keys(userTokens);
-      if (ids.length === 0) return;
+    let cancelled = false;
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
 
-      for (const tokenId of ids) {
-        if (tokenDetailsRef.current[tokenId]) continue;
-        try {
+    const run = async () => {
+      const tokensToLoad = userTokenIds.filter(tokenId => !tokenDetailsRef.current[tokenId]);
+      if (tokensToLoad.length === 0) return;
+
+      const results = await Promise.allSettled(
+        tokensToLoad.map(async (tokenId) => {
           const detail = await fetchTokenDetails(tokenId);
-          if (detail) {
-            setTokenDetails(prev => ({
-              ...prev,
-              [tokenId]: detail,
-            }));
-          }
-        } catch (error) {
-        }
+          return { tokenId, detail };
+        })
+      );
+
+      if (cancelled || loadRequestIdRef.current !== requestId) {
+        return;
       }
+
+      const loadedDetails: TokenDetailsMap = {};
+      results.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value.detail) {
+          loadedDetails[result.value.tokenId] = result.value.detail;
+        }
+      });
+
+      if (Object.keys(loadedDetails).length === 0) {
+        return;
+      }
+
+      tokenDetailsRef.current = {
+        ...tokenDetailsRef.current,
+        ...loadedDetails,
+      };
+
+      setTokenDetails(prev => ({
+        ...prev,
+        ...loadedDetails,
+      }));
     };
 
-    loadTokenDetails();
-  }, [userTokens]);
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userTokenIds]);
+
+  const selectedTokenDetail = selectedToken?.id ? tokenDetails[selectedToken.id] : undefined;
 
   useEffect(() => {
     if (!onTokenMetaChange || !selectedToken?.id) return;
 
-    const detail = tokenDetails[selectedToken.id];
     const decimals = getTokenDecimalsFromDetails(
-      detail,
+      selectedTokenDetail,
       0,
     );
 
     onTokenMetaChange({
       tokenId: selectedToken.id,
       decimals,
-      detail,
+      detail: selectedTokenDetail,
     });
-  }, [selectedToken.id, tokenDetails, onTokenMetaChange]);
+  }, [selectedToken.id, selectedTokenDetail, onTokenMetaChange]);
+
+  const displayTokens = useMemo<DisplayToken[]>(() => {
+    return Object.entries(TOKENS)
+      .map(([tokenId, token]) => {
+        const rawAmount = userTokens[tokenId] || "0";
+        const hasBalance = rawAmount !== "0";
+
+        const detail = tokenDetails[tokenId];
+        const decimals = getTokenDecimalsFromDetails(detail, 0);
+        const actualAmount = Number(rawAmount) / Math.pow(10, decimals);
+        const formattedAmount = new Intl.NumberFormat('en-US', {
+          maximumFractionDigits: decimals,
+        }).format(actualAmount);
+
+        return {
+          tokenId,
+          token,
+          hasBalance,
+          formattedAmount,
+        };
+      })
+      .filter(({ hasBalance }) => !onlyOwnedTokens || hasBalance)
+      .sort((a, b) => {
+        if (a.hasBalance !== b.hasBalance) {
+          return a.hasBalance ? -1 : 1;
+        }
+        if (a.tokenId === PRIORITY_TOKEN_ID && b.tokenId !== PRIORITY_TOKEN_ID) return -1;
+        if (b.tokenId === PRIORITY_TOKEN_ID && a.tokenId !== PRIORITY_TOKEN_ID) return 1;
+        return a.token.name.localeCompare(b.token.name);
+      });
+  }, [onlyOwnedTokens, tokenDetails, userTokens]);
 
   useEffect(() => {
-    if (open && Object.keys(userTokens).length > 2) {
+    if (open && userTokenCount > 2) {
       setShowScrollHint(true);
       
       const timer = setTimeout(() => {
@@ -122,7 +203,7 @@ export function TokenSelector({
       
       return () => clearTimeout(timer);
     }
-  }, [open, userTokens]);
+  }, [open, userTokenCount]);
   
   const handleTokenSelect = (tokenId: string, tokenName: string) => {
     onTokenSelect(tokenId, tokenName);
@@ -155,35 +236,7 @@ export function TokenSelector({
           <div className="space-y-2 relative">
             <div className="text-sm text-muted-foreground">Listed etokens</div>
             <div className="space-y-1 max-h-[200px] overflow-y-auto">
-              {Object.entries(TOKENS)
-                .map(([tokenId, token]) => {
-                  const rawAmount = userTokens[tokenId] || "0";
-                  const hasBalance = rawAmount !== "0";
-
-                  const detail = tokenDetails[tokenId];
-                  const decimals = getTokenDecimalsFromDetails(detail, 0);
-                  const actualAmount = Number(rawAmount) / Math.pow(10, decimals);
-                  const formattedAmount = new Intl.NumberFormat('en-US', {
-                    maximumFractionDigits: decimals,
-                  }).format(actualAmount);
-
-                  return {
-                    tokenId,
-                    token,
-                    hasBalance,
-                    formattedAmount,
-                  };
-                })
-                .filter(({ hasBalance }) => !onlyOwnedTokens || hasBalance)
-                .sort((a, b) => {
-                  if (a.hasBalance !== b.hasBalance) {
-                    return a.hasBalance ? -1 : 1;
-                  }
-                  if (a.tokenId === PRIORITY_TOKEN_ID && b.tokenId !== PRIORITY_TOKEN_ID) return -1;
-                  if (b.tokenId === PRIORITY_TOKEN_ID && a.tokenId !== PRIORITY_TOKEN_ID) return 1;
-                  return a.token.name.localeCompare(b.token.name);
-                })
-                .map(({ tokenId, token, hasBalance, formattedAmount }) => (
+              {displayTokens.map(({ tokenId, token, hasBalance, formattedAmount }) => (
                   <Button
                     key={tokenId}
                     variant="ghost"
@@ -207,7 +260,7 @@ export function TokenSelector({
                   </Button>
                 ))}
             </div>
-            {showScrollHint && Object.keys(userTokens).length > 2 && (
+            {showScrollHint && userTokenCount > 2 && (
               <div 
                 className="absolute bottom-[-12px] left-1/2 transform -translate-x-1/2 transition-opacity duration-500"
                 style={{ opacity: showScrollHint ? 1 : 0 }}

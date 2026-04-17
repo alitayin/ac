@@ -38,4 +38,4 @@ Next.js 14, TypeScript, Tailwind CSS, ecash-lib, ecash-agora, chronik-client
 - Telegram: https://t.me/agoraUI
 - Email: alitaweb3@gmail.com
 
-**Version**: 4.0.5
+**Version**: 4.0.6
