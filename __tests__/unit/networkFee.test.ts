@@ -43,7 +43,7 @@ describe('networkFee', () => {
         fee: DEFAULT_BASE_NETWORK_FEE_XEC + DEFAULT_PER_UTXO_FEE_XEC * 1,
         utxoCount: 1,
       });
-      expect(result.fee).toBe(26); // 20 + 6*1
+      expect(result.fee).toBe(16); // 10 + 6*1
     });
 
     it('should calculate fee with 5 UTXOs', async () => {
@@ -55,7 +55,7 @@ describe('networkFee', () => {
         fee: DEFAULT_BASE_NETWORK_FEE_XEC + DEFAULT_PER_UTXO_FEE_XEC * 5,
         utxoCount: 5,
       });
-      expect(result.fee).toBe(50); // 20 + 6*5
+      expect(result.fee).toBe(40); // 10 + 6*5
     });
 
     it('should calculate fee with 100 UTXOs (large UTXO count)', async () => {
@@ -67,7 +67,7 @@ describe('networkFee', () => {
         fee: DEFAULT_BASE_NETWORK_FEE_XEC + DEFAULT_PER_UTXO_FEE_XEC * 100,
         utxoCount: 100,
       });
-      expect(result.fee).toBe(620); // 20 + 6*100
+      expect(result.fee).toBe(610); // 10 + 6*100
     });
 
     it('should use custom base fee', async () => {
@@ -92,7 +92,7 @@ describe('networkFee', () => {
         customPerUtxoFee
       );
 
-      expect(result.fee).toBe(50); // 20 + 10*3
+      expect(result.fee).toBe(40); // 10 + 10*3
     });
 
     it('should use both custom fees', async () => {
@@ -144,7 +144,7 @@ describe('networkFee', () => {
 
       const result = await estimateNetworkFeeXecFromAddress('ecash:test123');
 
-      expect(result.fee).toBe(62); // 20 + 6*7
+      expect(result.fee).toBe(52); // 10 + 6*7
       expect(Number.isInteger(result.fee)).toBe(true);
     });
   });

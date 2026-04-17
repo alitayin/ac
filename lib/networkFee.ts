@@ -1,6 +1,6 @@
 import { fetchAddressXecUtxos } from "@/lib/chronik"
 
-export const DEFAULT_BASE_NETWORK_FEE_XEC = 20
+export const DEFAULT_BASE_NETWORK_FEE_XEC = 10
 export const DEFAULT_PER_UTXO_FEE_XEC = 6
 
 export const estimateNetworkFeeXecFromAddress = async (
@@ -19,5 +19,4 @@ export const estimateNetworkFeeXecFromAddress = async (
 
   return { fee, utxoCount }
 }
-
 

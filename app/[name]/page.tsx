@@ -47,6 +47,10 @@ import { TOKEN_IDS, PRICE_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraOrderBook } from "@/lib/agora-orders"
 import { isEtokenDbAvailable } from "@/lib/etokendb"
 import {
+  DEFAULT_BASE_NETWORK_FEE_XEC,
+  estimateNetworkFeeXecFromAddress,
+} from "@/lib/networkFee"
+import {
   getCachedTokenSummary,
   SUMMARY_CACHE_TTL_MS,
 } from "@/lib/token-stats"
@@ -102,10 +106,29 @@ export default function TokenPage() {
     insufficientOrders: []
   })
   const [chronikTokenInfo, setChronikTokenInfo] = useState<any>(null)
+  const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC)
   
   const isLoadingStats = useRef<boolean>(false)
 
-  const AGORA_FEE = 20
+  const calculateNetworkFeeFromUtxos = async (): Promise<number> => {
+    try {
+      if (!isWalletConnected || !ecashAddress) {
+        setNetworkFee(DEFAULT_BASE_NETWORK_FEE_XEC)
+        return DEFAULT_BASE_NETWORK_FEE_XEC
+      }
+
+      const { fee } = await estimateNetworkFeeXecFromAddress(ecashAddress)
+      setNetworkFee(fee)
+      return fee
+    } catch (error) {
+      console.error(
+        "Failed to calculate network fee from UTXOs, fallback to base fee:",
+        error
+      )
+      setNetworkFee(DEFAULT_BASE_NETWORK_FEE_XEC)
+      return DEFAULT_BASE_NETWORK_FEE_XEC
+    }
+  }
 
   useEffect(() => {
     const hasAcknowledged = localStorage.getItem('risk_acknowledged') === 'true';
@@ -151,7 +174,7 @@ export default function TokenPage() {
         }
         
         const budget = order.remainingAmount * order.maxPrice;
-        if (budget < MIN_ORDER_TOTAL_XEC && order.maxPrice <= 1 && order.status !== 'completed' && order.remainingAmount !== 0) {
+        if ((budget + networkFee) < MIN_ORDER_TOTAL_XEC && order.maxPrice <= 1 && order.status !== 'completed' && order.remainingAmount !== 0) {
           insufficientCount++;
           insufficientOrderKeys.push(key);
         }
@@ -171,7 +194,11 @@ export default function TokenPage() {
 
     const timer = setTimeout(checkLocalOrders, 1000);
     return () => clearTimeout(timer);
-  }, [ecashAddress]);
+  }, [ecashAddress, networkFee]);
+
+  useEffect(() => {
+    void calculateNetworkFeeFromUtxos();
+  }, [isWalletConnected, ecashAddress]);
 
   const rawName = params.name.toString();
   let decodedName: string;
@@ -399,7 +426,7 @@ export default function TokenPage() {
     if (spendAmount && buyTokenOrderBook) {
       calculateReceiveAmount(spendAmount)
     }
-  }, [buyTokenOrderBook])
+  }, [buyTokenOrderBook, networkFee])
 
   const marketCap = stats && supply && !isNaN(stats.latestPrice) && !isNaN(Number(supply)) 
     ? (stats.latestPrice * Number(supply)) 
@@ -436,12 +463,12 @@ export default function TokenPage() {
       }
     }
 
-    const availableXec = Math.max(0, xecAmount - AGORA_FEE)
+    const availableXec = Math.max(0, xecAmount - networkFee)
     if (availableXec <= 0) {
       setReceiveAmount('0')
       setAvgExecutionPrice(0)
       setSlippage(0)
-      setErrorMessage(`Amount must be greater than ${AGORA_FEE} XEC to cover network fee`)
+      setErrorMessage(`Amount must be greater than ${networkFee.toFixed(2)} XEC to cover the estimated network fee`)
       setMaxPrice(0)
       return
     }
@@ -546,12 +573,13 @@ export default function TokenPage() {
     }
 
     if (orderCheckInfo.hasInsufficientBudget && orderCheckInfo.insufficientOrders.length > 0) {
-      const actualSpendAmount = MIN_ORDER_TOTAL_XEC;
+      const actualSpendAmount = Math.max(0, MIN_ORDER_TOTAL_XEC - networkFee);
+      const actualTotalRequired = actualSpendAmount + networkFee;
 
-      if (currentBalance < actualSpendAmount) {
+      if (currentBalance < actualTotalRequired) {
         toast({
           title: "Cannot adjust orders",
-          description: `Insufficient balance. Required: ${actualSpendAmount.toFixed(2)} XEC, Available: ${currentBalance.toFixed(2)} XEC`,
+          description: `Insufficient balance. Required: ${actualTotalRequired.toFixed(2)} XEC, Available: ${currentBalance.toFixed(2)} XEC`,
           variant: "destructive",
         });
         setShowOrderCheckDialog(false);
@@ -637,7 +665,7 @@ export default function TokenPage() {
     setShowOrderCheckDialog(false);
   };
 
-  const createSwapOrder = () => {
+  const createSwapOrder = async () => {
     if (!selectedBuyToken) {
       toast({
         title: "No token selected",
@@ -683,11 +711,13 @@ export default function TokenPage() {
       return;
     }
 
+    const currentFee = await calculateNetworkFeeFromUtxos();
     const totalCost = parseFloat(receiveAmount) * maxPrice;
-    if (totalCost < MIN_ORDER_TOTAL_XEC) {
+    const totalRequired = totalCost + currentFee;
+    if (totalRequired < MIN_ORDER_TOTAL_XEC) {
       toast({
         title: "Order amount too small",
-        description: `Orders require a minimum total value of ${MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC. Current total: ${totalCost.toFixed(2)} XEC`,
+        description: `Orders require a minimum total value of ${MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC (including network fee). Current total: ${totalRequired.toFixed(2)} XEC`,
         variant: "destructive",
       });
       return;
@@ -1036,12 +1066,12 @@ export default function TokenPage() {
               )}
               {orderCheckInfo.hasInsufficientBudget && (
                 <p className="leading-relaxed text-foreground">
-                  ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient budget (less than {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC).
+                  ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient total value (less than {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC including network fee).
                 </p>
               )}
               {orderCheckInfo.hasInsufficientBudget && (
                 <p className="leading-relaxed text-muted-foreground">
-                  These orders will be automatically adjusted to {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC.
+                  These orders will be automatically adjusted to the minimum valid total.
                 </p>
               )}
               {orderCheckInfo.hasCompleted && !orderCheckInfo.hasInsufficientBudget && (
