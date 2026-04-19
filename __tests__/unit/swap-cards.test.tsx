@@ -90,6 +90,12 @@ describe('Swap Cards', () => {
       expect(input.value).toBe('100')
     })
 
+    it('should render ecash as a static label instead of a button', () => {
+      render(<SpendCard {...mockProps} />)
+      expect(screen.getByText('ecash')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /ecash/i })).not.toBeInTheDocument()
+    })
+
     it('should only accept numeric input', () => {
       render(<SpendCard {...mockProps} />)
       const input = screen.getByPlaceholderText('0')

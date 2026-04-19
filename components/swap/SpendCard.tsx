@@ -69,10 +69,10 @@ export const SpendCard: React.FC<SpendCardProps> = ({
               }
             }}
           />
-          <Button className="bg-background hover:bg-muted border text-foreground rounded-full text-sm px-2 py-1 flex items-center gap-2">
-            <Image src="/ecash.svg" alt="eCash" width={12} height={12} />
-            eCash
-          </Button>
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground/80 select-none">
+            <Image src="/ecash.svg" alt="eCash" width={14} height={14} />
+            <span>ecash</span>
+          </div>
         </div>
         <div className="text-muted-foreground text-sm">
           <div className="flex items-center mt-2">
@@ -117,4 +117,3 @@ export const SpendCard: React.FC<SpendCardProps> = ({
 };
 
 export default SpendCard;
-

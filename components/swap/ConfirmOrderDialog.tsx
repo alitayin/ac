@@ -10,9 +10,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { PackageCheck, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ArrowDown, PackageCheck, X } from "lucide-react";
 import Image from "next/image";
 
 interface ConfirmOrderDialogProps {
@@ -33,6 +35,43 @@ interface ConfirmOrderDialogProps {
   onConfirm: () => void;
 }
 
+interface BreakdownRowProps {
+  label: string;
+  value: string;
+  emphasized?: boolean;
+}
+
+function formatDisplayNumber(
+  value: number | string,
+  options: Intl.NumberFormatOptions = {},
+): string {
+  const numericValue = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return String(value);
+  }
+
+  return numericValue.toLocaleString("en-US", options);
+}
+
+function BreakdownRow({
+  label,
+  value,
+  emphasized = false,
+}: BreakdownRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <div className="flex items-baseline gap-1 text-right">
+        <span className={`tabular-nums ${emphasized ? "text-base font-semibold" : "font-medium"}`}>
+          {value}
+        </span>
+        <span className="text-xs uppercase text-muted-foreground">XEC</span>
+      </div>
+    </div>
+  );
+}
+
 export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   open,
   onOpenChange,
@@ -50,47 +89,94 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   onClose,
   onConfirm,
 }) => {
-  const totalXec = receiveAmount && tokenPrice
-    ? (tokenCost + totalFees).toFixed(2)
-    : spendAmount;
+  const custodyLabel = isOfflineOrder ? "Custodial" : "Self-Custody";
+  const totalXec =
+    receiveAmount && tokenPrice
+      ? tokenCost + totalFees
+      : Number(spendAmount || 0);
+
+  const formattedTotalXec = formatDisplayNumber(totalXec, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const formattedReceiveAmount = formatDisplayNumber(receiveAmount, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 8,
+  });
+  const formattedTokenCost = formatDisplayNumber(tokenCost, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const formattedSwapFee = formatDisplayNumber(swapFee, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const formattedNetworkFee = formatDisplayNumber(networkFee, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const formattedTotalFees = formatDisplayNumber(totalFees, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <PackageCheck className="h-6 w-6" />
-              Confirm Order
-              <span
-                className={`px-2 py-1 text-xs rounded-full ${
-                  isOfflineOrder
-                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                    : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                }`}
-              >
-                {isOfflineOrder ? "Custodial" : "Self-Custody"}
-              </span>
+      <AlertDialogContent className="gap-3 p-5 sm:max-w-xl">
+        <AlertDialogHeader className="gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 items-center justify-center rounded-full border bg-muted">
+                <PackageCheck className="size-5" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <AlertDialogTitle>Confirm Order</AlertDialogTitle>
+                  <Badge variant={isOfflineOrder ? "outline" : "secondary"}>
+                    {custodyLabel}
+                  </Badge>
+                </div>
+                <AlertDialogDescription>
+                  Check the key numbers before submitting.
+                </AlertDialogDescription>
+              </div>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="size-8 shrink-0"
               onClick={onClose}
+              aria-label="Close confirm order dialog"
             >
-              <X className="h-4 w-4" />
+              <X />
             </Button>
-          </AlertDialogTitle>
-          <AlertDialogDescription className="sr-only">Review and confirm your order details before submitting.</AlertDialogDescription>
-          <div className="mt-4">
-            <span className="text-sm text-muted-foreground">
-              You are about to create the following order:
-            </span>
-            <div className="mt-4">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="text-muted-foreground">Max Token amount:</div>
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-5 w-5">
+          </div>
+        </AlertDialogHeader>
+
+        <div className="flex flex-col gap-3">
+          <Card className="border-primary/20 bg-primary/5 shadow-none">
+            <CardContent className="p-4">
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                <div className="flex items-center gap-3 rounded-lg border bg-background/80 p-3">
+                  <Image src="/ecash.svg" alt="eCash" width={18} height={18} />
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Spend up to
+                    </span>
+                    <span className="truncate text-sm font-semibold tabular-nums">
+                      {formattedTotalXec} XEC
+                    </span>
+                  </div>
+                </div>
+
+                <div className="hidden justify-center sm:flex">
+                  <div className="flex size-8 items-center justify-center rounded-full border bg-background/80">
+                    <ArrowDown className="size-4" />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-lg border bg-background/80 p-3">
+                  <Avatar className="size-7">
                     <AvatarImage
                       src={`https://icons.etokens.cash/32/${selectedToken.id}.png`}
                       alt={selectedToken.name}
@@ -99,106 +185,38 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                       {selectedToken.name.substring(0, 2)}
                     </AvatarFallback>
                   </Avatar>
-                  {receiveAmount} {selectedToken.name}
-                </div>
-
-                <div className="text-muted-foreground">Max XEC Amount</div>
-                <div className="flex items-center gap-2">
-                  <Image
-                    src="/ecash.svg"
-                    alt="eCash"
-                    width={20}
-                    height={20}
-                  />
-                  {totalXec} XEC
-                </div>
-
-                <div className="text-muted-foreground">Price per token:</div>
-                <div className="flex items-center gap-2">
-                  <Image
-                    src="/ecash.svg"
-                    alt="eCash"
-                    width={20}
-                    height={20}
-                  />
-                  {formatTokenPrice(tokenPrice)} XEC
-                </div>
-
-                <div className="text-muted-foreground">Order value:</div>
-                <div className="flex items-center gap-2">
-                  <Image
-                    src="/ecash.svg"
-                    alt="eCash"
-                    width={20}
-                    height={20}
-                  />
-                  {tokenCost.toFixed(2)} XEC
-                </div>
-
-                <div className="text-muted-foreground">{feeDescription}:</div>
-                <div className="flex items-center gap-2">
-                  <Image
-                    src="/ecash.svg"
-                    alt="eCash"
-                    width={20}
-                    height={20}
-                  />
-                  {swapFee.toFixed(2)} XEC
-                </div>
-
-                <div className="text-muted-foreground">Network fee:</div>
-                <div className="flex items-center gap-2">
-                  <Image
-                    src="/ecash.svg"
-                    alt="eCash"
-                    width={20}
-                    height={20}
-                  />
-                  {networkFee.toFixed(2)} XEC
-                </div>
-
-                <div className="text-muted-foreground">Total fees:</div>
-                <div className="flex items-center gap-2 font-medium">
-                  <Image
-                    src="/ecash.svg"
-                    alt="eCash"
-                    width={20}
-                    height={20}
-                  />
-                  {totalFees.toFixed(2)} XEC
-                </div>
-              </div>
-            </div>
-          </div>
-        </AlertDialogHeader>
-
-        <div className="mb-4">
-          <div className="space-y-3">
-            <h3 className="font-medium text-base">Order Type</h3>
-            <div className="flex justify-center">
-              <div className="border rounded-xl p-4 transition-all border-primary bg-primary/5 ring-2 ring-primary/20 w-full max-w-md">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium text-sm">Self-Custody</div>
-                  <div className="w-4 h-4 rounded-full border-2 border-primary bg-primary">
-                    <div className="w-2 h-2 bg-white rounded-full m-0.5"></div>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Receive up to
+                    </span>
+                    <span className="truncate text-sm font-semibold">
+                      {formattedReceiveAmount} {selectedToken.name}
+                    </span>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Self-custody orders require keeping your browser online to
-                  ensure order execution. You maintain full control of your
-                  funds.
-                </p>
-                <p className="text-xs text-primary mt-2 font-medium">
-                  ✓ Selected
-                </p>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-none">
+            <CardContent className="flex flex-col gap-2.5 p-4">
+              <BreakdownRow label="Order value" value={formattedTokenCost} />
+              <BreakdownRow label="Price per token" value={formatTokenPrice(tokenPrice)} />
+              <BreakdownRow label={feeDescription} value={formattedSwapFee} />
+              <BreakdownRow label="Network fee" value={formattedNetworkFee} />
+              <div className="rounded-lg bg-muted/60 p-2.5">
+                <BreakdownRow label="Total fees" value={formattedTotalFees} />
+                <div className="mt-2 border-t border-border/60 pt-2">
+                  <BreakdownRow label="Max spend" value={formattedTotalXec} emphasized />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <AlertDialogFooter className="sm:justify-center">
-          <AlertDialogAction onClick={onConfirm} className="w-full h-12 text-md">
-            {isOfflineOrder ? "Confirm Custodial Order" : "Confirm Self-Custody Order"}
+          <AlertDialogAction onClick={onConfirm} className="h-11 w-full text-sm">
+            Confirm Order
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -207,4 +225,3 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 };
 
 export default ConfirmOrderDialog;
-
