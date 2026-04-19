@@ -38,6 +38,7 @@ interface SwapPanelProps {
   riskAcknowledged: boolean
   setRiskAcknowledged: (v: boolean) => void
   onMaxClick: () => void
+  showCashtabButton?: boolean
   checkboxId?: string
 }
 
@@ -48,6 +49,7 @@ export function SwapPanel({
   errorMessage, avgExecutionPrice, slippage, isSwapActivated, tokenId,
   createSwapOrder, networkFee, swapFee, totalFees, feeDescription,
   riskAcknowledged, setRiskAcknowledged, onMaxClick,
+  showCashtabButton = true,
   checkboxId = "risk-acknowledgement",
 }: SwapPanelProps) {
   return (
@@ -159,13 +161,15 @@ export function SwapPanel({
       </Card>
 
       <div className="flex gap-2">
-        <Button
-          className="flex-1 bg-pink-100 hover:bg-pink-200 text-pink-500/80 h-14 text-lg rounded-xl"
-          variant="ghost"
-          onClick={() => window.open(`https://cashtab.com/#/token/${tokenId}`, "_blank")}
-        >
-          Cashtab
-        </Button>
+        {showCashtabButton && (
+          <Button
+            className="flex-1 bg-pink-100 hover:bg-pink-200 text-pink-500/80 h-14 text-lg rounded-xl"
+            variant="ghost"
+            onClick={() => window.open(`https://cashtab.com/#/token/${tokenId}`, "_blank")}
+          >
+            Cashtab
+          </Button>
+        )}
         <Button
           className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-500 h-14 text-lg rounded-xl"
           variant="ghost"

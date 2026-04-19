@@ -1,5 +1,5 @@
 export const AGORA_SWAP_FEE_ADDRESS =
-  "ecash:qr6lws9uwmjkkaau4w956lugs9nlg9hudqs26lyxkv";
+  "ecash:qpaw7v7sfvlsm4px33saggr63jgsalsx4q49m7n6v4";
 export const AGORA_SWAP_FEE_BPS = 50;
 export const AGORA_SWAP_FEE_RATE = AGORA_SWAP_FEE_BPS / 10000;
 export const AGORA_SWAP_FEE_MIN_SATS = 546n;

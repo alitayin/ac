@@ -6,6 +6,18 @@
 
 ## 2026-04-20
 
+### 🎉 v4.0.8 发布
+
+**主要改动：**
+- 将 Agora swap 手续费地址更新为 `ecash:qpaw7v7sfvlsm4px33saggr63jgsalsx4q49m7n6v4`
+- 在 token 页面移除 `Cashtab` 跳转按钮，不再从该页跳转到 Cashtab
+
+**验证：**
+- ✅ `npm test` 通过
+- ✅ `npm run build` 通过
+
+---
+
 ### 🎉 v4.0.7 发布
 
 **主要改动：**

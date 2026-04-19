@@ -823,6 +823,7 @@ export default function TokenPage() {
               swapFee={estimatedBuyFeeSummary.swapFeeXec}
               totalFees={estimatedBuyFeeSummary.totalFeesXec}
               feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
+              showCashtabButton={false}
               riskAcknowledged={riskAcknowledged}
               setRiskAcknowledged={setRiskAcknowledged}
               checkboxId="risk-acknowledgement-mobile"
@@ -1001,6 +1002,7 @@ export default function TokenPage() {
               swapFee={estimatedBuyFeeSummary.swapFeeXec}
               totalFees={estimatedBuyFeeSummary.totalFeesXec}
               feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
+              showCashtabButton={false}
               riskAcknowledged={riskAcknowledged}
               setRiskAcknowledged={setRiskAcknowledged}
               checkboxId="risk-acknowledgement-desktop"
