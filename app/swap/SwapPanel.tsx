@@ -47,6 +47,12 @@ import {
   DEFAULT_BASE_NETWORK_FEE_XEC,
   estimateNetworkFeeXecFromAddress,
 } from "@/lib/networkFee";
+import {
+  AGORA_SWAP_FEE_DESCRIPTION,
+  calculateAgoraFeeSummary,
+  estimateAgoraTokenCostFromBudget,
+  getMinimumAgoraBuyFeesXec,
+} from "@/lib/agora-swap-fee";
 import WalletConnectDrawerInner from "@/components/swap/WalletConnectDrawerInner";
 import ClearLocalDataDialog from "@/components/swap/ClearLocalDataDialog";
 import PriceCard from "@/components/swap/PriceCard";
@@ -330,7 +336,7 @@ export function SwapPanel() {
       setSpendAmount(maxSpend.toFixed(2));
     }
     
-    const availableSpend = Math.max(0, spend - networkFee);
+    const availableSpend = estimateAgoraTokenCostFromBudget(spend, networkFee);
     if (availableSpend <= 0) {
       setReceiveAmount('0');
       return;
@@ -359,11 +365,11 @@ export function SwapPanel() {
     }
     
     const tokenCost = receive * tokenPrice;
-    const totalSpend = tokenCost + networkFee;
+    const totalSpend = calculateAgoraFeeSummary(tokenCost, networkFee).totalCostXec;
     const maxSpend = parseFloat(balance);
     
     if (totalSpend > maxSpend) {
-      const maxAvailable = Math.max(0, maxSpend - networkFee);
+      const maxAvailable = estimateAgoraTokenCostFromBudget(maxSpend, networkFee);
       const maxReceive = maxAvailable / tokenPrice;
       
       const tokenDecimals = selectedTokenDecimals;
@@ -532,6 +538,25 @@ export function SwapPanel() {
     const validReceive = receiveAmount && parseFloat(receiveAmount) > 0;
     return validPrice && validSpend && validReceive;
   }, [tokenPrice, spendAmount, receiveAmount]);
+
+  const estimatedTokenCost = useMemo(() => {
+    const receive = parseFloat(receiveAmount || "0");
+    if (!Number.isFinite(receive) || receive <= 0 || tokenPrice <= 0) {
+      return 0;
+    }
+
+    return receive * tokenPrice;
+  }, [receiveAmount, tokenPrice]);
+
+  const estimatedFeeSummary = useMemo(
+    () => calculateAgoraFeeSummary(estimatedTokenCost, networkFee),
+    [estimatedTokenCost, networkFee],
+  );
+
+  const minimumBuyFees = useMemo(
+    () => getMinimumAgoraBuyFeesXec(networkFee),
+    [networkFee],
+  );
 
   const handleTokenSelect = (tokenId: string, tokenName: string) => {
     setSelectedToken({ id: tokenId, name: tokenName });
@@ -769,11 +794,11 @@ export function SwapPanel() {
     }
     
     const tokenCost = tokenPrice * parseFloat(receiveAmount || '0');
-    const totalAmount = tokenCost + currentFee;
+    const totalAmount = calculateAgoraFeeSummary(tokenCost, currentFee).totalCostXec;
     if (totalAmount < MIN_ORDER_TOTAL_XEC) {
       toast({
         title: "Order amount too small",
-        description: `Orders require a minimum total value of ${MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC (including network fee). Current total: ${totalAmount.toFixed(2)} XEC`,
+        description: `Orders require a minimum total value of ${MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC (including swap and network fees). Current total: ${totalAmount.toFixed(2)} XEC`,
         variant: "destructive",
       });
       return;
@@ -1161,6 +1186,9 @@ export function SwapPanel() {
                   isWalletConnected={isWalletConnected}
                   balance={balance}
                   networkFee={networkFee}
+                  swapFee={estimatedFeeSummary.swapFeeXec}
+                  totalFees={estimatedFeeSummary.totalFeesXec}
+                  minimumTotalFees={minimumBuyFees}
                   toast={toast}
                 />
 
@@ -1211,6 +1239,10 @@ export function SwapPanel() {
                     spendAmount={spendAmount}
                     tokenPrice={tokenPrice}
                     networkFee={networkFee}
+                    swapFee={estimatedFeeSummary.swapFeeXec}
+                    totalFees={estimatedFeeSummary.totalFeesXec}
+                    tokenCost={estimatedFeeSummary.tokenCostXec}
+                    feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
                     formatTokenPrice={formatTokenPrice}
                     onClose={() => setIsConfirmDialogOpen(false)}
                     onConfirm={createOrder}
@@ -1280,7 +1312,7 @@ export function SwapPanel() {
                     </Alert>
                   )}
                   
-                  {receiveAmount && tokenPrice && ((parseFloat(receiveAmount) * tokenPrice + networkFee) < MIN_ORDER_TOTAL_XEC) && (
+                  {receiveAmount && tokenPrice && (estimatedFeeSummary.totalCostXec < MIN_ORDER_TOTAL_XEC) && (
                     <Alert className="relative mt-2">
                       <div className="flex items-center">
                         <div className="p-2 bg-orange-100 dark:bg-orange-400 rounded-md">
@@ -1288,7 +1320,7 @@ export function SwapPanel() {
                         </div>
                         <AlertDescription className="flex items-center justify-between flex-1">
                           <div className="ml-2 flex items-center leading-7 tracking-tight">
-                            Orders require minimum {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC. Current: {(parseFloat(receiveAmount) * tokenPrice + networkFee).toFixed(2)} XEC
+                            Orders require minimum {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC. Current: {estimatedFeeSummary.totalCostXec.toFixed(2)} XEC
                           </div>
                         </AlertDescription>
                       </div>

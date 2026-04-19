@@ -8,19 +8,31 @@ import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CircleX, Trash2, CircleCheck, LoaderCircle, RefreshCw } from "lucide-react";
+import { CircleX, Trash2, CircleCheck, LoaderCircle, RefreshCw, History } from "lucide-react";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
 
 interface Order {
   remainingAmount: number;
   maxPrice: number;
   status: string;
-  transactions: any[];
+  transactions: OrderTransaction[];
+  createdAt?: string;
   tokenId?: string;
   address?: string;
   tokenName?: string;
   orderType?: string; // added: order type field
   failureReason?: string; // added: failure reason field
+}
+
+interface OrderTransaction {
+  txid?: string;
+  amount?: number;
+  networkFee?: number;
+  swapFee?: number;
+  totalFees?: number;
+  totalXECPaid?: number;
+  refundTxid?: string;
+  refundAmount?: number;
 }
 
 interface OrderListProps {
@@ -291,6 +303,28 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
     return `${txid.substring(0, 6)}...${txid.substring(txid.length - 6)}`;
   };
 
+  const getOrderTimestamp = (order: Order) => {
+    if (!order.createdAt) return 0;
+    const timestamp = new Date(order.createdAt).getTime();
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+  };
+
+  const formatOrderTime = (createdAt?: string) => {
+    if (!createdAt) return "Unknown time";
+
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) return "Unknown time";
+
+    return new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  };
+
   // Filter orders
   const filteredOrders = Object.entries(orders).filter(([orderKey, order]) => {
     // Token filter
@@ -393,26 +427,13 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
       
       {/* Render actual orders */}
       {filteredOrders
-        // Sort to prioritize pending and in-progress orders
         .sort((a, b) => {
-          const [orderKeyA, orderA] = a;
-          const [orderKeyB, orderB] = b;
-          
-          // First sort by status: pending/in-progress first, completed/fail later
-          const statusPriorityA = (orderA.status === 'pending' || orderA.status === 'in-progress') ? 0 : 1;
-          const statusPriorityB = (orderB.status === 'pending' || orderB.status === 'in-progress') ? 0 : 1;
-          
-          if (statusPriorityA !== statusPriorityB) {
-            return statusPriorityA - statusPriorityB;
+          const timeDiff = getOrderTimestamp(b[1]) - getOrderTimestamp(a[1]);
+          if (timeDiff !== 0) {
+            return timeDiff;
           }
-          
-          // Then sort by tokenId
-          if (orderA.tokenId !== orderB.tokenId) {
-            return (orderA.tokenId || '').localeCompare(orderB.tokenId || '');
-          }
-          
-          // Finally sort by maxPrice descending within the same tokenId
-          return orderB.maxPrice - orderA.maxPrice;
+
+          return b[1].maxPrice - a[1].maxPrice;
         })
         .map(([orderKey, order]) => {
  
@@ -423,7 +444,23 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
         
         const hasInsufficientFunds = insufficientFundsOrders.has(orderKey);
         
-        const totalExecuted = order.transactions.reduce((sum, tx) => sum + tx.amount, 0);
+        const totalExecuted = order.transactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+        const totalNetworkFees = order.transactions.reduce(
+          (sum, tx) => sum + (Number(tx.networkFee) || 0),
+          0,
+        );
+        const totalSwapFees = order.transactions.reduce(
+          (sum, tx) => sum + (Number(tx.swapFee) || 0),
+          0,
+        );
+        const totalFeesPaid = order.transactions.reduce(
+          (sum, tx) =>
+            sum +
+            (typeof tx.totalFees === 'number'
+              ? tx.totalFees
+              : (Number(tx.networkFee) || 0) + (Number(tx.swapFee) || 0)),
+          0,
+        );
         const originalAmount = order.remainingAmount + totalExecuted;
         const progressPercent = originalAmount > 0 ? Math.round((totalExecuted / originalAmount) * 100) : 0;
         
@@ -433,6 +470,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
         return (
           <Card 
             key={orderKey} 
+            data-testid={`order-card-${orderKey}`}
             className="rounded-xl p-4 bg-background hover:bg-muted/30 hover:shadow-md transition-all duration-200 cursor-pointer"
             onClick={() => handleCardClick(order)}
           >
@@ -527,39 +565,41 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
                         {formatTokenAmount(order.remainingAmount, order.tokenId)} {tokenSymbol}
                       </div>
                     </div>
+                    <div>
+                      <div className="text-muted-foreground text-xs">Fees Paid</div>
+                      <div className="font-medium">
+                        {totalFeesPaid.toFixed(2)} XEC
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground text-xs">Swap / Network</div>
+                      <div className="font-medium">
+                        {totalSwapFees.toFixed(2)} / {totalNetworkFees.toFixed(2)} XEC
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
             </div>
             
-            <div className="flex justify-between mt-4">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="text-muted-foreground"
-                onClick={() => handleDeleteOrder(orderKey)}
-              >
-                {isCompleted ? (
-                  <>
-                    <Trash2 className="h-4 w-4" />
-                    Delete Order
-                  </>
-                ) : (
-                  <>
-                    <CircleX className="h-4 w-4" />
-                    Cancel Order
-                  </>
-                )}
-              </Button>
-              
-              <div className="flex gap-2">
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-xs text-muted-foreground" data-testid={`order-time-${orderKey}`}>
+                {formatOrderTime(order.createdAt)}
+              </div>
+
+              <div className="flex items-center gap-1">
                 {/* View refund button - only when refund tx exists */}
                 {hasRefundTransactions(order) && (
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="text-orange-600 border-orange-200 hover:bg-muted/30">
-                        <RefreshCw className="h-4 w-4 mr-1" />
-                        View Refunds
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-orange-600 hover:text-orange-700"
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label="View Refunds"
+                      >
+                        <RefreshCw className="h-4 w-4" />
                       </Button>
                     </PopoverTrigger>
                                          <PopoverContent className="w-80">
@@ -602,32 +642,56 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
                 )}
                 
                 {/* View transaction button */}
-                {order.transactions.length > 0 && (
+                {order.transactions.some(tx => tx.txid) && (
                   <Popover open={openPopover === orderKey} onOpenChange={(open) => setOpenPopover(open ? orderKey : null)}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        View Transactions
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground"
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label="View Transactions"
+                      >
+                        <History className="h-4 w-4" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80">
                       <div className="space-y-2">
                         <h4 className="font-medium">Transaction History</h4>
                         <div className="border rounded-md divide-y">
-                          {order.transactions.map((tx, index) => (
-                            <div key={index} className="p-2 flex justify-between items-center">
-                              <div className="text-sm truncate max-w-[180px]">
-                                <a 
-                                  href={`https://explorer.e.cash/tx/${tx.txid}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:underline"
-                                >
-                                  {formatTxId(tx.txid)}
-                                </a>
+                          {order.transactions
+                            .filter(tx => tx.txid)
+                            .map((tx, index) => (
+                            <div key={index} className="p-2 space-y-2">
+                              <div className="flex justify-between items-center gap-3">
+                                <div className="text-sm truncate max-w-[180px]">
+                                  <a 
+                                    href={`https://explorer.e.cash/tx/${tx.txid}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline"
+                                  >
+                                    {formatTxId(tx.txid!)}
+                                  </a>
+                                </div>
+                                <div className="text-sm font-medium">
+                                  {tx.amount} {tokenSymbol}
+                                </div>
                               </div>
-                              <div className="text-sm font-medium">
-                                {tx.amount} {tokenSymbol}
-                              </div>
+                              {((Number(tx.swapFee) || 0) > 0 || (Number(tx.networkFee) || 0) > 0) && (
+                                <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                  <span>
+                                    Fees ({(Number(tx.swapFee) || 0).toFixed(2)} swap + {(Number(tx.networkFee) || 0).toFixed(2)} network)
+                                  </span>
+                                  <span className="font-medium text-foreground">
+                                    {(
+                                      typeof tx.totalFees === 'number'
+                                        ? tx.totalFees
+                                        : (Number(tx.swapFee) || 0) + (Number(tx.networkFee) || 0)
+                                    ).toFixed(2)} XEC
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -635,6 +699,23 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
                     </PopoverContent>
                   </Popover>
                 )}
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleDeleteOrder(orderKey);
+                  }}
+                  aria-label={isCompleted ? "Delete Order" : "Cancel Order"}
+                >
+                  {isCompleted ? (
+                    <Trash2 className="h-4 w-4" />
+                  ) : (
+                    <CircleX className="h-4 w-4" />
+                  )}
+                </Button>
               </div>
             </div>
             

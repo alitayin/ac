@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { main } from '@/lib/Buy.js';
 import * as ecashQuicksend from 'ecash-quicksend';
+import {
+  AGORA_SWAP_FEE_ADDRESS,
+  AGORA_SWAP_FEE_BPS,
+  AGORA_SWAP_FEE_MIN_SATS,
+} from '@/lib/agora-swap-fee';
 
 vi.mock('ecash-quicksend', () => ({
   buyAgoraTokens: vi.fn(),
@@ -29,9 +34,11 @@ describe('Buy.js', () => {
             amount: 1000000n, // 1 token with 6 decimals
             price: 0.0001, // XEC per atom
             fee: 10,
+            swapFee: 5.46,
           },
         ],
         totalXECPaid: 110,
+        totalSwapFeePaid: 5.46,
       };
 
       vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
@@ -53,7 +60,27 @@ describe('Buy.js', () => {
       expect(result.totalXECPaid).toBe(110);
       expect(result.pricePerToken).toBe(100); // 0.0001 * 10^6
       expect(result.networkFee).toBe(10);
+      expect(result.swapFee).toBe(5.46);
+      expect(result.totalFees).toBe(15.46);
+      expect(result.transactions).toEqual([
+        expect.objectContaining({
+          txid: 'abc123',
+          amount: 1,
+          networkFee: 10,
+          swapFee: 5.46,
+          totalFees: 15.46,
+        }),
+      ]);
       expect(result.explorerLink).toBe('https://explorer.e.cash/tx/abc123');
+      expect(ecashQuicksend.buyAgoraTokens).toHaveBeenCalledWith(
+        expect.objectContaining({
+          feeOutput: {
+            address: AGORA_SWAP_FEE_ADDRESS,
+            feeBps: AGORA_SWAP_FEE_BPS,
+            minSats: AGORA_SWAP_FEE_MIN_SATS,
+          },
+        }),
+      );
     });
 
     it('should handle token with 0 decimals', async () => {
@@ -117,6 +144,45 @@ describe('Buy.js', () => {
 
       expect(result.success).toBe(true);
       expect(result.actualAmount).toBe(1);
+    });
+
+    it('should aggregate multi-transaction fills and fee totals', async () => {
+      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue({
+        success: true,
+        transactions: [
+          {
+            txid: 'tx-1',
+            amount: 200n,
+            price: 1.5,
+            fee: 10,
+            swapFee: 5.46,
+          },
+          {
+            txid: 'tx-2',
+            amount: 300n,
+            price: 1.4,
+            fee: 12,
+            swapFee: 5.46,
+          },
+        ],
+        totalXECPaid: 732.92,
+        totalSwapFeePaid: 10.92,
+      });
+
+      const result = await main({
+        tokenId: 'token-aggregate',
+        tokenDecimals: 0,
+        amount: 500,
+        maxPrice: 2,
+        buyerAddress: 'ecash:test',
+        buyerMnemonic: 'test mnemonic',
+      });
+
+      expect(result.actualAmount).toBe(500);
+      expect(result.networkFee).toBe(22);
+      expect(result.swapFee).toBe(10.92);
+      expect(result.totalFees).toBe(32.92);
+      expect(result.transactions).toHaveLength(2);
     });
 
     it('should handle insufficient balance error', async () => {
@@ -262,12 +328,19 @@ describe('Buy.js', () => {
 
       await main(config);
 
-      expect(ecashQuicksend.buyAgoraTokens).toHaveBeenCalledWith({
-        tokenId: 'token123',
-        amount: 1234567n, // Should be converted to atoms
-        maxPrice: 0.0001, // 100 / 10^6
-        mnemonic: 'test mnemonic',
-      });
+      expect(ecashQuicksend.buyAgoraTokens).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tokenId: 'token123',
+          amount: 1234567n, // Should be converted to atoms
+          maxPrice: 0.0001, // 100 / 10^6
+          mnemonic: 'test mnemonic',
+          feeOutput: {
+            address: AGORA_SWAP_FEE_ADDRESS,
+            feeBps: AGORA_SWAP_FEE_BPS,
+            minSats: AGORA_SWAP_FEE_MIN_SATS,
+          },
+        }),
+      );
     });
 
     it('should handle missing tokenDecimals (default to 0)', async () => {

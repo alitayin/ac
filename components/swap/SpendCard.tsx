@@ -12,6 +12,9 @@ interface SpendCardProps {
   isWalletConnected: boolean;
   balance: string;
   networkFee: number;
+  swapFee: number;
+  totalFees: number;
+  minimumTotalFees: number;
   toast: (options: any) => void;
 }
 
@@ -22,6 +25,9 @@ export const SpendCard: React.FC<SpendCardProps> = ({
   isWalletConnected,
   balance,
   networkFee,
+  swapFee,
+  totalFees,
+  minimumTotalFees,
   toast,
 }) => {
   return (
@@ -76,15 +82,15 @@ export const SpendCard: React.FC<SpendCardProps> = ({
               onClick={() => {
                 if (isWalletConnected) {
                   const maxBalance = parseFloat(balance);
-                  if (maxBalance > networkFee) {
+                  if (maxBalance > minimumTotalFees) {
                     setSpendAmount(balance);
                     calculateReceiveAmount(balance);
                   } else {
                     toast({
                       title: "Insufficient balance",
-                      description: `You need at least ${networkFee.toFixed(
+                      description: `You need at least ${minimumTotalFees.toFixed(
                         2,
-                      )} XEC to cover the estimated network fee`,
+                      )} XEC to cover the estimated swap and network fees`,
                       variant: "destructive",
                     });
                   }
@@ -98,6 +104,12 @@ export const SpendCard: React.FC<SpendCardProps> = ({
               Balance: {isWalletConnected ? `${balance} XEC` : "0 XEC"}
             </span>
           </div>
+          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Estimated fees</span>
+            <span>
+              {totalFees.toFixed(2)} XEC ({swapFee.toFixed(2)} swap + {networkFee.toFixed(2)} network)
+            </span>
+          </div>
         </div>
       </div>
     </Card>
@@ -105,5 +117,4 @@ export const SpendCard: React.FC<SpendCardProps> = ({
 };
 
 export default SpendCard;
-
 

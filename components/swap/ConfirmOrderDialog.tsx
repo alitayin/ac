@@ -24,6 +24,10 @@ interface ConfirmOrderDialogProps {
   spendAmount: string;
   tokenPrice: number;
   networkFee: number;
+  swapFee: number;
+  totalFees: number;
+  tokenCost: number;
+  feeDescription: string;
   formatTokenPrice: (price: number) => string;
   onClose: () => void;
   onConfirm: () => void;
@@ -38,12 +42,16 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   spendAmount,
   tokenPrice,
   networkFee,
+  swapFee,
+  totalFees,
+  tokenCost,
+  feeDescription,
   formatTokenPrice,
   onClose,
   onConfirm,
 }) => {
   const totalXec = receiveAmount && tokenPrice
-    ? (parseFloat(receiveAmount) * tokenPrice + networkFee).toFixed(2)
+    ? (tokenCost + totalFees).toFixed(2)
     : spendAmount;
 
   return (
@@ -116,7 +124,29 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                   {formatTokenPrice(tokenPrice)} XEC
                 </div>
 
-                <div className="text-muted-foreground">Swap Fee:</div>
+                <div className="text-muted-foreground">Order value:</div>
+                <div className="flex items-center gap-2">
+                  <Image
+                    src="/ecash.svg"
+                    alt="eCash"
+                    width={20}
+                    height={20}
+                  />
+                  {tokenCost.toFixed(2)} XEC
+                </div>
+
+                <div className="text-muted-foreground">{feeDescription}:</div>
+                <div className="flex items-center gap-2">
+                  <Image
+                    src="/ecash.svg"
+                    alt="eCash"
+                    width={20}
+                    height={20}
+                  />
+                  {swapFee.toFixed(2)} XEC
+                </div>
+
+                <div className="text-muted-foreground">Network fee:</div>
                 <div className="flex items-center gap-2">
                   <Image
                     src="/ecash.svg"
@@ -125,6 +155,17 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                     height={20}
                   />
                   {networkFee.toFixed(2)} XEC
+                </div>
+
+                <div className="text-muted-foreground">Total fees:</div>
+                <div className="flex items-center gap-2 font-medium">
+                  <Image
+                    src="/ecash.svg"
+                    alt="eCash"
+                    width={20}
+                    height={20}
+                  />
+                  {totalFees.toFixed(2)} XEC
                 </div>
               </div>
             </div>
@@ -166,5 +207,4 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 };
 
 export default ConfirmOrderDialog;
-
 

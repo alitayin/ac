@@ -78,6 +78,9 @@ describe('Swap Cards', () => {
       isWalletConnected: true,
       balance: '1000',
       networkFee: 20,
+      swapFee: 5.46,
+      totalFees: 25.46,
+      minimumTotalFees: 25.46,
       toast: mockToast,
     }
 
@@ -101,6 +104,14 @@ describe('Swap Cards', () => {
     it('should display wallet balance when connected', () => {
       render(<SpendCard {...mockProps} />)
       expect(screen.getByText('Balance: 1000 XEC')).toBeInTheDocument()
+    })
+
+    it('should display combined fee summary', () => {
+      render(<SpendCard {...mockProps} />)
+      expect(screen.getByText('Estimated fees')).toBeInTheDocument()
+      expect(
+        screen.getByText('25.46 XEC (5.46 swap + 20.00 network)'),
+      ).toBeInTheDocument()
     })
 
     it('should display 0 balance when wallet not connected', () => {

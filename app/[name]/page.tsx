@@ -51,6 +51,12 @@ import {
   estimateNetworkFeeXecFromAddress,
 } from "@/lib/networkFee"
 import {
+  AGORA_SWAP_FEE_DESCRIPTION,
+  calculateAgoraFeeSummary,
+  estimateAgoraTokenCostFromBudget,
+  getMinimumAgoraBuyFeesXec,
+} from "@/lib/agora-swap-fee"
+import {
   getCachedTokenSummary,
   SUMMARY_CACHE_TTL_MS,
 } from "@/lib/token-stats"
@@ -109,6 +115,15 @@ export default function TokenPage() {
   const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC)
   
   const isLoadingStats = useRef<boolean>(false)
+  const estimatedBuyTokenCost =
+    maxPrice > 0 && parseFloat(receiveAmount || "0") > 0
+      ? parseFloat(receiveAmount || "0") * maxPrice
+      : 0
+  const estimatedBuyFeeSummary = calculateAgoraFeeSummary(
+    estimatedBuyTokenCost,
+    networkFee,
+  )
+  const minimumBuyFees = getMinimumAgoraBuyFeesXec(networkFee)
 
   const calculateNetworkFeeFromUtxos = async (): Promise<number> => {
     try {
@@ -174,7 +189,8 @@ export default function TokenPage() {
         }
         
         const budget = order.remainingAmount * order.maxPrice;
-        if ((budget + networkFee) < MIN_ORDER_TOTAL_XEC && order.maxPrice <= 1 && order.status !== 'completed' && order.remainingAmount !== 0) {
+        const totalRequired = calculateAgoraFeeSummary(budget, networkFee).totalCostXec;
+        if (totalRequired < MIN_ORDER_TOTAL_XEC && order.maxPrice <= 1 && order.status !== 'completed' && order.remainingAmount !== 0) {
           insufficientCount++;
           insufficientOrderKeys.push(key);
         }
@@ -463,12 +479,12 @@ export default function TokenPage() {
       }
     }
 
-    const availableXec = Math.max(0, xecAmount - networkFee)
+    const availableXec = estimateAgoraTokenCostFromBudget(xecAmount, networkFee)
     if (availableXec <= 0) {
       setReceiveAmount('0')
       setAvgExecutionPrice(0)
       setSlippage(0)
-      setErrorMessage(`Amount must be greater than ${networkFee.toFixed(2)} XEC to cover the estimated network fee`)
+      setErrorMessage(`Amount must be greater than ${minimumBuyFees.toFixed(2)} XEC to cover the estimated swap and network fees`)
       setMaxPrice(0)
       return
     }
@@ -573,8 +589,14 @@ export default function TokenPage() {
     }
 
     if (orderCheckInfo.hasInsufficientBudget && orderCheckInfo.insufficientOrders.length > 0) {
-      const actualSpendAmount = Math.max(0, MIN_ORDER_TOTAL_XEC - networkFee);
-      const actualTotalRequired = actualSpendAmount + networkFee;
+      const actualSpendAmount = estimateAgoraTokenCostFromBudget(
+        MIN_ORDER_TOTAL_XEC,
+        networkFee,
+      );
+      const actualTotalRequired = calculateAgoraFeeSummary(
+        actualSpendAmount,
+        networkFee,
+      ).totalCostXec;
 
       if (currentBalance < actualTotalRequired) {
         toast({
@@ -713,11 +735,11 @@ export default function TokenPage() {
 
     const currentFee = await calculateNetworkFeeFromUtxos();
     const totalCost = parseFloat(receiveAmount) * maxPrice;
-    const totalRequired = totalCost + currentFee;
+    const totalRequired = calculateAgoraFeeSummary(totalCost, currentFee).totalCostXec;
     if (totalRequired < MIN_ORDER_TOTAL_XEC) {
       toast({
         title: "Order amount too small",
-        description: `Orders require a minimum total value of ${MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC (including network fee). Current total: ${totalRequired.toFixed(2)} XEC`,
+        description: `Orders require a minimum total value of ${MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC (including swap and network fees). Current total: ${totalRequired.toFixed(2)} XEC`,
         variant: "destructive",
       });
       return;
@@ -797,17 +819,25 @@ export default function TokenPage() {
               isSwapActivated={isSwapActivated}
               tokenId={tokenData.tokenId}
               createSwapOrder={createSwapOrder}
+              networkFee={networkFee}
+              swapFee={estimatedBuyFeeSummary.swapFeeXec}
+              totalFees={estimatedBuyFeeSummary.totalFeesXec}
+              feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
               riskAcknowledged={riskAcknowledged}
               setRiskAcknowledged={setRiskAcknowledged}
               checkboxId="risk-acknowledgement-mobile"
               onMaxClick={() => {
                 if (isWalletConnected) {
                   const maxBalance = parseFloat(balance);
-                  if (maxBalance > 0) {
+                  if (maxBalance > minimumBuyFees) {
                     setSpendAmount(balance);
                     calculateReceiveAmount(balance);
                   } else {
-                    toast({ title: "Insufficient balance", description: "Your wallet balance is empty", variant: "destructive" });
+                    toast({
+                      title: "Insufficient balance",
+                      description: `You need at least ${minimumBuyFees.toFixed(2)} XEC to cover the estimated swap and network fees`,
+                      variant: "destructive"
+                    });
                   }
                 } else {
                   toast({ title: "Wallet not connected", description: "Please connect your wallet first", variant: "destructive" });
@@ -967,17 +997,25 @@ export default function TokenPage() {
               isSwapActivated={isSwapActivated}
               tokenId={tokenData.tokenId}
               createSwapOrder={createSwapOrder}
+              networkFee={networkFee}
+              swapFee={estimatedBuyFeeSummary.swapFeeXec}
+              totalFees={estimatedBuyFeeSummary.totalFeesXec}
+              feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
               riskAcknowledged={riskAcknowledged}
               setRiskAcknowledged={setRiskAcknowledged}
               checkboxId="risk-acknowledgement-desktop"
               onMaxClick={() => {
                 if (isWalletConnected) {
                   const maxBalance = parseFloat(balance);
-                  if (maxBalance > 0) {
+                  if (maxBalance > minimumBuyFees) {
                     setSpendAmount(balance);
                     calculateReceiveAmount(balance);
                   } else {
-                    toast({ title: "Insufficient balance", description: "Your wallet balance is empty", variant: "destructive" });
+                    toast({
+                      title: "Insufficient balance",
+                      description: `You need at least ${minimumBuyFees.toFixed(2)} XEC to cover the estimated swap and network fees`,
+                      variant: "destructive"
+                    });
                   }
                 } else {
                   toast({ title: "Wallet not connected", description: "Please connect your wallet first", variant: "destructive" });
@@ -1066,7 +1104,7 @@ export default function TokenPage() {
               )}
               {orderCheckInfo.hasInsufficientBudget && (
                 <p className="leading-relaxed text-foreground">
-                  ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient total value (less than {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC including network fee).
+                  ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient total value (less than {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC including swap and network fees).
                 </p>
               )}
               {orderCheckInfo.hasInsufficientBudget && (

@@ -31,6 +31,10 @@ interface SwapPanelProps {
   isSwapActivated: boolean
   tokenId: string
   createSwapOrder: () => void
+  networkFee: number
+  swapFee: number
+  totalFees: number
+  feeDescription: string
   riskAcknowledged: boolean
   setRiskAcknowledged: (v: boolean) => void
   onMaxClick: () => void
@@ -42,7 +46,8 @@ export function SwapPanel({
   calculateReceiveAmount, selectedBuyToken, setSelectedBuyToken, userTokens,
   setReceiveAmount, setAvgExecutionPrice, setSlippage, setErrorMessage, setMaxPrice,
   errorMessage, avgExecutionPrice, slippage, isSwapActivated, tokenId,
-  createSwapOrder, riskAcknowledged, setRiskAcknowledged, onMaxClick,
+  createSwapOrder, networkFee, swapFee, totalFees, feeDescription,
+  riskAcknowledged, setRiskAcknowledged, onMaxClick,
   checkboxId = "risk-acknowledgement",
 }: SwapPanelProps) {
   return (
@@ -136,6 +141,20 @@ export function SwapPanel({
               </>
             )}
           </div>
+          <div className="mt-3 space-y-1 border-t border-muted/40 pt-3 text-sm">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>{feeDescription}</span>
+              <span>{swapFee.toFixed(2)} XEC</span>
+            </div>
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Network fee</span>
+              <span>{networkFee.toFixed(2)} XEC</span>
+            </div>
+            <div className="flex items-center justify-between font-medium">
+              <span>Total fees</span>
+              <span>{totalFees.toFixed(2)} XEC</span>
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -158,4 +177,3 @@ export function SwapPanel({
     </div>
   )
 }
-
