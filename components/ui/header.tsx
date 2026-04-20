@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { tokens } from "@/config/tokens";
 import Image from "next/image";
 import { ConfettiButton } from "@/components/magicui/confetti";
@@ -51,6 +51,7 @@ import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
 import { watchOrderTokens } from "@/lib/swap-ws";
 import TelegramAgoraBotDialog from "@/components/ui/TelegramAgoraBotDialog";
 import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerInner";
+import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   isOnline?: boolean;
@@ -71,9 +72,8 @@ export default function Header({
   } = useWallet();
 
   const xecPrice = useXECPrice();
-  const { setTheme, theme, resolvedTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   const { toast } = useToast();
-  const router = useRouter();
   const pathname = usePathname();
   const [currentTheme, setCurrentTheme] = useState<string>("dark");
   const [tokenDetails, setTokenDetails] = useState<{[key: string]: any}>({});
@@ -445,9 +445,34 @@ export default function Header({
         {/* Right section */}
         <div className="flex-1 flex items-center justify-end sm:gap-2 gap-0">
           <div className="flex items-center sm:gap-2 gap-0">
+            <div className="hidden sm:flex items-center gap-3">
+              <Link
+                href="/promote"
+                className={cn(
+                  "text-sm font-normal tracking-tight transition-colors",
+                  pathname === "/promote"
+                    ? "text-foreground"
+                    : "text-foreground/70 hover:text-foreground",
+                )}
+              >
+                Promote
+              </Link>
+              <Link
+                href="/about"
+                className={cn(
+                  "text-sm font-normal tracking-tight transition-colors",
+                  pathname === "/about"
+                    ? "text-foreground"
+                    : "text-foreground/70 hover:text-foreground",
+                )}
+              >
+                About
+              </Link>
+            </div>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
+                <Button variant="ghost" size="icon" className="rounded-full sm:hidden">
                   <CircleEllipsis className="h-[1.2rem] w-[1.2rem]" />
                   <span className="sr-only">More</span>
                 </Button>
