@@ -91,7 +91,6 @@ export default function TokenPage() {
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'trading' | 'orderbook' | 'address'>('trading');
   const [maxPrice, setMaxPrice] = useState<number>(0)
-  const [riskAcknowledged, setRiskAcknowledged] = useState<boolean>(false)
   const [selectedBuyToken, setSelectedBuyToken] = useState<{
     id: string;
     name: string;
@@ -144,13 +143,6 @@ export default function TokenPage() {
       return DEFAULT_BASE_NETWORK_FEE_XEC
     }
   }
-
-  useEffect(() => {
-    const hasAcknowledged = localStorage.getItem('risk_acknowledged') === 'true';
-    if (hasAcknowledged) {
-      setRiskAcknowledged(true);
-    }
-  }, []);
 
   useEffect(() => {
     const checkLocalOrders = () => {
@@ -697,15 +689,6 @@ export default function TokenPage() {
       return;
     }
 
-    if (!riskAcknowledged) {
-      toast({
-        title: "Please acknowledge the risks",
-        description: "You must acknowledge the risks before creating an order",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!isWalletConnected || !ecashAddress) {
       toast({
         title: "Please connect wallet",
@@ -824,9 +807,6 @@ export default function TokenPage() {
               totalFees={estimatedBuyFeeSummary.totalFeesXec}
               feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
               showCashtabButton={false}
-              riskAcknowledged={riskAcknowledged}
-              setRiskAcknowledged={setRiskAcknowledged}
-              checkboxId="risk-acknowledgement-mobile"
               onMaxClick={() => {
                 if (isWalletConnected) {
                   const maxBalance = parseFloat(balance);
@@ -1003,9 +983,6 @@ export default function TokenPage() {
               totalFees={estimatedBuyFeeSummary.totalFeesXec}
               feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
               showCashtabButton={false}
-              riskAcknowledged={riskAcknowledged}
-              setRiskAcknowledged={setRiskAcknowledged}
-              checkboxId="risk-acknowledgement-desktop"
               onMaxClick={() => {
                 if (isWalletConnected) {
                   const maxBalance = parseFloat(balance);

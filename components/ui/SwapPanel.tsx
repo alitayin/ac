@@ -2,7 +2,6 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { TokenSelector } from "@/components/ui/token-selector"
 
 interface SelectedToken {
@@ -35,11 +34,8 @@ interface SwapPanelProps {
   swapFee: number
   totalFees: number
   feeDescription: string
-  riskAcknowledged: boolean
-  setRiskAcknowledged: (v: boolean) => void
   onMaxClick: () => void
   showCashtabButton?: boolean
-  checkboxId?: string
 }
 
 export function SwapPanel({
@@ -48,9 +44,8 @@ export function SwapPanel({
   setReceiveAmount, setAvgExecutionPrice, setSlippage, setErrorMessage, setMaxPrice,
   errorMessage, avgExecutionPrice, slippage, isSwapActivated, tokenId,
   createSwapOrder, networkFee, swapFee, totalFees, feeDescription,
-  riskAcknowledged, setRiskAcknowledged, onMaxClick,
+  onMaxClick,
   showCashtabButton = true,
-  checkboxId = "risk-acknowledgement",
 }: SwapPanelProps) {
   return (
     <div className="space-y-4">

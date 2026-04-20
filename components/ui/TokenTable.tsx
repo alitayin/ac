@@ -30,7 +30,20 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-import { ArrowUp, ArrowDown, DollarSign, Youtube, RotateCcw, AlertTriangle, Search, X, CheckCircle, Plus, ListPlus, Filter, Check } from "lucide-react"
+import {
+  ArrowDown,
+  ArrowUp,
+  AlertTriangle,
+  CheckCircle,
+  DollarSign,
+  Filter,
+  ListPlus,
+  Plus,
+  RotateCcw,
+  Search,
+  X,
+  Youtube,
+} from "lucide-react"
 import { tokens } from "@/config/tokens"
 import { AuroraText } from "@/components/magicui/aurora-text"
 import { Badge } from "@/components/ui/badge"
@@ -44,6 +57,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -92,6 +116,7 @@ import {
 import { watchAgoraTokens } from "@/lib/agora-ws"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/lib/context/WalletContext"
+import { Spinner } from "@/components/ui/spinner"
 
 const FILTER_OPTION_STORAGE_KEY = "token_table_filter_option_v1"
 
@@ -99,11 +124,52 @@ type TokenTableRow = Token
 
 type FilterOption = "all" | "no-trades-30d" | "low-volume-30d" | "low-trades-30d"
 
+type TokenLookupStatus = "idle" | "loading" | "listed" | "found" | "not-found"
+
+type TokenLookupState = {
+  status: TokenLookupStatus
+  tokenId: string
+  tokenInfo: Awaited<ReturnType<typeof fetchTokenDetails>> | null
+}
+
 type BootstrapTokenCandidate = {
   tokenId: string
   fallbackName?: string
   patch?: Partial<Token>
   etokenDbToken?: (Awaited<ReturnType<typeof fetchEtokenDbTopVolumeTokens>>)[number]
+}
+
+const FILTER_OPTIONS: Array<{
+  value: FilterOption
+  label: string
+  summary: string
+}> = [
+  {
+    value: "all",
+    label: "Show all listed tokens",
+    summary: "All tokens",
+  },
+  {
+    value: "no-trades-30d",
+    label: "Hide tokens with no trades in 30 days",
+    summary: "Hide 0 trades / 30d",
+  },
+  {
+    value: "low-volume-30d",
+    label: "Hide tokens with volume < 1M XEC in 30 days",
+    summary: "Hide low volume / 30d",
+  },
+  {
+    value: "low-trades-30d",
+    label: "Hide tokens with < 50 trades in 30 days",
+    summary: "Hide low trades / 30d",
+  },
+]
+
+const EMPTY_TOKEN_LOOKUP_STATE: TokenLookupState = {
+  status: "idle",
+  tokenId: "",
+  tokenInfo: null,
 }
 
 const getTokenNameFromDetails = (
@@ -232,10 +298,10 @@ export default function Component() {
   const [chainTipHeight, setChainTipHeight] = React.useState<number | null>(null)
   const [searchExpanded, setSearchExpanded] = React.useState(false)
   const [searchInput, setSearchInput] = React.useState("")
-  const [searchDialogOpen, setSearchDialogOpen] = React.useState(false)
-  const [searchTokenInfo, setSearchTokenInfo] = React.useState<any>(null)
-  const [isSearching, setIsSearching] = React.useState(false)
-  const [isTokenListed, setIsTokenListed] = React.useState(false)
+  const [lookupDialogOpen, setLookupDialogOpen] = React.useState(false)
+  const [tokenLookup, setTokenLookup] = React.useState<TokenLookupState>(
+    EMPTY_TOKEN_LOOKUP_STATE,
+  )
   const [filterOption, setFilterOption] = React.useState<FilterOption>(getStoredFilterOption)
   const [filteredTokens, setFilteredTokens] = React.useState<Set<string>>(new Set())
   const [showClearCacheConfirm, setShowClearCacheConfirm] = React.useState(false)
@@ -244,13 +310,12 @@ export default function Component() {
   const [viewMode, setViewMode] = React.useState<
     "normal" | "all-etokens"
   >("normal")
-  const searchContainerRef = React.useRef<HTMLDivElement | null>(null)
   const router = useRouter()
   
   const loadingTokens = React.useRef<Set<string>>(new Set())
   const loadingTimeouts = React.useRef<Map<string, NodeJS.Timeout>>(new Map())
   const wsReloadTimeouts = React.useRef<Map<string, NodeJS.Timeout>>(new Map())
-  const clearCacheConfirmRef = React.useRef<HTMLDivElement | null>(null)
+  const searchContainerRef = React.useRef<HTMLDivElement | null>(null)
   const filteredTokensRef = React.useRef<Set<string>>(new Set())
   const prevFilteredTokensRef = React.useRef<Set<string>>(new Set())
 
@@ -277,7 +342,10 @@ export default function Component() {
     if (!searchExpanded) return
 
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
         setSearchExpanded(false)
         setSearchInput("")
       }
@@ -291,32 +359,6 @@ export default function Component() {
       document.removeEventListener("touchstart", handleClickOutside)
     }
   }, [searchExpanded])
-
-  React.useEffect(() => {
-    if (!showClearCacheConfirm) return
-
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (clearCacheConfirmRef.current && !clearCacheConfirmRef.current.contains(event.target as Node)) {
-        setShowClearCacheConfirm(false)
-      }
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowClearCacheConfirm(false)
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside)
-    document.addEventListener("touchstart", handleClickOutside)
-    document.addEventListener("keydown", handleKeyDown)
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-      document.removeEventListener("touchstart", handleClickOutside)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [showClearCacheConfirm])
 
   React.useEffect(() => {
     try {
@@ -1642,42 +1684,62 @@ export default function Component() {
     return /^[a-fA-F0-9]{64}$/.test(id)
   }
 
-  const closeSearchDialog = () => {
-    setSearchDialogOpen(false)
+  const trimmedSearchInput = searchInput.trim()
+  const isSearchTokenId = isValidTokenId(trimmedSearchInput)
+
+  const closeLookupDialog = () => {
+    setLookupDialogOpen(false)
+    setTokenLookup(EMPTY_TOKEN_LOOKUP_STATE)
     setSearchInput("")
     setSearchExpanded(false)
-    setSearchTokenInfo(null)
-    setIsTokenListed(false)
   }
 
-  const handleSearchToken = async () => {
-    if (!isValidTokenId(searchInput) || isChronikLoading || !chronikClient) {
+  const handleSearchToken = async (tokenIdOverride?: string) => {
+    const tokenId = (tokenIdOverride ?? trimmedSearchInput).trim()
+
+    if (!isValidTokenId(tokenId) || isChronikLoading || !chronikClient) {
       return
     }
 
-    setIsSearching(true)
-    setSearchTokenInfo(null)
-    setIsTokenListed(false)
+    setLookupDialogOpen(true)
+    setTokenLookup({
+      status: "loading",
+      tokenId,
+      tokenInfo: null,
+    })
 
     try {
-      const isListed = data.some(token => token.tokenId === searchInput)
-      setIsTokenListed(isListed)
+      const isListed = data.some(
+        (token) => token.tokenId.toLowerCase() === tokenId.toLowerCase(),
+      )
 
-      if (!isListed) {
-        const tokenInfo = await fetchTokenDetails(searchInput, chronikClient)
-        setSearchTokenInfo(tokenInfo)
+      if (isListed) {
+        setTokenLookup({
+          status: "listed",
+          tokenId,
+          tokenInfo: null,
+        })
+        return
       }
 
-      setSearchDialogOpen(true)
+      const tokenInfo = await fetchTokenDetails(tokenId, chronikClient)
+
+      setTokenLookup({
+        status: tokenInfo ? "found" : "not-found",
+        tokenId,
+        tokenInfo: tokenInfo ?? null,
+      })
     } catch (_error) {
-      setSearchDialogOpen(true)
-    } finally {
-      setIsSearching(false)
+      setTokenLookup({
+        status: "not-found",
+        tokenId,
+        tokenInfo: null,
+      })
     }
   }
 
   const handleAddToWatchlist = async () => {
-    const tokenIdToAdd = searchTokenInfo?.tokenId || searchInput
+    const tokenIdToAdd = tokenLookup.tokenInfo?.tokenId || tokenLookup.tokenId
 
     if (!tokenIdToAdd || !isValidTokenId(tokenIdToAdd)) {
       return
@@ -1689,7 +1751,7 @@ export default function Component() {
       const added = addCustomToken(tokenIdToAdd)
       if (!added) return
       
-      closeSearchDialog()
+      closeLookupDialog()
       
       setRefreshNonce((n) => n + 1)
     } catch (error) {
@@ -2315,204 +2377,199 @@ export default function Component() {
     }
   `
 
+  const lookupTokenName =
+    tokenLookup.tokenInfo?.genesisInfo?.tokenName?.trim() || "Unknown token"
+  const lookupTokenTicker = tokenLookup.tokenInfo?.genesisInfo?.tokenTicker?.trim()
+  const lookupTokenUrl = tokenLookup.tokenInfo?.genesisInfo?.url?.trim()
+  const lookupDialogTitle =
+    tokenLookup.status === "loading"
+      ? "Searching token"
+      : tokenLookup.status === "listed"
+        ? "Token already listed"
+        : tokenLookup.status === "found"
+          ? "Token details"
+          : "Token lookup"
+
   return (
     <>
       <style>{styles}</style>
       <TooltipProvider delayDuration={0} skipDelayDuration={0}>
       <Card className="relative overflow-hidden">
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <CardTitle className="flex items-baseline gap-2">
-              <AuroraText className="text-2xl font-semibold tracking-tight">eToken Market</AuroraText>
-              {chainTipHeight && (
-                <span className="text-xs text-muted-foreground font-normal tracking-tight">
-                  # {chainTipHeight.toLocaleString()}
-                </span>
-              )}
-            </CardTitle>
-            <CardDescription className="font-normal tracking-tight">
-              {viewMode === "normal"
-                ? "Agora sales data. Showing the 100 tokens with the highest 7-day trading volume."
-                : "All active eTokens on Agora"}
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <div className="flex items-center gap-0.5 border rounded-md p-1">
-              <button
-                onClick={() => setViewMode('normal')}
-                className={cn(
-                  "text-sm font-normal tracking-tight px-3 py-1 rounded-md transition-colors",
-                  viewMode === 'normal'
-                    ? "bg-accent font-semibold"
-                    : "hover:bg-accent/50 text-muted-foreground"
+        <CardHeader className="gap-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-baseline gap-2">
+                <AuroraText className="text-2xl font-semibold tracking-tight">eToken Market</AuroraText>
+                {chainTipHeight && (
+                  <span className="text-xs font-normal tracking-tight text-muted-foreground">
+                    # {chainTipHeight.toLocaleString()}
+                  </span>
                 )}
-              >
-                7D Active Tokens
-              </button>
-              <button
-                onClick={() => setViewMode("all-etokens")}
-                className={cn(
-                  "text-sm font-normal tracking-tight px-3 py-1 rounded-md transition-colors",
-                  viewMode === "all-etokens"
-                    ? "bg-accent font-semibold"
-                    : "hover:bg-accent/50 text-muted-foreground",
-                )}
-              >
-                All eTokens
-              </button>
+              </CardTitle>
+              <CardDescription className="font-normal tracking-tight">
+                {viewMode === "normal"
+                  ? "Agora sales data. Showing the 100 tokens with the highest 7-day trading volume."
+                  : "All active eTokens on Agora"}
+              </CardDescription>
             </div>
 
-            {viewMode === 'normal' && (
-            <>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-normal tracking-tight hover:bg-accent transition-colors",
-                    filterOption !== 'all' && "text-blue-500 border-blue-500"
-                  )}
-                >
-                  <Filter className="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuItem 
-                  onClick={() => setFilterOption('all')}
-                  className={cn(
-                    "cursor-pointer",
-                    filterOption === 'all' && "bg-accent"
-                  )}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>Show All</span>
-                    {filterOption === 'all' && (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    )}
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => setFilterOption('no-trades-30d')}
-                  className={cn(
-                    "cursor-pointer",
-                    filterOption === 'no-trades-30d' && "bg-accent"
-                  )}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>Hide tokens with no trades in 30 days</span>
-                    {filterOption === 'no-trades-30d' && (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    )}
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => setFilterOption('low-volume-30d')}
-                  className={cn(
-                    "cursor-pointer",
-                    filterOption === 'low-volume-30d' && "bg-accent"
-                  )}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>Hide tokens with volume &lt; 1M XEC in 30 days</span>
-                    {filterOption === 'low-volume-30d' && (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    )}
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => setFilterOption('low-trades-30d')}
-                  className={cn(
-                    "cursor-pointer",
-                    filterOption === 'low-trades-30d' && "bg-accent"
-                  )}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>Hide tokens with &lt; 50 trades in 30 days</span>
-                    {filterOption === 'low-trades-30d' && (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    )}
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            {searchExpanded ? (
-              <div
-                ref={searchContainerRef}
-                className="flex items-center gap-2 border rounded-md px-2 py-1 w-full sm:w-auto max-w-full"
-              >
-                <Input
-                  type="text"
-                  placeholder="Enter token ID"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  className="h-8 flex-1 min-w-0 w-full sm:w-64 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && isValidTokenId(searchInput)) {
-                      handleSearchToken()
-                    }
-                  }}
-                />
-                {isValidTokenId(searchInput) && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 px-2"
-                    onClick={handleSearchToken}
-                    disabled={isSearching}
-                  >
-                    {isSearching ? "..." : "Search"}
-                  </Button>
-                )}
-                <button
-                  onClick={() => {
-                    setSearchExpanded(false)
-                    setSearchInput("")
-                  }}
-                  className="p-1 hover:bg-accent rounded-md transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setSearchExpanded(true)}
-                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent transition-colors"
-              >
-                <Search className="h-4 w-4" />
-              </button>
-            )}
-            {showClearCacheConfirm ? (
-              <div
-                ref={clearCacheConfirmRef}
-                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm bg-accent/40 shadow-sm"
-              >
-                <RotateCcw className="h-4 w-4 text-muted-foreground" />
-                <span className="whitespace-nowrap text-xs sm:text-sm">Clear cache and Rebuild table?</span>
-                <div className="flex items-center gap-1">
+            <div className="flex w-full flex-col gap-3 lg:max-w-3xl lg:items-end">
+              <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
+                <div className="flex items-center gap-0.5 rounded-md border p-1">
                   <button
-                    className="p-1 rounded-md hover:bg-accent text-green-600 transition-colors"
-                    onClick={clearCacheAndReload}
+                    onClick={() => setViewMode("normal")}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-sm font-normal tracking-tight transition-colors",
+                      viewMode === "normal"
+                        ? "bg-accent font-semibold"
+                        : "text-muted-foreground hover:bg-accent/50",
+                    )}
                   >
-                    <Check className="h-4 w-4" />
+                    7D Active Tokens
                   </button>
                   <button
-                    className="p-1 rounded-md hover:bg-accent text-muted-foreground transition-colors"
-                    onClick={() => setShowClearCacheConfirm(false)}
+                    onClick={() => setViewMode("all-etokens")}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-sm font-normal tracking-tight transition-colors",
+                      viewMode === "all-etokens"
+                        ? "bg-accent font-semibold"
+                        : "text-muted-foreground hover:bg-accent/50",
+                    )}
                   >
-                    <X className="h-4 w-4" />
+                    All eTokens
                   </button>
                 </div>
+
+                {viewMode === "normal" && (
+                  <>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "gap-2",
+                            filterOption !== "all" &&
+                              "border-primary/30 text-primary hover:text-primary",
+                          )}
+                        >
+                          <Filter data-icon="inline-start" />
+                          Filters
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-72">
+                        {FILTER_OPTIONS.map((option) => (
+                          <DropdownMenuItem
+                            key={option.value}
+                            onSelect={() => setFilterOption(option.value)}
+                            className={cn(
+                              "cursor-pointer",
+                              filterOption === option.value && "bg-accent",
+                            )}
+                          >
+                            <div className="flex w-full items-center justify-between gap-3">
+                              <div className="flex flex-col gap-0.5">
+                                <span>{option.label}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {option.summary}
+                                </span>
+                              </div>
+                              {filterOption === option.value && (
+                                <CheckCircle className="size-4 text-primary" />
+                              )}
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <AlertDialog
+                      open={showClearCacheConfirm}
+                      onOpenChange={setShowClearCacheConfirm}
+                    >
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="icon" aria-label="Rebuild table">
+                          <RotateCcw className="size-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Clear cached token data?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This rebuilds the market table from scratch and refreshes cached token stats and icons.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={clearCacheAndReload}>
+                            Clear cache
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+
+                    {searchExpanded ? (
+                      <div
+                        ref={searchContainerRef}
+                        className="flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1 sm:w-auto sm:min-w-[18rem]"
+                      >
+                        <Input
+                          type="text"
+                          placeholder="Enter token ID"
+                          value={searchInput}
+                          onChange={(event) => setSearchInput(event.target.value)}
+                          className="h-8 w-full border-0 px-1 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && isSearchTokenId) {
+                              event.preventDefault()
+                              void handleSearchToken()
+                            }
+                          }}
+                        />
+                        {isSearchTokenId && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2"
+                            onClick={() => void handleSearchToken()}
+                            disabled={
+                              isChronikLoading ||
+                              (tokenLookup.status === "loading" &&
+                                tokenLookup.tokenId === trimmedSearchInput)
+                            }
+                          >
+                            {tokenLookup.status === "loading" &&
+                            tokenLookup.tokenId === trimmedSearchInput
+                              ? "..."
+                              : "Search"}
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setSearchExpanded(false)
+                            setSearchInput("")
+                          }}
+                          aria-label="Close token search"
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setSearchExpanded(true)}
+                        aria-label="Search by token ID"
+                      >
+                        <Search className="size-4" />
+                      </Button>
+                    )}
+                  </>
+                )}
               </div>
-            ) : (
-              <button
-                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent transition-colors"
-                onClick={() => setShowClearCacheConfirm(true)}
-              >
-                <RotateCcw className="h-4 w-4" />
-              </button>
-            )}
-            </>
-            )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -2589,131 +2646,173 @@ export default function Component() {
       </Card>
       </TooltipProvider>
 
-      <Dialog 
-        open={searchDialogOpen} 
+      <Dialog
+        open={lookupDialogOpen}
         onOpenChange={(open) => {
-          setSearchDialogOpen(open)
+          setLookupDialogOpen(open)
           if (!open) {
-            setSearchTokenInfo(null)
-            setIsTokenListed(false)
+            setTokenLookup(EMPTY_TOKEN_LOOKUP_STATE)
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Token Search Result</DialogTitle>
+            <DialogTitle>{lookupDialogTitle}</DialogTitle>
             <DialogDescription>
-              Information about token ID: {(searchTokenInfo?.tokenId || searchInput).substring(0, 10)}...
+              {tokenLookup.tokenId
+                ? `Token ID: ${tokenLookup.tokenId}`
+                : "Search for an on-chain token by full token ID."}
             </DialogDescription>
           </DialogHeader>
-          
-          {isTokenListed ? (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <CheckCircle className="h-16 w-16 text-green-500" />
-              <div className="text-center">
-                <p className="text-lg font-semibold">Token Already Listed</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  This token is already displayed in the market table
+
+          {tokenLookup.status === "loading" ? (
+            <div className="flex flex-col items-center gap-4 py-10 text-center">
+              <Spinner className="size-8" />
+              <div className="space-y-1">
+                <p className="text-lg font-semibold">Fetching token metadata</p>
+                <p className="text-sm text-muted-foreground">
+                  Looking up this token on Chronik.
                 </p>
               </div>
             </div>
-          ) : searchTokenInfo ? (
-            <div className="space-y-4">
-              <div className="grid gap-3">
-                <div className="flex items-start justify-between p-3 bg-accent/50 rounded-lg">
-                  <span className="text-sm font-medium text-muted-foreground">Token ID:</span>
-                  <span className="text-sm font-mono text-right break-all ml-2">
-                    {searchTokenInfo.tokenId}
-                  </span>
+          ) : tokenLookup.status === "listed" ? (
+            <div className="flex flex-col gap-6 py-2">
+              <div className="flex flex-col items-center gap-4 rounded-xl border bg-muted/20 px-6 py-8 text-center">
+                <CheckCircle className="size-12 text-primary" />
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold">This token is already listed</p>
+                  <p className="text-sm text-muted-foreground">
+                    It already appears in the market table, so you can jump straight to the token page.
+                  </p>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                  <span className="text-sm font-medium text-muted-foreground">Name:</span>
-                  <span className="text-sm font-semibold">
-                    {searchTokenInfo.genesisInfo?.tokenName || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                  <span className="text-sm font-medium text-muted-foreground">Ticker:</span>
-                  <span className="text-sm font-semibold">
-                    {searchTokenInfo.genesisInfo?.tokenTicker || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                  <span className="text-sm font-medium text-muted-foreground">Decimals:</span>
-                  <span className="text-sm">
-                    {searchTokenInfo.genesisInfo?.decimals ?? 'N/A'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                  <span className="text-sm font-medium text-muted-foreground">Type:</span>
-                  <span className="text-sm">
-                    {searchTokenInfo.tokenType?.protocol || 'N/A'} - {searchTokenInfo.tokenType?.type || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                  <span className="text-sm font-medium text-muted-foreground">Block Height:</span>
-                  <span className="text-sm">
-                    {searchTokenInfo.block?.height || 'N/A'}
-                  </span>
-                </div>
-                {searchTokenInfo.genesisInfo?.url && (
-                  <div className="flex items-start justify-between p-3 bg-accent/50 rounded-lg">
-                    <span className="text-sm font-medium text-muted-foreground">URL:</span>
-                    <a
-                      href={searchTokenInfo.genesisInfo.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-500 hover:underline break-all ml-2 text-right"
-                    >
-                      {searchTokenInfo.genesisInfo.url}
-                    </a>
-                  </div>
-                )}
               </div>
-              
-              <DialogFooter className="flex-col sm:flex-row gap-2">
-                <Button
-                  variant="outline"
-                  onClick={closeSearchDialog}
-                >
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button variant="outline" onClick={closeLookupDialog}>
                   Close
                 </Button>
                 <Button
-                  variant="default"
-                  onClick={handleAddToWatchlist}
-                  disabled={isAddingToWatchlist}
-                  className="gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  {isAddingToWatchlist ? 'Adding...' : 'Add to Watchlist'}
-                </Button>
-                <Button
-                  variant="default"
                   onClick={() => {
-                    router.push('/list')
+                    closeLookupDialog()
+                    router.push(`/${getTokenRouteParam({ tokenId: tokenLookup.tokenId })}`)
                   }}
-                  className="gap-2"
                 >
-                  <ListPlus className="h-4 w-4" />
-                  List This Token
+                  Open token
                 </Button>
               </DialogFooter>
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <AlertTriangle className="h-16 w-16 text-yellow-500" />
-              <div className="text-center">
-                <p className="text-lg font-semibold">Token Not Found</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Unable to fetch information for this token ID
-                </p>
+          ) : tokenLookup.status === "found" && tokenLookup.tokenInfo ? (
+            <div className="flex flex-col gap-4">
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold">{lookupTokenName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {lookupTokenTicker || "No ticker available"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">
+                      {tokenLookup.tokenInfo.tokenType?.protocol || "Unknown"} /{" "}
+                      {tokenLookup.tokenInfo.tokenType?.type || "Unknown"}
+                    </Badge>
+                    <Badge variant="outline">
+                      {tokenLookup.tokenInfo.genesisInfo?.decimals ?? "N/A"} decimals
+                    </Badge>
+                  </div>
+                </div>
               </div>
-              <DialogFooter>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border bg-muted/10 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Token ID</p>
+                  <p className="mt-2 break-all font-mono text-sm">{tokenLookup.tokenInfo.tokenId}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/10 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Block Height</p>
+                  <p className="mt-2 text-sm font-medium">
+                    {tokenLookup.tokenInfo.block?.height ?? "N/A"}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-muted/10 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Name</p>
+                  <p className="mt-2 text-sm font-medium">{lookupTokenName}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/10 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Ticker</p>
+                  <p className="mt-2 text-sm font-medium">{lookupTokenTicker || "N/A"}</p>
+                </div>
+              </div>
+
+              {lookupTokenUrl && (
+                <div className="rounded-lg border bg-muted/10 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Project URL</p>
+                  <a
+                    href={lookupTokenUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 block break-all text-sm text-primary underline-offset-4 hover:underline"
+                  >
+                    {lookupTokenUrl}
+                  </a>
+                </div>
+              )}
+
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+                <Button variant="outline" onClick={closeLookupDialog}>
+                  Close
+                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      closeLookupDialog()
+                      router.push("/list")
+                    }}
+                    className="gap-2"
+                  >
+                    <ListPlus data-icon="inline-start" />
+                    List This Token
+                  </Button>
+                  <Button
+                    onClick={handleAddToWatchlist}
+                    disabled={isAddingToWatchlist}
+                    className="gap-2"
+                  >
+                    {isAddingToWatchlist ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <Plus data-icon="inline-start" />
+                    )}
+                    {isAddingToWatchlist ? "Adding..." : "Add to Watchlist"}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6 py-2">
+              <div className="flex flex-col items-center gap-4 rounded-xl border bg-muted/20 px-6 py-8 text-center">
+                <AlertTriangle className="size-12 text-amber-500" />
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold">Token not found</p>
+                  <p className="text-sm text-muted-foreground">
+                    We could not fetch metadata for this token ID from Chronik.
+                  </p>
+                </div>
+              </div>
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button variant="outline" onClick={closeLookupDialog}>
+                  Close
+                </Button>
                 <Button
                   variant="outline"
-                  onClick={closeSearchDialog}
+                  onClick={() => {
+                    closeLookupDialog()
+                    router.push("/list")
+                  }}
+                  className="gap-2"
                 >
-                  Close
+                  <ListPlus data-icon="inline-start" />
+                  List This Token
                 </Button>
               </DialogFooter>
             </div>

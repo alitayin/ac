@@ -28,7 +28,6 @@ export interface StorageSchema {
   // UI preferences
   filter_option: string;
   custom_tokens: string;
-  risk_acknowledged: string;
   promotional_dialog: string;
 }
 
