@@ -13,6 +13,12 @@ import { ChronikProvider } from '@/lib/context/ChronikContext';
 
 import "./globals.css";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agora.cash";
+const pageTitle = "agoraUI - eCash Agora DEX Interface";
+const pageDescription =
+  "agoraUI is the best place to list your eToken, an eToken DEX UI built upon Cashtab's Agora, offering professional exchange-style charts. Join our Telegram community at https://t.me/agoraUI for discussions.";
+const ogImagePath = "/og-image.png";
+
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist-sans",
@@ -26,8 +32,30 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "agoraUI - A eCash Agora DEX Interface",
-  description: "agoraUI is the best place to list your eToken, an eToken DEX UI built upon Cashtab's Agora, offering professional exchange-style charts. Join our Telegram community at https://t.me/agoraUI for discussions.",
+  metadataBase: new URL(siteUrl),
+  title: pageTitle,
+  description: pageDescription,
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "Agora Cash",
+    title: pageTitle,
+    description: pageDescription,
+    images: [
+      {
+        url: ogImagePath,
+        width: 1200,
+        height: 630,
+        alt: "Agora Cash token table preview",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: pageTitle,
+    description: pageDescription,
+    images: [ogImagePath],
+  },
   icons: {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',

@@ -111,26 +111,6 @@ export default function About() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-xl border border-amber-200/40 dark:border-amber-500/25 bg-amber-50/40 dark:bg-amber-500/5 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-semibold tracking-tight text-amber-950 dark:text-amber-100">
-                Acquisition & official communications
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm font-normal tracking-tight leading-relaxed text-foreground/90">
-              <p className="font-semibold tracking-tight text-foreground">
-                The acquisition of the Agora.Cash site occurred on March 5, 2026.
-              </p>
-              <p>
-                The new Agora.Cash site currently has no tokens associated with it, so please be wary of
-                any fraudulent activity by parties claiming to be associated with Agora.Cash issuing
-                unauthorized tokens for any reason, including shares of ownership, profit sharing, or any
-                other purpose. Any change to this state will be officially announced on the new Agora.Cash
-                site.
-              </p>
-            </CardContent>
-          </Card>
-
           <section className="mt-10 pt-2">
             <h2 className="text-xl font-semibold tracking-tight leading-tight mb-2">Join us</h2>
             <p className="text-sm font-normal tracking-tight text-muted-foreground leading-relaxed mb-4">

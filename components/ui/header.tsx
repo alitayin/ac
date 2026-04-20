@@ -454,6 +454,11 @@ export default function Header({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
+                  <Link href="/promote" className="w-full">
+                    Promote
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link href="/about" className="w-full">
                     About
                   </Link>
