@@ -4,8 +4,6 @@ import type React from "react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Moon,
-  Sun,
   Power,
   CircleEllipsis,
   Wallet,
@@ -49,6 +47,7 @@ import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
 import TelegramAgoraBotDialog from "@/components/ui/TelegramAgoraBotDialog";
 import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerInner";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 interface HeaderProps {
   isOnline?: boolean;
@@ -69,10 +68,10 @@ export default function Header({
   } = useWallet();
 
   const xecPrice = useXECPrice();
-  const { setTheme, resolvedTheme } = useTheme();
+  const { resolvedTheme } = useTheme();
   const { toast } = useToast();
   const pathname = usePathname();
-  const [currentTheme, setCurrentTheme] = useState<string>("dark");
+  const [currentTheme, setCurrentTheme] = useState<string>("light");
   const [tokenDetails, setTokenDetails] = useState<{[key: string]: any}>({});
   const tokenDetailsRef = useRef<{[key: string]: any}>({});
   const { isNotifying } = useWebSocketStatus();
@@ -355,6 +354,17 @@ export default function Header({
           <div className="flex items-center sm:gap-2 gap-0">
             <div className="hidden sm:flex items-center gap-3">
               <Link
+                href="/analytics"
+                className={cn(
+                  "text-sm font-normal tracking-tight transition-colors",
+                  pathname === "/analytics"
+                    ? "text-foreground"
+                    : "text-foreground/70 hover:text-foreground",
+                )}
+              >
+                Analytics
+              </Link>
+              <Link
                 href="/promote"
                 className={cn(
                   "text-sm font-normal tracking-tight transition-colors",
@@ -387,6 +397,11 @@ export default function Header({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
+                  <Link href="/analytics" className="w-full">
+                    Analytics
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link href="/promote" className="w-full">
                     Promote
                   </Link>
@@ -400,27 +415,8 @@ export default function Header({
               </DropdownMenu>
 
               <TelegramAgoraBotDialog />
-            
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-full">
-                  <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                  <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                  <span className="sr-only">Theme</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setTheme("light")}>
-                  Light
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("dark")}>
-                  Dark
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("system")}>
-                  System
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+
+              <ThemeToggle />
             
             {isWalletConnected && (
               <Drawer>

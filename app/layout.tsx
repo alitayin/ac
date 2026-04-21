@@ -73,8 +73,9 @@ export default function RootLayout({
         <Script src="https://unpkg.com/@paybutton/paybutton/dist/paybutton.js" strategy="lazyOnload" />
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          enableSystem
+          defaultTheme="light"
+          enableSystem={false}
+          themes={["light", "dark"]}
           disableTransitionOnChange
         >
           <ErrorBoundary>
