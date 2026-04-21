@@ -10,6 +10,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CircleX, Trash2, CircleCheck, LoaderCircle, RefreshCw, History } from "lucide-react";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
+import {
+  ORDERS_UPDATED_EVENT,
+  deleteSwapOrder,
+  dispatchOrdersUpdated,
+} from "@/lib/swap-order-utils";
 
 interface Order {
   remainingAmount: number;
@@ -138,7 +143,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
         });
         
         localStorage.setItem('swap_orders', JSON.stringify(updatedOrders));
-        window.dispatchEvent(new Event('orders-updated'));
+        dispatchOrdersUpdated("processed");
       }
       
       // Check whether orders are sufficiently funded
@@ -253,9 +258,9 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
   };
 
   useEffect(() => {
-    window.addEventListener('orderUpdated', refreshOrders);
+    window.addEventListener(ORDERS_UPDATED_EVENT, refreshOrders);
     return () => {
-      window.removeEventListener('orderUpdated', refreshOrders);
+      window.removeEventListener(ORDERS_UPDATED_EVENT, refreshOrders);
     };
   }, []);
 
@@ -266,11 +271,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
 
   const confirmDeleteOrder = () => {
     if (orderToDelete) {
-      // Delete order from localStorage
-      const savedOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-      delete savedOrders[orderToDelete];
-      localStorage.setItem('swap_orders', JSON.stringify(savedOrders));
-      window.dispatchEvent(new Event('orders-updated'));
+      deleteSwapOrder(orderToDelete, "deleted");
       
       // Update state
       const newOrders = { ...orders };
@@ -350,20 +351,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
   const handleCardClick = (order: Order) => {
     // Skip prompts when an order is completed
     if (order.status === 'completed') return;
-    
-    // Read latest auto-processing flag from localStorage on each click
-    const currentAutoProcessing = localStorage.getItem('auto_processing') === 'true';
-    
-    // Verify auto-processing is enabled
-    if (!currentAutoProcessing) {
-      toast({
-        title: "Auto processing is disabled",
-        description: "Please enable the signal light to automatically process your orders",
-        variant: "destructive",
-      });
-      return;
-    }
-    
+
     // Show status-specific message
     if (order.status === 'pending') {
       if (order.transactions.length === 0) {

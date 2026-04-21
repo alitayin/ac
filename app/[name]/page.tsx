@@ -27,6 +27,7 @@ import { useWallet } from "@/lib/context/WalletContext"
 import { useToast } from "@/hooks/use-toast"
 import { TokenSelector } from "@/components/ui/token-selector"
 import { SwapPanel } from "@/components/ui/SwapPanel"
+import { useAutoExecution } from "@/lib/context/AutoExecutionContext"
 
 const MIN_ORDER_TOTAL_XEC = 100;
 import {
@@ -62,6 +63,13 @@ import {
 } from "@/lib/token-stats"
 import { watchAgoraTokens } from "@/lib/agora-ws"
 import { loadTokenPageStats } from "@/lib/token-page-stats"
+import { pushOrdersToServer } from "@/lib/Auto.js"
+import {
+  createSwapOrderKey,
+  dispatchOrdersUpdated,
+  saveSwapOrder,
+  writeSwapOrders,
+} from "@/lib/swap-order-utils"
 
 interface TokenData {
   tokenId: string;
@@ -79,6 +87,7 @@ export default function TokenPage() {
   const params = useParams()
   const { toast } = useToast()
   const { isWalletConnected, ecashAddress, isGuestMode, balance, userTokens } = useWallet()
+  const { executeOrders } = useAutoExecution()
   const [stats, setStats] = useState<any>(null)
   const [chainTipHeight, setChainTipHeight] = useState<number | null>(null)
   const [selectedChart, setSelectedChart] = useState("realtimeprice")
@@ -637,7 +646,15 @@ export default function TokenPage() {
           }
 
           if (totalTokens > 0 && highestPrice > 0) {
-            const newOrderKey = `${tokenId}|${address}|${highestPrice}`;
+            const existingPrice = Number(priceStr);
+            const existingSuffix = parts[3];
+            const shouldReuseExistingKey =
+              typeof existingSuffix === "string" &&
+              existingSuffix.length > 0 &&
+              existingPrice === highestPrice;
+            const newOrderKey = shouldReuseExistingKey
+              ? orderKey
+              : createSwapOrderKey(tokenId, address, highestPrice);
 
             if (newOrderKey !== orderKey) {
               delete existingOrders[orderKey];
@@ -659,7 +676,16 @@ export default function TokenPage() {
       }
     }
 
-    localStorage.setItem('swap_orders', JSON.stringify(existingOrders));
+    writeSwapOrders(existingOrders);
+    dispatchOrdersUpdated("processed");
+
+    if (ecashAddress) {
+      try {
+        await pushOrdersToServer(existingOrders, ecashAddress);
+      } catch (error) {
+        console.error('❌ Failed to push adjusted orders to server:', error);
+      }
+    }
 
     const messages = [];
     if (deletedCount > 0) {
@@ -716,7 +742,10 @@ export default function TokenPage() {
       return;
     }
 
-    const currentFee = await calculateNetworkFeeFromUtxos();
+    const currentFee =
+      typeof networkFee === "number" && networkFee > 0
+        ? networkFee
+        : DEFAULT_BASE_NETWORK_FEE_XEC;
     const totalCost = parseFloat(receiveAmount) * maxPrice;
     const totalRequired = calculateAgoraFeeSummary(totalCost, currentFee).totalCostXec;
     if (totalRequired < MIN_ORDER_TOTAL_XEC) {
@@ -728,7 +757,7 @@ export default function TokenPage() {
       return;
     }
 
-    const orderKey = `${selectedBuyToken.id}|${ecashAddress}|${maxPrice}`;
+    const orderKey = createSwapOrderKey(selectedBuyToken.id, ecashAddress, maxPrice);
     
     const orderData = {
       remainingAmount: parseFloat(receiveAmount),
@@ -739,15 +768,24 @@ export default function TokenPage() {
       createdAt: new Date().toISOString()
     };
 
-    const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-    
-    existingOrders[orderKey] = orderData;
-    
-    localStorage.setItem('swap_orders', JSON.stringify(existingOrders));
+    const existingOrders = saveSwapOrder(orderKey, orderData, "created");
+
+    executeOrders().catch(() => {});
+
+    try {
+      await pushOrdersToServer(existingOrders, ecashAddress);
+    } catch (error) {
+      console.error('❌ Failed to push orders to server:', error);
+      toast({
+        title: "Warning",
+        description: "Order saved locally but failed to sync with server. It will sync later.",
+        variant: "destructive",
+      });
+    }
     
     toast({
       title: "✅ Order created successfully",
-      description: "Your order has been created. Please visit /swap page to manage your orders",
+      description: "Your order has been created. Agora will check current sell orders immediately.",
     });
 
     setSpendAmount('');

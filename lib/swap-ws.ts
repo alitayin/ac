@@ -3,10 +3,41 @@ import { chronik } from "./chronik"
 type OrderProcessHandler = () => void
 
 const watchedOrderTokenIds = new Set<string>()
+const handlerTokenIds = new Map<OrderProcessHandler, Set<string>>()
+const manualWatchedOrderTokenIds = new Set<string>()
 const handlers = new Set<OrderProcessHandler>()
 const processingTxids = new Set<string>()
 let wsClient: ReturnType<typeof chronik.ws> | null = null
 let wsConnected = false
+
+const syncWatchedOrderTokenIds = () => {
+  const nextWatchedTokenIds = new Set<string>(manualWatchedOrderTokenIds)
+
+  handlerTokenIds.forEach((tokenIds) => {
+    tokenIds.forEach((tokenId) => nextWatchedTokenIds.add(tokenId))
+  })
+
+  if (wsClient) {
+    watchedOrderTokenIds.forEach((tokenId) => {
+      if (!nextWatchedTokenIds.has(tokenId)) {
+        try {
+          wsClient?.unsubscribeFromTokenId(tokenId)
+        } catch (_err) {}
+      }
+    })
+
+    nextWatchedTokenIds.forEach((tokenId) => {
+      if (!watchedOrderTokenIds.has(tokenId)) {
+        try {
+          wsClient?.subscribeToTokenId(tokenId)
+        } catch (_err) {}
+      }
+    })
+  }
+
+  watchedOrderTokenIds.clear()
+  nextWatchedTokenIds.forEach((tokenId) => watchedOrderTokenIds.add(tokenId))
+}
 
 const subscribeAll = () => {
   if (!wsClient) return
@@ -97,40 +128,34 @@ export const watchOrderTokens = (
   tokenIds: string[],
   onOrderProcess: OrderProcessHandler,
 ) => {
-  tokenIds
-    .filter((id) => typeof id === "string" && id.length > 0)
-    .forEach((id) => {
-      watchedOrderTokenIds.add(id)
-    })
-
+  handlerTokenIds.set(
+    onOrderProcess,
+    new Set(tokenIds.filter((id) => typeof id === "string" && id.length > 0)),
+  )
   handlers.add(onOrderProcess)
   ensureWebSocket()
-  subscribeAll()
+  syncWatchedOrderTokenIds()
 
   return () => {
     handlers.delete(onOrderProcess)
+    handlerTokenIds.delete(onOrderProcess)
+    syncWatchedOrderTokenIds()
   }
 }
 
 export const addOrderTokenWatch = (tokenId: string) => {
   if (!tokenId) return
   
-  watchedOrderTokenIds.add(tokenId)
+  manualWatchedOrderTokenIds.add(tokenId)
   ensureWebSocket()
-  
-  try {
-    wsClient?.subscribeToTokenId(tokenId)
-  } catch (_err) {}
+  syncWatchedOrderTokenIds()
 }
 
 export const removeOrderTokenWatch = (tokenId: string) => {
   if (!tokenId) return
   
-  watchedOrderTokenIds.delete(tokenId)
-  
-  try {
-    wsClient?.unsubscribeFromTokenId(tokenId)
-  } catch (_err) {}
+  manualWatchedOrderTokenIds.delete(tokenId)
+  syncWatchedOrderTokenIds()
 }
 
 export const getWatchedOrderTokens = (): string[] => {
@@ -140,4 +165,3 @@ export const getWatchedOrderTokens = (): string[] => {
 export const isSwapWsConnected = (): boolean => {
   return wsConnected
 }
-

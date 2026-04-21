@@ -6,8 +6,6 @@ import * as bip39 from "bip39";
 import { debounce } from "lodash";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useOrderProcessing } from "@/lib/context/OrderProcessingContext";
-import { useAutoExecution } from "@/lib/context/AutoExecutionContext";
 import {
   Tabs,
   TabsContent,
@@ -61,6 +59,13 @@ import BuyCard from "@/components/swap/BuyCard";
 import ConfirmOrderDialog from "@/components/swap/ConfirmOrderDialog";
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions";
 import { Transaction } from "@/lib/types";
+import { useAutoExecution } from "@/lib/context/AutoExecutionContext";
+import {
+  createSwapOrderKey,
+  dispatchOrdersUpdated,
+  readSwapOrders,
+  saveSwapOrder,
+} from "@/lib/swap-order-utils";
 
 const MIN_ORDER_TOTAL_XEC = 100;
 const POLLING_INTERVAL_MS = 30000;
@@ -95,8 +100,6 @@ export function SwapPanel() {
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState<boolean>(false);
   const [tokenPriceInput, setTokenPriceInput] = useState<string>('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
-  const { isAutoProcessing, setIsAutoProcessing } = useOrderProcessing();
-  const { executeOrders } = useAutoExecution();
   const [showOrdersRainbow, setShowOrdersRainbow] = useState<boolean>(false);
   const [ordersRainbowTimer, setOrdersRainbowTimer] = useState<NodeJS.Timeout | null>(null);
   const [showUsdPrice, setShowUsdPrice] = useState<boolean>(false);
@@ -114,6 +117,7 @@ export function SwapPanel() {
   const [sellAmount, setSellAmount] = useState<string>('');
   const [sellPrice, setSellPrice] = useState<string>('');
   const [isCreatingListing, setIsCreatingListing] = useState<boolean>(false);
+  const { executeOrders } = useAutoExecution();
 
   // Order book cache with 10 second TTL
   const orderBookCacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
@@ -585,15 +589,6 @@ export function SwapPanel() {
     };
   }, [ordersRainbowTimer]);
 
-  const generateRandomString = (): string => {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-    let result = '';
-    for (let i = 0; i < 8; i++) {
-      result += letters.charAt(Math.floor(Math.random() * letters.length));
-    }
-    return result;
-  };
-
   const startOrdersRainbowEffect = () => {
     if (ordersRainbowTimer) {
       clearTimeout(ordersRainbowTimer);
@@ -625,7 +620,7 @@ export function SwapPanel() {
     }
 
     if (isOfflineOrder) {
-      const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
+      const existingOrders = readSwapOrders();
       const hasActiveCustodialOrder = Object.keys(existingOrders).some(orderKey => {
         const parts = orderKey.split('|');
         const address = parts[1];
@@ -647,7 +642,7 @@ export function SwapPanel() {
 
     const exactReceiveAmount = parseFloat(receiveAmount);
 
-    const orderKey = `${selectedToken.id}|${ecashAddress}|${tokenPrice}|${generateRandomString()}`;
+    const orderKey = createSwapOrderKey(selectedToken.id, ecashAddress, tokenPrice);
     
     const orderData: {
       remainingAmount: number;
@@ -716,12 +711,11 @@ export function SwapPanel() {
        }
     }
 
-    const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-    existingOrders[orderKey] = orderData;
-    
-    localStorage.setItem('swap_orders', JSON.stringify(existingOrders));
-    
-    window.dispatchEvent(new Event('orders-updated'));
+    const existingOrders = saveSwapOrder(orderKey, orderData, "created");
+
+    if (!isOfflineOrder) {
+      executeOrders().catch(() => {});
+    }
     
     try {
       await pushOrdersToServer(existingOrders, ecashAddress);
@@ -734,26 +728,6 @@ export function SwapPanel() {
       });
     }
     
-    if (!isAutoProcessing) {
-      setIsAutoProcessing(true);
-      localStorage.setItem('auto_processing', 'true');
-      if (isOfflineOrder) {
-        toast({
-          title: "✅ Auto sync enabled",
-          description: "System will automatically sync order status in real-time via WebSocket",
-        });
-      } else {
-        toast({
-          title: "✅ Auto processing enabled",
-          description: "System will automatically search and process orders in real-time via WebSocket",
-        });
-      }
-    }
-
-    if (!isOfflineOrder) {
-      executeOrders().catch(() => {});
-    }
-    
     setSpendAmount('');
     setReceiveAmount('');
     
@@ -764,7 +738,7 @@ export function SwapPanel() {
     if (!isOfflineOrder) {
       toast({
         title: "✅ Order created successfully",
-        description: `You have successfully created a purchase order for ${exactReceiveAmount} ${selectedToken.name}`,
+        description: `You have successfully created a purchase order for ${exactReceiveAmount} ${selectedToken.name}. Agora will check current sell orders immediately.`,
       });
     }
   };
@@ -811,8 +785,7 @@ export function SwapPanel() {
 
   const handleClearLocalStorage = () => {
     localStorage.clear();
-
-    setIsAutoProcessing(false);
+    dispatchOrdersUpdated("cleared");
     disconnectWallet();
     
     setSpendAmount('');
@@ -850,31 +823,6 @@ export function SwapPanel() {
     setDeleteCountdown(5);
     setIsCountingDown(true);
   };
-
-  const hasActiveOrders = () => {
-    const orders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-    if (!isWalletConnected || !ecashAddress) return false;
-    
-    return Object.keys(orders).some(orderKey => {
-      const parts = orderKey.split('|');
-      const address = parts[1];
-      return address === ecashAddress;
-    });
-  };
-
-  // Keep auto-processing state in sync with wallet status and existing orders
-  useEffect(() => {
-    if (isWalletConnected) {
-      const savedAutoProcessing = localStorage.getItem('auto_processing');
-      
-      if (savedAutoProcessing !== null && hasActiveOrders()) {
-        setIsAutoProcessing(savedAutoProcessing === 'true');
-      } else if (!hasActiveOrders()) {
-        setIsAutoProcessing(false);
-        localStorage.setItem('auto_processing', 'false');
-      }
-    }
-  }, [isWalletConnected]);
 
   const handleTokenPriceInputChange = (value: string) => {
     if (value === '' || /^[0-9]*\.?[0-9]*$/.test(value)) {

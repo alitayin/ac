@@ -2,7 +2,6 @@ import React from 'react';
 import { render } from '@testing-library/react';
 import { SwapPanel } from '@/app/swap/SwapPanel';
 import { WalletProvider } from '@/lib/context/WalletContext';
-import { OrderProcessingProvider } from '@/lib/context/OrderProcessingContext';
 import { AutoExecutionProvider } from '@/lib/context/AutoExecutionContext';
 import * as agoraOrders from '@/lib/agora-orders';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -70,11 +69,9 @@ describe('SwapPanel - Debounce calculateAverageExecutionPrice', () => {
   const renderSwapPanel = () => {
     return render(
       <WalletProvider>
-        <OrderProcessingProvider>
-          <AutoExecutionProvider>
-            <SwapPanel />
-          </AutoExecutionProvider>
-        </OrderProcessingProvider>
+        <AutoExecutionProvider>
+          <SwapPanel />
+        </AutoExecutionProvider>
       </WalletProvider>
     );
   };
@@ -151,4 +148,3 @@ describe('SwapPanel - Debounce calculateAverageExecutionPrice', () => {
     expect(typeof debounce).toBe('function');
   });
 });
-

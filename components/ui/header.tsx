@@ -41,14 +41,11 @@ import {
 } from "@/components/ui/drawer";
 import { Card, CardContent } from "@/components/ui/card";
 import { FlickeringGrid } from "@/components/magicui/flickering-grid";
-import { processOrders } from '@/lib/Auto.js';
-import { useOrderProcessing } from "@/lib/context/OrderProcessingContext";
 import { useWebSocketStatus } from "@/lib/context/WebSocketContext";
 import { useWallet } from "@/lib/context/WalletContext";
 import { useXECPrice } from "@/lib/price";
 import appVersion from "@/version.json";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
-import { watchOrderTokens } from "@/lib/swap-ws";
 import TelegramAgoraBotDialog from "@/components/ui/TelegramAgoraBotDialog";
 import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerInner";
 import { cn } from "@/lib/utils";
@@ -78,7 +75,6 @@ export default function Header({
   const [currentTheme, setCurrentTheme] = useState<string>("dark");
   const [tokenDetails, setTokenDetails] = useState<{[key: string]: any}>({});
   const tokenDetailsRef = useRef<{[key: string]: any}>({});
-  const { isAutoProcessing, setIsAutoProcessing } = useOrderProcessing();
   const { isNotifying } = useWebSocketStatus();
   const [isLoginDrawerOpen, setIsLoginDrawerOpen] = useState(false);
   const [mnemonicWords, setMnemonicWords] = useState<string[]>(new Array(12).fill(""));
@@ -219,94 +215,6 @@ export default function Header({
     loadTokenDetails();
 
   }, [isWalletConnected, userTokens]);
-
-  
-  const hasActiveOrders = () => {
-    const orders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-    if (!isWalletConnected || !ecashAddress) return false;
-
-    return Object.keys(orders).some(orderKey => {
-      const parts = orderKey.split('|');
-      const tokenId = parts[0];
-      const address = parts[1];
-      return address === ecashAddress;
-    });
-  };
-
-
-  const handleProcessOrders = async () => {
-    try {
-      await processOrders();
-   
-    } catch (error) {
-      console.error('Failed to process orders:', error);
-    }
-  };
-
-
-  useEffect(() => {
-
-    if (!isAutoProcessing || !isWalletConnected || !hasActiveOrders()) {
-      return;
-    }
-
-
-    const getOrderTokenIds = (): string[] => {
-      const orders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-      const tokenIds = new Set<string>();
-      
-      Object.keys(orders).forEach(orderKey => {
-        const parts = orderKey.split('|');
-        const tokenId = parts[0];
-        const address = parts[1];
-        if (address === ecashAddress) {
-          tokenIds.add(tokenId);
-        }
-      });
-      
-      return Array.from(tokenIds);
-    };
-
-    const tokenIds = getOrderTokenIds();
-    
-    if (tokenIds.length === 0) {
-      setIsAutoProcessing(false);
-      localStorage.setItem('auto_processing', 'false');
-      return;
-    }
-
-
-
-    handleProcessOrders();
-
-
-    const cleanup = watchOrderTokens(tokenIds, () => {
-      if (!hasActiveOrders()) {
-        setIsAutoProcessing(false);
-        localStorage.setItem('auto_processing', 'false');
-        return;
-      }
-      handleProcessOrders();
-    });
-    
-
-    return cleanup;
-  }, [isAutoProcessing, isWalletConnected, ecashAddress]);
-
-
-  useEffect(() => {
-    if (isWalletConnected) {
-      const savedAutoProcessing = localStorage.getItem('auto_processing');
-      
-      if (savedAutoProcessing === 'true' && hasActiveOrders()) {
-        setIsAutoProcessing(true);
-      } else if (!hasActiveOrders()) {
-        setIsAutoProcessing(false);
-        localStorage.setItem('auto_processing', 'false');
-      }
-    }
-  }, [isWalletConnected, ecashAddress]);
-
   useEffect(() => {
 
     const TWELVE_HOURS = 12 * 60 * 60 * 1000;
@@ -528,8 +436,8 @@ export default function Header({
                           'Unknown'}
                       </span>
                       <span 
-                        className={`h-2 w-2 rounded-full flex-shrink-0 ${isNotifying && isAutoProcessing ? 'bg-green-500' : 'bg-gray-400'}`} 
-                        title={isNotifying && isAutoProcessing ? "Auto Processing Online" : "Auto Processing Offline"}
+                        className={`h-2 w-2 rounded-full flex-shrink-0 ${isNotifying ? 'bg-green-500' : 'bg-gray-400'}`} 
+                        title={isNotifying ? "Wallet notifications connected" : "Wallet notifications offline"}
                       ></span>
                     </div>
                   </Button>

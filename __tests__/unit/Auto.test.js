@@ -24,6 +24,10 @@ vi.mock('@/lib/chronik.ts', () => ({
   chronik: {
     token: vi.fn(),
   },
+  getCachedTokenDetails: vi.fn(() => null),
+  getTokenDecimalsFromDetails: vi.fn((tokenData, fallback) =>
+    tokenData?.genesisInfo?.decimals ?? fallback,
+  ),
 }));
 
 global.fetch = vi.fn();
