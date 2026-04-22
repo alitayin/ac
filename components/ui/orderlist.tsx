@@ -398,10 +398,10 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
 
   return (
     <div className="space-y-4 pt-2 p-4">
-      <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <div className="min-w-[180px] flex-1">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
@@ -412,9 +412,11 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
               <SelectItem value="fail">Failed</SelectItem>
             </SelectContent>
           </Select>
+        </div>
 
+        <div className="min-w-[180px] flex-1">
           <Select value={tokenFilter} onValueChange={setTokenFilter}>
-            <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Filter by token" />
             </SelectTrigger>
             <SelectContent>
@@ -430,7 +432,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
 
         <Button
           variant="outline"
-          className="w-full sm:w-auto"
+          className="h-10 w-full shrink-0 whitespace-nowrap sm:ml-auto sm:w-auto"
           onClick={() => setIsClearAllDialogOpen(true)}
         >
           <Trash2 className="mr-2 h-4 w-4" />
