@@ -431,7 +431,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
         </div>
 
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
           className="h-10 w-10 shrink-0"
           onClick={() => setIsClearAllDialogOpen(true)}
