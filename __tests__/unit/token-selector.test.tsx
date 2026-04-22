@@ -13,14 +13,6 @@ vi.mock('@/lib/chronik', () => ({
   getTokenDecimalsFromDetails: mockGetTokenDecimalsFromDetails,
 }))
 
-vi.mock('@/config/tokenconfig', () => ({
-  TOKENS: {
-    'token-1': { name: 'Token One', decimals: 2 },
-    'token-2': { name: 'Token Two', decimals: 4 },
-    'token-3': { name: 'Token Three', decimals: 6 },
-  }
-}))
-
 describe('TokenSelector', () => {
   const mockOnTokenSelect = vi.fn()
   const mockOnTokenMetaChange = vi.fn()
@@ -55,6 +47,10 @@ describe('TokenSelector', () => {
 
       return {
         genesisInfo: {
+          tokenName:
+            tokenId === 'token-1' ? 'Token One' : tokenId === 'token-2' ? 'Token Two' : 'Token Three',
+          tokenTicker:
+            tokenId === 'token-1' ? 'ONE' : tokenId === 'token-2' ? 'TWO' : 'THREE',
           decimals: decimalsByTokenId[tokenId] ?? 0,
         },
       }
@@ -66,9 +62,9 @@ describe('TokenSelector', () => {
     expect(screen.getByText('Token One')).toBeInTheDocument()
   })
 
-  it('should filter to only owned tokens when onlyOwnedTokens is true', async () => {
+  it('should only show wallet tokens with balance', async () => {
     render(
-      <TokenSelector {...defaultProps} onlyOwnedTokens={true} />
+      <TokenSelector {...defaultProps} />
     )
 
     fireEvent.click(screen.getByText('Token One'))
@@ -78,18 +74,26 @@ describe('TokenSelector', () => {
     })
   })
 
-  it('should show all tokens when onlyOwnedTokens is false', async () => {
-    render(<TokenSelector {...defaultProps} onlyOwnedTokens={false} />)
+  it('should only show wallet tokens even when zero-balance tokens exist', async () => {
+    render(<TokenSelector {...defaultProps} />)
 
     fireEvent.click(screen.getByText('Token One'))
 
     await waitFor(() => {
-      expect(screen.getByText('Token Two')).toBeInTheDocument()
+      expect(screen.queryByText('Token Two')).not.toBeInTheDocument()
     })
   })
 
   it('should call onTokenSelect when token is clicked', async () => {
-    render(<TokenSelector {...defaultProps} />)
+    render(
+      <TokenSelector
+        {...defaultProps}
+        userTokens={{
+          'token-1': '100000',
+          'token-2': '250000',
+        }}
+      />
+    )
 
     fireEvent.click(screen.getByText('Token One'))
 
@@ -106,6 +110,19 @@ describe('TokenSelector', () => {
     await waitFor(() => {
       expect(screen.getByText(/Balance: 1,000/)).toBeInTheDocument()
     })
+  })
+
+  it('should show an empty wallet state when the user has no token balances', async () => {
+    render(
+      <TokenSelector
+        {...defaultProps}
+        selectedToken={{ id: '', name: '' }}
+        userTokens={{}}
+      />
+    )
+
+    expect(screen.getByRole('button')).toBeDisabled()
+    expect(screen.getByText('No tokens')).toBeInTheDocument()
   })
 
   it('should call onTokenMetaChange when token decimals are loaded', async () => {

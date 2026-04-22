@@ -5,7 +5,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { TOKENS } from '@/config/tokenconfig';
 import { MousePointerClick, ChevronDown } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
@@ -13,14 +12,10 @@ import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
 type TokenDetailsMap = Record<string, any>;
 type DisplayToken = {
   tokenId: string;
-  token: {
-    name: string;
-  };
-  hasBalance: boolean;
+  tokenName: string;
   formattedAmount: string;
+  rawAmount: string;
 };
-
-const PRIORITY_TOKEN_ID = 'fb4233e8a568993976ed38a81c2671587c5ad09552dedefa78760deed6ff87aa';
 
 interface TokenSelectorProps {
   selectedToken: {
@@ -35,7 +30,32 @@ interface TokenSelectorProps {
     detail?: any;
   }) => void;
   className?: string;
-  onlyOwnedTokens?: boolean;
+}
+
+function shortenTokenId(tokenId: string): string {
+  return `${tokenId.slice(0, 6)}...${tokenId.slice(-4)}`
+}
+
+function getTokenName(detail: any, tokenId: string): string {
+  const tokenName = detail?.genesisInfo?.tokenName?.trim()
+  if (tokenName) {
+    return tokenName
+  }
+
+  const tokenTicker = detail?.genesisInfo?.tokenTicker?.trim()
+  if (tokenTicker) {
+    return tokenTicker
+  }
+
+  return shortenTokenId(tokenId)
+}
+
+function parseRawAmount(rawAmount: string): bigint {
+  try {
+    return BigInt(rawAmount)
+  } catch {
+    return BigInt(0)
+  }
 }
 
 export function TokenSelector({
@@ -44,7 +64,6 @@ export function TokenSelector({
   onTokenSelect,
   onTokenMetaChange,
   className = "",
-  onlyOwnedTokens = false
 }: TokenSelectorProps) {
   const [open, setOpen] = useState(false);
   const [showScrollHint, setShowScrollHint] = useState(false);
@@ -52,7 +71,6 @@ export function TokenSelector({
   const tokenDetailsRef = useRef<TokenDetailsMap>({});
   const loadRequestIdRef = useRef(0);
   const userTokenIds = useMemo(() => Object.keys(userTokens), [userTokens]);
-  const userTokenCount = userTokenIds.length;
   
   useEffect(() => {
     if (userTokenIds.length === 0) return;
@@ -163,38 +181,42 @@ export function TokenSelector({
   }, [selectedToken.id, selectedTokenDetail, onTokenMetaChange]);
 
   const displayTokens = useMemo<DisplayToken[]>(() => {
-    return Object.entries(TOKENS)
-      .map(([tokenId, token]) => {
+    return userTokenIds
+      .filter((tokenId) => {
         const rawAmount = userTokens[tokenId] || "0";
-        const hasBalance = rawAmount !== "0";
-
+        return rawAmount !== "0";
+      })
+      .map((tokenId) => {
+        const rawAmount = userTokens[tokenId] || "0";
         const detail = tokenDetails[tokenId];
         const decimals = getTokenDecimalsFromDetails(detail, 0);
-        const actualAmount = Number(rawAmount) / Math.pow(10, decimals);
+        const actualAmount = Number(rawAmount) / Math.pow(10, decimals || 0);
         const formattedAmount = new Intl.NumberFormat('en-US', {
           maximumFractionDigits: decimals,
         }).format(actualAmount);
 
         return {
           tokenId,
-          token,
-          hasBalance,
+          tokenName: getTokenName(detail, tokenId),
           formattedAmount,
+          rawAmount,
         };
       })
-      .filter(({ hasBalance }) => !onlyOwnedTokens || hasBalance)
       .sort((a, b) => {
-        if (a.hasBalance !== b.hasBalance) {
-          return a.hasBalance ? -1 : 1;
-        }
-        if (a.tokenId === PRIORITY_TOKEN_ID && b.tokenId !== PRIORITY_TOKEN_ID) return -1;
-        if (b.tokenId === PRIORITY_TOKEN_ID && a.tokenId !== PRIORITY_TOKEN_ID) return 1;
-        return a.token.name.localeCompare(b.token.name);
-      });
-  }, [onlyOwnedTokens, tokenDetails, userTokens]);
+        const amountA = parseRawAmount(a.rawAmount)
+        const amountB = parseRawAmount(b.rawAmount)
 
+        if (amountA !== amountB) {
+          return amountA > amountB ? -1 : 1
+        }
+        return a.tokenName.localeCompare(b.tokenName);
+      });
+  }, [tokenDetails, userTokenIds, userTokens]);
+
+  const hasWalletTokens = displayTokens.length > 0;
+  
   useEffect(() => {
-    if (open && userTokenCount > 2) {
+    if (open && displayTokens.length > 2) {
       setShowScrollHint(true);
       
       const timer = setTimeout(() => {
@@ -203,7 +225,7 @@ export function TokenSelector({
       
       return () => clearTimeout(timer);
     }
-  }, [open, userTokenCount]);
+  }, [displayTokens.length, open]);
   
   const handleTokenSelect = (tokenId: string, tokenName: string) => {
     onTokenSelect(tokenId, tokenName);
@@ -215,15 +237,18 @@ export function TokenSelector({
       <PopoverTrigger asChild>
         <Button 
           className={`bg-background text-sm hover:bg-muted border text-foreground rounded-full px-2 py-1 flex items-center gap-2 ${className}`}
+          disabled={!hasWalletTokens}
         >
           <Avatar className="h-4 w-4">
-            <AvatarImage 
-              src={`https://icons.etokens.cash/32/${selectedToken.id}.png`} 
-              alt={selectedToken.name} 
-            />
-            <AvatarFallback>{selectedToken.name.substring(0, 2)}</AvatarFallback>
+            {selectedToken.id ? (
+              <AvatarImage 
+                src={`https://icons.etokens.cash/32/${selectedToken.id}.png`} 
+                alt={selectedToken.name} 
+              />
+            ) : null}
+            <AvatarFallback>{(selectedToken.name || "TK").substring(0, 2)}</AvatarFallback>
           </Avatar>
-          {selectedToken.name}
+          {selectedToken.name || (hasWalletTokens ? "Select token" : "No tokens")}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 flex flex-col">
@@ -234,33 +259,38 @@ export function TokenSelector({
           </h4>
           
           <div className="space-y-2 relative">
-            <div className="text-sm text-muted-foreground">Listed etokens</div>
+            <div className="text-sm text-muted-foreground">Wallet tokens</div>
             <div className="space-y-1 max-h-[200px] overflow-y-auto">
-              {displayTokens.map(({ tokenId, token, hasBalance, formattedAmount }) => (
+              {displayTokens.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  No wallet tokens
+                </div>
+              ) : (
+                displayTokens.map(({ tokenId, tokenName, formattedAmount }) => (
                   <Button
                     key={tokenId}
                     variant="ghost"
                     className="w-full justify-start gap-2 px-2 py-1.5 h-auto"
-                    onClick={() => handleTokenSelect(tokenId, token.name)}
-                    disabled={onlyOwnedTokens && !hasBalance}
+                    onClick={() => handleTokenSelect(tokenId, tokenName)}
                   >
                     <Avatar className="h-8 w-8">
                       <AvatarImage
                         src={`https://icons.etokens.cash/32/${tokenId}.png`}
-                        alt={token.name}
+                        alt={tokenName}
                       />
-                      <AvatarFallback>{token.name.substring(0, 2)}</AvatarFallback>
+                      <AvatarFallback>{tokenName.substring(0, 2)}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col items-start">
-                      <span className="text-sm font-medium">{token.name}</span>
+                      <span className="text-sm font-medium">{tokenName}</span>
                       <span className="text-sm text-muted-foreground">
-                        Balance: {hasBalance ? formattedAmount : "0"}
+                        Balance: {formattedAmount}
                       </span>
                     </div>
                   </Button>
-                ))}
+                ))
+              )}
             </div>
-            {showScrollHint && userTokenCount > 2 && (
+            {showScrollHint && displayTokens.length > 2 && (
               <div 
                 className="absolute bottom-[-12px] left-1/2 transform -translate-x-1/2 transition-opacity duration-500"
                 style={{ opacity: showScrollHint ? 1 : 0 }}

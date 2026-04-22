@@ -15,7 +15,6 @@ interface BuyCardProps {
   selectedTokenDecimals: number;
   label?: string;
   showTokenSelector?: boolean;
-  onlyOwnedTokens?: boolean;
   showMaxBalance?: boolean;
 }
 
@@ -30,7 +29,6 @@ export const BuyCard: React.FC<BuyCardProps> = ({
   selectedTokenDecimals,
   label = "Buy",
   showTokenSelector = true,
-  onlyOwnedTokens = false,
   showMaxBalance = false,
 }) => {
   const rawAmount = userTokens[selectedToken.id] || "0";
@@ -92,21 +90,24 @@ export const BuyCard: React.FC<BuyCardProps> = ({
               onTokenSelect={onTokenSelect}
               onTokenMetaChange={onTokenMetaChange}
               className="bg-background hover:bg-muted border text-foreground rounded-full px-2 py-2 flex items-center gap-2"
-              onlyOwnedTokens={onlyOwnedTokens}
             />
           )}
         </div>
 
         <div className="text-muted-foreground text-sm text-right">
-          <a
-            href={`https://explorer.e.cash/tx/${selectedToken.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-primary transition-colors"
-          >
-            {selectedToken.id.substring(0, 4)}...
-            {selectedToken.id.substring(selectedToken.id.length - 4)}
-          </a>
+          {selectedToken.id ? (
+            <a
+              href={`https://explorer.e.cash/tx/${selectedToken.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+            >
+              {selectedToken.id.substring(0, 4)}...
+              {selectedToken.id.substring(selectedToken.id.length - 4)}
+            </a>
+          ) : (
+            <span>No token selected</span>
+          )}
         </div>
       </div>
     </Card>
@@ -114,5 +115,3 @@ export const BuyCard: React.FC<BuyCardProps> = ({
 };
 
 export default BuyCard;
-
-

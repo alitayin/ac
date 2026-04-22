@@ -210,9 +210,8 @@ describe('Swap Cards', () => {
       expect(screen.getByText('Sell Amount')).toBeInTheDocument()
     })
 
-    it('should filter to owned tokens when onlyOwnedTokens is true', () => {
-      render(<BuyCard {...mockProps} onlyOwnedTokens={true} />)
-      // TokenSelector should receive onlyOwnedTokens prop
+    it('should render token selector for wallet-based token selection', () => {
+      render(<BuyCard {...mockProps} />)
       expect(screen.getByTestId('token-selector')).toBeInTheDocument()
     })
   })

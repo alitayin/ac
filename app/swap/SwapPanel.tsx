@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/tabs";
 import { createAgoraOffer } from "ecash-quicksend";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
-import { TOKENS } from '@/config/tokenconfig';
 import { Power, Trash2, CircleAlert, Eraser, ArrowDownUp, ShieldAlert, Layout } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OrderList } from "@/components/ui/orderlist";
@@ -66,9 +65,32 @@ import {
   readSwapOrders,
   saveSwapOrder,
 } from "@/lib/swap-order-utils";
+import { fetchTokenDetails, getCachedTokenDetails } from "@/lib/chronik";
 
 const MIN_ORDER_TOTAL_XEC = 100;
 const POLLING_INTERVAL_MS = 30000;
+const EMPTY_SELECTED_TOKEN = {
+  id: "",
+  name: "Select token",
+};
+
+function shortenTokenId(tokenId: string): string {
+  return `${tokenId.slice(0, 6)}...${tokenId.slice(-4)}`;
+}
+
+function getTokenNameFromDetail(detail: any, tokenId: string): string {
+  const tokenName = detail?.genesisInfo?.tokenName?.trim();
+  if (tokenName) {
+    return tokenName;
+  }
+
+  const tokenTicker = detail?.genesisInfo?.tokenTicker?.trim();
+  if (tokenTicker) {
+    return tokenTicker;
+  }
+
+  return shortenTokenId(tokenId);
+}
 
 export function SwapPanel() {
   const { toast } = useToast();
@@ -92,10 +114,7 @@ export function SwapPanel() {
   const [selectedToken, setSelectedToken] = useState<{
     id: string;
     name: string;
-  }>({
-    id: 'ac31bb0bccf33de1683efce4da64f1cb6d8e8d6e098bc01c51d5864deb0e783f',
-    name: 'StarCrystal'
-  });
+  }>(EMPTY_SELECTED_TOKEN);
   const [tokenPrice, setTokenPrice] = useState<number>(0);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState<boolean>(false);
   const [tokenPriceInput, setTokenPriceInput] = useState<string>('');
@@ -141,6 +160,10 @@ export function SwapPanel() {
 
   // Cached order book fetch with 10 second TTL
   const fetchOrderBookCached = useCallback(async (tokenId: string) => {
+    if (!tokenId) {
+      return { orders: [] };
+    }
+
     const cached = orderBookCacheRef.current.get(tokenId);
     const now = Date.now();
 
@@ -327,6 +350,11 @@ export function SwapPanel() {
       setReceiveAmount('');
       return;
     }
+
+    if (!selectedToken.id || tokenPrice <= 0) {
+      setReceiveAmount('0');
+      return;
+    }
     
     let spend = parseFloat(inputAmount);
     if (isNaN(spend)) {
@@ -358,6 +386,11 @@ export function SwapPanel() {
 
   const calculateSpendAmount = (inputAmount: string) => {
     if (!inputAmount || isNaN(Number(inputAmount))) {
+      setSpendAmount('');
+      return;
+    }
+
+    if (!selectedToken.id || tokenPrice <= 0) {
       setSpendAmount('');
       return;
     }
@@ -426,6 +459,12 @@ export function SwapPanel() {
   };
 
   const getTokenPrice = async (tokenId: string) => {
+    if (!tokenId) {
+      setTokenPrice(0);
+      setMarketPrice(0);
+      return 0;
+    }
+
     if (useBestOrderPrice) {
       try {
         const data = await fetchOrderBookCached(tokenId);
@@ -445,6 +484,12 @@ export function SwapPanel() {
   };
 
   const fetchTokenPrice = async (tokenId: string) => {
+    if (!tokenId) {
+      setTokenPrice(0);
+      setMarketPrice(0);
+      return 0;
+    }
+
     try {
       let latestTx: Transaction[] = [];
       try {
@@ -563,6 +608,16 @@ export function SwapPanel() {
   );
 
   const handleTokenSelect = (tokenId: string, tokenName: string) => {
+    if (!tokenId) {
+      setSelectedToken(EMPTY_SELECTED_TOKEN);
+      setTokenPrice(0);
+      setTokenPriceInput('0.00');
+      setMarketPrice(0);
+      setSpendAmount('');
+      setReceiveAmount('');
+      return;
+    }
+
     setSelectedToken({ id: tokenId, name: tokenName });
     getTokenPrice(tokenId).then(price => {
       setTokenPrice(price);
@@ -574,6 +629,13 @@ export function SwapPanel() {
   };
 
   useEffect(() => {
+    if (!selectedToken.id) {
+      setTokenPrice(0);
+      setTokenPriceInput('0.00');
+      setMarketPrice(0);
+      return;
+    }
+
     getTokenPrice(selectedToken.id).then(price => {
       setTokenPrice(price);
       setTokenPriceInput(formatTokenPrice(price));
@@ -667,11 +729,6 @@ export function SwapPanel() {
         const walletMnemonic = localStorage.getItem('wallet_mnemonic');
         if (!walletMnemonic) {
           throw new Error('Wallet mnemonic not found');
-        }
-
-        const tokenConfig = TOKENS[selectedToken.id as keyof typeof TOKENS];
-        if (!tokenConfig) {
-          throw new Error('Token configuration not found');
         }
 
         const proxyBuyAmount = tokenPrice * exactReceiveAmount;
@@ -879,20 +936,57 @@ export function SwapPanel() {
   };
 
 
-  // Auto-select first owned token when wallet connects or user has tokens
+  // Keep the swap token selection fully wallet-driven.
   useEffect(() => {
-    if (isWalletConnected && userTokens && Object.keys(userTokens).length > 0) {
-      // Find first token with balance > 0
+    let cancelled = false;
+
+    const syncSelectedToken = async () => {
       const ownedTokens = Object.entries(userTokens).filter(([_, amount]) => amount !== "0");
-      if (ownedTokens.length > 0) {
-        const [firstTokenId] = ownedTokens[0];
-        const tokenConfig = TOKENS[firstTokenId as keyof typeof TOKENS];
-        if (tokenConfig && selectedToken.id !== firstTokenId) {
-          handleTokenSelect(firstTokenId, tokenConfig.name);
+
+      if (!isWalletConnected || ownedTokens.length === 0) {
+        setSelectedToken(EMPTY_SELECTED_TOKEN);
+        setTokenPrice(0);
+        setTokenPriceInput('0.00');
+        setMarketPrice(0);
+        setSelectedTokenDecimals(0);
+        setOrderBook({ orders: [] });
+        setSpendAmount('');
+        setReceiveAmount('');
+        return;
+      }
+
+      const hasCurrentSelection = ownedTokens.some(([tokenId]) => tokenId === selectedToken.id);
+      if (hasCurrentSelection) {
+        return;
+      }
+
+      const [firstTokenId] = ownedTokens[0];
+      const cachedDetail = getCachedTokenDetails(firstTokenId);
+      if (cachedDetail) {
+        if (!cancelled) {
+          handleTokenSelect(firstTokenId, getTokenNameFromDetail(cachedDetail, firstTokenId));
+        }
+        return;
+      }
+
+      try {
+        const detail = await fetchTokenDetails(firstTokenId);
+        if (!cancelled) {
+          handleTokenSelect(firstTokenId, getTokenNameFromDetail(detail, firstTokenId));
+        }
+      } catch {
+        if (!cancelled) {
+          handleTokenSelect(firstTokenId, shortenTokenId(firstTokenId));
         }
       }
-    }
-  }, [isWalletConnected, userTokens]);
+    };
+
+    void syncSelectedToken();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isWalletConnected, selectedToken.id, userTokens]);
 
 
   const handleCreateListing = async () => {
@@ -909,6 +1003,15 @@ export function SwapPanel() {
       toast({
         title: "Guest Mode Restriction",
         description: "Cannot create listings in guest mode. Please connect wallet with recovery phrase",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedToken.id) {
+      toast({
+        title: "No token selected",
+        description: "Select a wallet token first",
         variant: "destructive",
       });
       return;
@@ -1330,7 +1433,6 @@ export function SwapPanel() {
                   selectedTokenDecimals={selectedTokenDecimals}
                   label="Sell"
                   showTokenSelector={true}
-                  onlyOwnedTokens={true}
                   showMaxBalance={true}
                 />
 
