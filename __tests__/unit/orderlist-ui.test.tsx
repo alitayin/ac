@@ -131,10 +131,10 @@ describe('OrderList UI', () => {
     render(<OrderList ecashAddress={mockAddress} balance={10000} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Clear all orders')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Clear all orders' })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Clear all orders'));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all orders' }));
     fireEvent.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Clear all orders' }),
     );

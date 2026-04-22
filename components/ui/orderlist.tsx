@@ -398,8 +398,8 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
 
   return (
     <div className="space-y-4 pt-2 p-4">
-      <div className="mb-2 flex flex-wrap items-center gap-3">
-        <div className="min-w-[180px] flex-1">
+      <div className="mb-2 flex items-center gap-3">
+        <div className="min-w-0 flex-1">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Filter by status" />
@@ -414,7 +414,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
           </Select>
         </div>
 
-        <div className="min-w-[180px] flex-1">
+        <div className="min-w-0 flex-1">
           <Select value={tokenFilter} onValueChange={setTokenFilter}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Filter by token" />
@@ -432,11 +432,13 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
 
         <Button
           variant="outline"
-          className="h-10 w-full shrink-0 whitespace-nowrap sm:ml-auto sm:w-auto"
+          size="icon"
+          className="h-10 w-10 shrink-0"
           onClick={() => setIsClearAllDialogOpen(true)}
+          aria-label="Clear all orders"
+          title="Clear all orders"
         >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Clear all orders
+          <Trash2 className="h-4 w-4" />
         </Button>
       </div>
       
