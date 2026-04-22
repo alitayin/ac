@@ -112,12 +112,10 @@ describe('Swap Cards', () => {
       expect(screen.getByText('Balance: 1000 XEC')).toBeInTheDocument()
     })
 
-    it('should display combined fee summary', () => {
+    it('should display total fee summary', () => {
       render(<SpendCard {...mockProps} />)
       expect(screen.getByText('Estimated fees')).toBeInTheDocument()
-      expect(
-        screen.getByText('25.46 XEC (5.46 swap + 20.00 network)'),
-      ).toBeInTheDocument()
+      expect(screen.getByText('25.46 XEC')).toBeInTheDocument()
     })
 
     it('should display 0 balance when wallet not connected', () => {
@@ -193,12 +191,13 @@ describe('Swap Cards', () => {
 
     it('should show max balance when showMaxBalance is true', () => {
       render(<BuyCard {...mockProps} showMaxBalance={true} />)
-      expect(screen.getByText(/Max:/)).toBeInTheDocument()
+      expect(screen.getByText('Max')).toBeInTheDocument()
+      expect(screen.getByText(/Balance:\s*100,000/)).toBeInTheDocument()
     })
 
-    it('should set max balance when Max link is clicked', () => {
+    it('should set max balance when Max button is clicked', () => {
       render(<BuyCard {...mockProps} showMaxBalance={true} />)
-      const maxButton = screen.getByText(/Max:/)
+      const maxButton = screen.getByText('Max')
       fireEvent.click(maxButton)
 
       // 10000000 / 10^2 = 100000.00

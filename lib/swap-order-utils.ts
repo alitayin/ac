@@ -109,6 +109,24 @@ export const deleteSwapOrder = (
   return orders;
 };
 
+export const clearSwapOrdersForAddress = (
+  address: string,
+  reason: OrdersUpdatedReason = "cleared",
+): StoredSwapOrders => {
+  if (!address) {
+    return readSwapOrders();
+  }
+
+  const orders = readSwapOrders();
+  const filteredOrders = Object.fromEntries(
+    Object.entries(orders).filter(([orderKey]) => getAddressFromOrderKey(orderKey) !== address),
+  );
+
+  writeSwapOrders(filteredOrders);
+  dispatchOrdersUpdated(reason);
+  return filteredOrders;
+};
+
 export const isOnlineOrder = (order: StoredSwapOrder | undefined): boolean =>
   !!order && order.orderType !== "offline";
 

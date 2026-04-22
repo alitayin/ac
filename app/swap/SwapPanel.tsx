@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/tabs";
 import { createAgoraOffer } from "ecash-quicksend";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
-import { Power, Trash2, CircleAlert, Eraser, ArrowDownUp, ShieldAlert, Layout } from "lucide-react";
+import { Power, CircleAlert, ArrowDownUp, ShieldAlert, Layout } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OrderList } from "@/components/ui/orderlist";
 import { ListingList } from "@/components/ui/listinglist";
@@ -51,7 +51,6 @@ import {
   getMinimumAgoraBuyFeesXec,
 } from "@/lib/agora-swap-fee";
 import WalletConnectDrawerInner from "@/components/swap/WalletConnectDrawerInner";
-import ClearLocalDataDialog from "@/components/swap/ClearLocalDataDialog";
 import PriceCard from "@/components/swap/PriceCard";
 import SpendCard from "@/components/swap/SpendCard";
 import BuyCard from "@/components/swap/BuyCard";
@@ -61,7 +60,6 @@ import { Transaction } from "@/lib/types";
 import { useAutoExecution } from "@/lib/context/AutoExecutionContext";
 import {
   createSwapOrderKey,
-  dispatchOrdersUpdated,
   readSwapOrders,
   saveSwapOrder,
 } from "@/lib/swap-order-utils";
@@ -118,14 +116,11 @@ export function SwapPanel() {
   const [tokenPrice, setTokenPrice] = useState<number>(0);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState<boolean>(false);
   const [tokenPriceInput, setTokenPriceInput] = useState<string>('');
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
   const [showOrdersRainbow, setShowOrdersRainbow] = useState<boolean>(false);
   const [ordersRainbowTimer, setOrdersRainbowTimer] = useState<NodeJS.Timeout | null>(null);
   const [showUsdPrice, setShowUsdPrice] = useState<boolean>(false);
   const [useBestOrderPrice, setUseBestOrderPrice] = useState<boolean>(true);
   const xecPrice = useXECPrice();
-  const [deleteCountdown, setDeleteCountdown] = useState<number>(5);
-  const [isCountingDown, setIsCountingDown] = useState<boolean>(false);
   const [marketPrice, setMarketPrice] = useState<number>(0);
   const [totalTokensBought, setTotalTokensBought] = useState<number>(0);
   const [isOfflineOrder, setIsOfflineOrder] = useState<boolean>(false);
@@ -840,47 +835,6 @@ export function SwapPanel() {
     setIsConfirmDialogOpen(true);
   };
 
-  const handleClearLocalStorage = () => {
-    localStorage.clear();
-    dispatchOrdersUpdated("cleared");
-    disconnectWallet();
-    
-    setSpendAmount('');
-    setReceiveAmount('');
-    setMnemonicWords(new Array(12).fill(''));
-    
-    toast({
-      title: "✅ Cache cleared",
-      description: "All local data (including orders and wallet information) has been deleted",
-    });
-    
-    setIsDeleteDialogOpen(false);
-    setDeleteCountdown(5);
-    setIsCountingDown(false);
-  };
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    
-    if (isCountingDown && deleteCountdown > 0) {
-      timer = setTimeout(() => {
-        setDeleteCountdown(prev => prev - 1);
-      }, 1000);
-    } else if (deleteCountdown === 0) {
-      setIsCountingDown(false);
-    }
-    
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [isCountingDown, deleteCountdown]);
-
-  const handleOpenDeleteDialog = () => {
-    setIsDeleteDialogOpen(true);
-    setDeleteCountdown(5);
-    setIsCountingDown(true);
-  };
-
   const handleTokenPriceInputChange = (value: string) => {
     if (value === '' || /^[0-9]*\.?[0-9]*$/.test(value)) {
       setTokenPriceInput(value);
@@ -936,11 +890,15 @@ export function SwapPanel() {
   };
 
 
-  // Keep the swap token selection fully wallet-driven.
+  // Auto-pick a wallet token only when there is no active selection yet.
   useEffect(() => {
     let cancelled = false;
 
     const syncSelectedToken = async () => {
+      if (selectedToken.id) {
+        return;
+      }
+
       const ownedTokens = Object.entries(userTokens).filter(([_, amount]) => amount !== "0");
 
       if (!isWalletConnected || ownedTokens.length === 0) {
@@ -952,11 +910,6 @@ export function SwapPanel() {
         setOrderBook({ orders: [] });
         setSpendAmount('');
         setReceiveAmount('');
-        return;
-      }
-
-      const hasCurrentSelection = ownedTokens.some(([tokenId]) => tokenId === selectedToken.id);
-      if (hasCurrentSelection) {
         return;
       }
 
@@ -1094,25 +1047,25 @@ export function SwapPanel() {
           <main className={`${showProPanel ? 'lg:w-[600px] w-full' : 'w-full'} transition-all duration-300`}>
             <Tabs defaultValue="swap" className="w-full">
           <TabsList className="flex justify-between px-4 bg-transparent">
-            <div className="flex space-x-4">
+            <div className="flex space-x-2">
               <TabsTrigger
                 value="swap"
-                className="data-[state=active]:bg-muted shadow-none data-[state=active]:text-muted-foreground data-[state=active]:shadow-none rounded-full px-4 py-2"
+                className="rounded-full px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-muted-foreground data-[state=active]:shadow-none shadow-none"
               >
                 Buy
               </TabsTrigger>
               <TabsTrigger
                 value="sell"
-                className="data-[state=active]:bg-muted shadow-none data-[state=active]:text-muted-foreground data-[state=active]:shadow-none rounded-full px-4 py-2"
+                className="rounded-full px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-muted-foreground data-[state=active]:shadow-none shadow-none"
               >
                 Sell
               </TabsTrigger>
               <TabsTrigger
                 value="limit"
-                className="data-[state=active]:bg-muted shadow-none data-[state=active]:text-muted-foreground data-[state=active]:shadow-none rounded-full px-4 py-2 relative"
+                className="relative rounded-full px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-muted-foreground data-[state=active]:shadow-none shadow-none"
               >
                                   <span className="flex items-center gap-2">
-                    My orders
+                    Buy orders
                     {showOrdersRainbow && (
                       <Badge variant="secondary" className="h-5 min-w-5 animate-rainbow bg-gradient-to-r from-pink-500 via-red-500 via-yellow-500 via-green-500 via-blue-500 via-indigo-500 to-purple-500 bg-[length:200%] rounded-full px-1 font-mono tabular-nums text-white">
                         +1
@@ -1122,7 +1075,7 @@ export function SwapPanel() {
               </TabsTrigger>
               <TabsTrigger
                 value="listing"
-                className="data-[state=active]:bg-muted shadow-none data-[state=active]:text-muted-foreground data-[state=active]:shadow-none rounded-full px-4 py-2"
+                className="rounded-full px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-muted-foreground data-[state=active]:shadow-none shadow-none"
               >
                 My listing
               </TabsTrigger>
@@ -1142,24 +1095,6 @@ export function SwapPanel() {
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>{showProPanel ? "Hide OrderBook" : "Show OrderBook"}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={handleOpenDeleteDialog}
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Clear all local data</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1519,20 +1454,6 @@ export function SwapPanel() {
           )}
         </div>
       </div>
-
-      <ClearLocalDataDialog
-        open={isDeleteDialogOpen}
-        deleteCountdown={deleteCountdown}
-        onOpenChange={(open) => {
-          setIsDeleteDialogOpen(open);
-          if (!open) {
-            setDeleteCountdown(5);
-            setIsCountingDown(false);
-          }
-        }}
-        onConfirm={handleClearLocalStorage}
-      />
-
     </>
   );
 }

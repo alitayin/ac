@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OrderList } from '@/components/ui/orderlist';
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from '@/lib/chronik';
@@ -106,5 +106,51 @@ describe('OrderList UI', () => {
     expect(screen.getByLabelText('View Transactions')).toBeInTheDocument();
     expect(screen.getByLabelText('Cancel Order')).toBeInTheDocument();
     expect(screen.getByTestId(`order-time-token1-id|${mockAddress}|100`).textContent).not.toBe('Unknown time');
+  });
+
+  it('clears all orders only for the connected wallet', async () => {
+    const otherAddress = 'ecash:qz2708636snqhsxu8wnlka78h6fdp77ar59jrf5035';
+
+    localStorage.setItem('swap_orders', JSON.stringify({
+      [`token1-id|${mockAddress}|100`]: {
+        remainingAmount: 100,
+        maxPrice: 100,
+        status: 'pending',
+        transactions: [],
+        orderType: 'online',
+      },
+      [`token2-id|${otherAddress}|100`]: {
+        remainingAmount: 200,
+        maxPrice: 100,
+        status: 'pending',
+        transactions: [],
+        orderType: 'online',
+      },
+    }));
+
+    render(<OrderList ecashAddress={mockAddress} balance={10000} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Clear all orders')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Clear all orders'));
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Clear all orders' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("You haven't created any orders yet")).toBeInTheDocument();
+    });
+
+    expect(JSON.parse(localStorage.getItem('swap_orders') || '{}')).toEqual({
+      [`token2-id|${otherAddress}|100`]: {
+        remainingAmount: 200,
+        maxPrice: 100,
+        status: 'pending',
+        transactions: [],
+        orderType: 'online',
+      },
+    });
   });
 });

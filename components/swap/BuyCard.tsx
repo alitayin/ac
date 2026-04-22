@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { TokenSelector } from "@/components/ui/token-selector";
 
 interface BuyCardProps {
@@ -48,14 +49,6 @@ export const BuyCard: React.FC<BuyCardProps> = ({
       <div className="space-y-2 bg-background p-4 rounded-2xl border mt-2 transition-all hover:bg-muted/50">
         <div className="flex items-center justify-between">
           <div className="text-muted-foreground text-sm">{label}</div>
-          {showMaxBalance && maxBalance > 0 && (
-            <button
-              onClick={handleMaxClick}
-              className="text-xs text-muted-foreground hover:text-primary transition-colors"
-            >
-              Max: {formattedMaxBalance}
-            </button>
-          )}
         </div>
         <div className="flex items-center justify-between">
           <input
@@ -93,6 +86,20 @@ export const BuyCard: React.FC<BuyCardProps> = ({
             />
           )}
         </div>
+        {showMaxBalance && maxBalance > 0 && (
+          <div className="flex items-center mt-2">
+            <Button
+              variant="outline"
+              className="p-2 h-8 mr-2"
+              onClick={handleMaxClick}
+            >
+              Max
+            </Button>
+            <span className="ml-auto text-sm text-muted-foreground">
+              Balance: {formattedMaxBalance}
+            </span>
+          </div>
+        )}
 
         <div className="text-muted-foreground text-sm text-right">
           {selectedToken.id ? (

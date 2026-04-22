@@ -12,6 +12,7 @@ import { CircleX, Trash2, CircleCheck, LoaderCircle, RefreshCw, History } from "
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
 import {
   ORDERS_UPDATED_EVENT,
+  clearSwapOrdersForAddress,
   deleteSwapOrder,
   dispatchOrdersUpdated,
 } from "@/lib/swap-order-utils";
@@ -49,6 +50,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
   const { toast } = useToast();
   const [orders, setOrders] = useState<Record<string, Order>>({});
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isClearAllDialogOpen, setIsClearAllDialogOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
   const [openPopover, setOpenPopover] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -290,6 +292,19 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
     }
   };
 
+  const confirmClearAllOrders = () => {
+    clearSwapOrdersForAddress(ecashAddress, "cleared");
+    setOrders({});
+    setAvailableTokens([]);
+    setInsufficientFundsOrders(new Set());
+    setIsClearAllDialogOpen(false);
+
+    toast({
+      title: "✅ Orders Cleared",
+      description: "All buy orders for this wallet have been deleted",
+    });
+  };
+
   // Format token amount for display
   const formatTokenAmount = (amount: number, tokenId: string | undefined) => {
     if (!tokenId) return amount.toString();
@@ -383,34 +398,44 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
 
   return (
     <div className="space-y-4 pt-2 p-4">
-      {/* Filters */}
-      <div className="flex justify-between mb-2">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="in-progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="fail">Failed</SelectItem>
-          </SelectContent>
-        </Select>
-        
-        <Select value={tokenFilter} onValueChange={setTokenFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by token" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Tokens</SelectItem>
-            {availableTokens.map(token => (
-              <SelectItem key={token.id} value={token.id}>
-                {token.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="in-progress">In Progress</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="fail">Failed</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={tokenFilter} onValueChange={setTokenFilter}>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by token" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Tokens</SelectItem>
+              {availableTokens.map(token => (
+                <SelectItem key={token.id} value={token.id}>
+                  {token.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button
+          variant="outline"
+          className="w-full sm:w-auto"
+          onClick={() => setIsClearAllDialogOpen(true)}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Clear all orders
+        </Button>
       </div>
       
       {/* Render actual orders */}
@@ -734,6 +759,27 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteOrder}>Confirm Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isClearAllDialogOpen} onOpenChange={setIsClearAllDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all orders</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete all buy orders stored for the connected wallet on this device.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmClearAllOrders}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Clear all orders
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

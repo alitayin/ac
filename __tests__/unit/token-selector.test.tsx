@@ -3,13 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TokenSelector } from '@/components/ui/token-selector'
 
-const { mockFetchTokenDetails, mockGetTokenDecimalsFromDetails } = vi.hoisted(() => ({
-  mockFetchTokenDetails: vi.fn(),
-  mockGetTokenDecimalsFromDetails: vi.fn(),
-}))
+const { mockFetchTokenDetails, mockGetCachedTokenDetails, mockGetTokenDecimalsFromDetails } =
+  vi.hoisted(() => ({
+    mockFetchTokenDetails: vi.fn(),
+    mockGetCachedTokenDetails: vi.fn(),
+    mockGetTokenDecimalsFromDetails: vi.fn(),
+  }))
 
 vi.mock('@/lib/chronik', () => ({
   fetchTokenDetails: mockFetchTokenDetails,
+  getCachedTokenDetails: mockGetCachedTokenDetails,
   getTokenDecimalsFromDetails: mockGetTokenDecimalsFromDetails,
 }))
 
@@ -33,6 +36,8 @@ describe('TokenSelector', () => {
 
     mockOnTokenSelect.mockReset()
     mockOnTokenMetaChange.mockReset()
+    mockGetCachedTokenDetails.mockReset()
+    mockGetCachedTokenDetails.mockReturnValue(null)
 
     mockGetTokenDecimalsFromDetails.mockImplementation((detail, fallback = 0) => {
       return detail?.genesisInfo?.decimals ?? fallback
@@ -46,6 +51,7 @@ describe('TokenSelector', () => {
       }
 
       return {
+        tokenId,
         genesisInfo: {
           tokenName:
             tokenId === 'token-1' ? 'Token One' : tokenId === 'token-2' ? 'Token Two' : 'Token Three',
@@ -63,9 +69,7 @@ describe('TokenSelector', () => {
   })
 
   it('should only show wallet tokens with balance', async () => {
-    render(
-      <TokenSelector {...defaultProps} />
-    )
+    render(<TokenSelector {...defaultProps} />)
 
     fireEvent.click(screen.getByText('Token One'))
 
@@ -84,7 +88,7 @@ describe('TokenSelector', () => {
     })
   })
 
-  it('should call onTokenSelect when token is clicked', async () => {
+  it('should filter wallet tokens with the search input', async () => {
     render(
       <TokenSelector
         {...defaultProps}
@@ -92,11 +96,32 @@ describe('TokenSelector', () => {
           'token-1': '100000',
           'token-2': '250000',
         }}
-      />
+      />,
     )
 
     fireEvent.click(screen.getByText('Token One'))
+    fireEvent.change(await screen.findByPlaceholderText('Search token'), {
+      target: { value: 'two' },
+    })
 
+    await waitFor(() => {
+      expect(screen.getByText('Token Two')).toBeInTheDocument()
+      expect(screen.queryAllByText('Token One')).toHaveLength(1)
+    })
+  })
+
+  it('should call onTokenSelect when wallet token is clicked', async () => {
+    render(
+      <TokenSelector
+        {...defaultProps}
+        userTokens={{
+          'token-1': '100000',
+          'token-2': '250000',
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Token One'))
     fireEvent.click(await screen.findByText('Token Two'))
 
     expect(mockOnTokenSelect).toHaveBeenCalledWith('token-2', 'Token Two')
@@ -112,17 +137,21 @@ describe('TokenSelector', () => {
     })
   })
 
-  it('should show an empty wallet state when the user has no token balances', async () => {
+  it('should stay usable when the wallet has no token balances', async () => {
     render(
       <TokenSelector
         {...defaultProps}
         selectedToken={{ id: '', name: '' }}
         userTokens={{}}
-      />
+      />,
     )
 
-    expect(screen.getByRole('button')).toBeDisabled()
-    expect(screen.getByText('No tokens')).toBeInTheDocument()
+    expect(screen.getByRole('button')).toBeEnabled()
+    expect(screen.getByText('Select token')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Select token'))
+
+    expect(await screen.findByText('No wallet tokens')).toBeInTheDocument()
   })
 
   it('should call onTokenMetaChange when token decimals are loaded', async () => {
@@ -133,7 +162,7 @@ describe('TokenSelector', () => {
         expect.objectContaining({
           tokenId: 'token-1',
           decimals: 2,
-        })
+        }),
       )
     })
   })
@@ -149,12 +178,13 @@ describe('TokenSelector', () => {
           resolvers.set(tokenId, () => {
             callOrder.push(`end-${tokenId}`)
             resolve({
+              tokenId,
               genesisInfo: {
                 decimals: tokenId === 'token-1' ? 2 : tokenId === 'token-2' ? 4 : 6,
               },
             })
           })
-        })
+        }),
     )
 
     render(
@@ -165,7 +195,7 @@ describe('TokenSelector', () => {
           'token-2': '200000',
           'token-3': '300000',
         }}
-      />
+      />,
     )
 
     await waitFor(() => {
@@ -187,7 +217,7 @@ describe('TokenSelector', () => {
       expect.objectContaining({
         tokenId: 'token-1',
         decimals: 2,
-      })
+      }),
     )
 
     resolvers.get('token-2')?.()
@@ -198,19 +228,24 @@ describe('TokenSelector', () => {
         expect.objectContaining({
           tokenId: 'token-1',
           decimals: 2,
-        })
+        }),
       )
     })
   })
 
   it('should skip fetching token details already available in local cache', async () => {
-    localStorage.setItem('token_details_cache', JSON.stringify({
-      'token-1': {
-        genesisInfo: {
-          decimals: 2,
-        },
-      },
-    }))
+    mockGetCachedTokenDetails.mockImplementation((tokenId: string) => {
+      if (tokenId === 'token-1') {
+        return {
+          tokenId,
+          genesisInfo: {
+            decimals: 2,
+          },
+        }
+      }
+
+      return null
+    })
 
     render(
       <TokenSelector
@@ -219,7 +254,7 @@ describe('TokenSelector', () => {
           'token-1': '100000',
           'token-2': '200000',
         }}
-      />
+      />,
     )
 
     await waitFor(() => {
@@ -233,8 +268,51 @@ describe('TokenSelector', () => {
         expect.objectContaining({
           tokenId: 'token-1',
           decimals: 2,
-        })
+        }),
       )
     })
+  })
+
+  it('should allow exact token id search outside the wallet using cache first', async () => {
+    const exactTokenId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    mockGetCachedTokenDetails.mockImplementation((tokenId: string) => {
+      if (tokenId === exactTokenId) {
+        return {
+          tokenId,
+          genesisInfo: {
+            tokenName: 'Alpha Token',
+            tokenTicker: 'ALPHA',
+            decimals: 2,
+          },
+        }
+      }
+
+      return null
+    })
+
+    render(
+      <TokenSelector
+        selectedToken={{ id: '', name: '' }}
+        userTokens={{}}
+        onTokenSelect={mockOnTokenSelect}
+        onTokenMetaChange={mockOnTokenMetaChange}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Select token'))
+    fireEvent.change(await screen.findByPlaceholderText('Search token'), {
+      target: { value: exactTokenId },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha Token')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Alpha Token'))
+
+    expect(mockGetCachedTokenDetails).toHaveBeenCalledWith(exactTokenId)
+    expect(mockFetchTokenDetails).not.toHaveBeenCalledWith(exactTokenId)
+    expect(mockOnTokenSelect).toHaveBeenCalledWith(exactTokenId, 'Alpha Token')
   })
 })

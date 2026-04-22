@@ -106,9 +106,7 @@ export const SpendCard: React.FC<SpendCardProps> = ({
           </div>
           <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
             <span>Estimated fees</span>
-            <span>
-              {totalFees.toFixed(2)} XEC ({swapFee.toFixed(2)} swap + {networkFee.toFixed(2)} network)
-            </span>
+            <span>{totalFees.toFixed(2)} XEC</span>
           </div>
         </div>
       </div>

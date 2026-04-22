@@ -11,7 +11,7 @@ import TokenTx from "@/components/ui/TokenTx";
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { tokens } from "@/config/tokens";
-import { BarChart3, Globe, Share2, Lock, Coins, X } from "lucide-react"
+import { BarChart3, Globe, Share2, Lock, Coins } from "lucide-react"
 import { useEffect, useState, useRef } from "react"
 import {
   Select,
@@ -29,10 +29,8 @@ import { TokenSelector } from "@/components/ui/token-selector"
 import { SwapPanel } from "@/components/ui/SwapPanel"
 import { useAutoExecution } from "@/lib/context/AutoExecutionContext"
 
-const MIN_ORDER_TOTAL_XEC = 100;
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -71,6 +69,8 @@ import {
   writeSwapOrders,
 } from "@/lib/swap-order-utils"
 
+const MIN_ORDER_TOTAL_XEC = 100;
+
 interface TokenData {
   tokenId: string;
   name: string;
@@ -107,15 +107,9 @@ export default function TokenPage() {
   const [buyTokenOrderBook, setBuyTokenOrderBook] = useState<any>(null)
   const [showOrderCheckDialog, setShowOrderCheckDialog] = useState<boolean>(false)
   const [orderCheckInfo, setOrderCheckInfo] = useState<{
-    hasCompleted: boolean;
-    hasInsufficientBudget: boolean;
-    completedCount: number;
     insufficientCount: number;
     insufficientOrders: string[];
   }>({
-    hasCompleted: false,
-    hasInsufficientBudget: false,
-    completedCount: 0,
     insufficientCount: 0,
     insufficientOrders: []
   })
@@ -158,37 +152,14 @@ export default function TokenPage() {
       if (!ecashAddress) return;
       
       const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
-      let completedCount = 0;
       let insufficientCount = 0;
       const insufficientOrderKeys: string[] = [];
 
       Object.entries(existingOrders).forEach(([key, order]: [string, any]) => {
         const parts = key.split('|');
-        const tokenId = parts[0];
         const address = parts[1];
-        const priceStr = parts[2];
         if (address !== ecashAddress) return;
-        
-        if (order.status === 'completed' || order.remainingAmount === 0) {
-          let shouldCount = false;
-          
-          if (!order.createdAt) {
-            shouldCount = true;
-          } else {
-            const createdDate = new Date(order.createdAt);
-            if (createdDate < sevenDaysAgo) {
-              shouldCount = true;
-            }
-          }
-          
-          if (shouldCount) {
-            completedCount++;
-          }
-        }
-        
+
         const budget = order.remainingAmount * order.maxPrice;
         const totalRequired = calculateAgoraFeeSummary(budget, networkFee).totalCostXec;
         if (totalRequired < MIN_ORDER_TOTAL_XEC && order.maxPrice <= 1 && order.status !== 'completed' && order.remainingAmount !== 0) {
@@ -197,11 +168,8 @@ export default function TokenPage() {
         }
       });
 
-      if (completedCount > 0 || insufficientCount > 0) {
+      if (insufficientCount > 0) {
         setOrderCheckInfo({
-          hasCompleted: completedCount > 0,
-          hasInsufficientBudget: insufficientCount > 0,
-          completedCount,
           insufficientCount,
           insufficientOrders: insufficientOrderKeys
         });
@@ -554,42 +522,9 @@ export default function TokenPage() {
   const handleAdjustInsufficientOrders = async () => {
     const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
     const currentBalance = parseFloat(balance);
-
-    let deletedCount = 0;
     let adjustedCount = 0;
 
-    if (orderCheckInfo.hasCompleted) {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
-      Object.entries(existingOrders).forEach(([key, order]: [string, any]) => {
-        const parts = key.split('|');
-        const tokenId = parts[0];
-        const address = parts[1];
-        const priceStr = parts[2];
-        if (address !== ecashAddress) return;
-        
-        if (order.status === 'completed' || order.remainingAmount === 0) {
-          let shouldDelete = false;
-          
-          if (!order.createdAt) {
-            shouldDelete = true;
-          } else {
-            const createdDate = new Date(order.createdAt);
-            if (createdDate < sevenDaysAgo) {
-              shouldDelete = true;
-            }
-          }
-          
-          if (shouldDelete) {
-            delete existingOrders[key];
-            deletedCount++;
-          }
-        }
-      });
-    }
-
-    if (orderCheckInfo.hasInsufficientBudget && orderCheckInfo.insufficientOrders.length > 0) {
+    if (orderCheckInfo.insufficientOrders.length > 0) {
       const actualSpendAmount = estimateAgoraTokenCostFromBudget(
         MIN_ORDER_TOTAL_XEC,
         networkFee,
@@ -687,18 +622,10 @@ export default function TokenPage() {
       }
     }
 
-    const messages = [];
-    if (deletedCount > 0) {
-      messages.push(`${deletedCount} completed order(s) deleted`);
-    }
     if (adjustedCount > 0) {
-      messages.push(`${adjustedCount} order(s) adjusted`);
-    }
-
-    if (messages.length > 0) {
       toast({
         title: "✅ Orders updated",
-        description: messages.join(', '),
+        description: `${adjustedCount} order(s) adjusted`,
       });
     }
 
@@ -1102,38 +1029,15 @@ export default function TokenPage() {
 
       <AlertDialog open={showOrderCheckDialog} onOpenChange={setShowOrderCheckDialog}>
         <AlertDialogContent className="max-w-md">
-          <button
-            onClick={() => {
-              setShowOrderCheckDialog(false);
-            }}
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </button>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg">Order Status Check 📋</AlertDialogTitle>
             <AlertDialogDescription className="space-y-3 text-base">
-              {orderCheckInfo.hasCompleted && (
-                <p className="leading-relaxed text-foreground">
-                  ✅ You have <span className="font-semibold text-green-600">{orderCheckInfo.completedCount}</span> completed order(s) that can be cleaned up.
-                </p>
-              )}
-              {orderCheckInfo.hasInsufficientBudget && (
-                <p className="leading-relaxed text-foreground">
-                  ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient total value (less than {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC including swap and network fees).
-                </p>
-              )}
-              {orderCheckInfo.hasInsufficientBudget && (
-                <p className="leading-relaxed text-muted-foreground">
-                  These orders will be automatically adjusted to the minimum valid total.
-                </p>
-              )}
-              {orderCheckInfo.hasCompleted && !orderCheckInfo.hasInsufficientBudget && (
-                <p className="leading-relaxed text-muted-foreground">
-                  You can manually clean up completed orders in the <a href="/swap" className="text-primary hover:underline font-semibold">Swap page</a>.
-                </p>
-              )}
+              <p className="leading-relaxed text-foreground">
+                ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient total value (less than {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC including swap and network fees).
+              </p>
+              <p className="leading-relaxed text-muted-foreground">
+                These orders will be automatically adjusted to the minimum valid total.
+              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
 
