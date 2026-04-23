@@ -79,6 +79,13 @@ export const estimateAgoraTokenCostFromBudget = (
   const normalizedBudgetXec = normalizeXec(totalBudgetXec);
   const normalizedNetworkFeeXec = normalizeXec(networkFeeXec);
 
+  if (
+    normalizedBudgetXec <=
+    normalizedNetworkFeeXec + AGORA_SWAP_FEE_MIN_XEC
+  ) {
+    return 0;
+  }
+
   let tokenCostXec = Math.max(0, normalizedBudgetXec - normalizedNetworkFeeXec);
 
   for (let i = 0; i < 6; i += 1) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { PriceCard } from '@/components/swap/PriceCard'
 import { SpendCard } from '@/components/swap/SpendCard'
@@ -12,6 +12,10 @@ vi.mock('@/components/ui/token-selector', () => ({
 }))
 
 describe('Swap Cards', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   describe('PriceCard', () => {
     const mockProps = {
       selectedToken: { id: 'token-1', name: 'TestToken' },
@@ -148,6 +152,16 @@ describe('Swap Cards', () => {
       const maxButton = screen.getByText('Max')
       expect(maxButton).toBeDisabled()
     })
+
+    it('should normalize spend input to two decimals on blur when needed', () => {
+      render(<SpendCard {...mockProps} spendAmount="123.456" />)
+      const input = screen.getByPlaceholderText('0')
+
+      fireEvent.blur(input, { target: { value: '123.456' } })
+
+      expect(mockProps.setSpendAmount).toHaveBeenCalledWith('123.46')
+      expect(mockProps.calculateReceiveAmount).toHaveBeenCalledWith('123.456')
+    })
   })
 
   describe('BuyCard', () => {
@@ -212,6 +226,17 @@ describe('Swap Cards', () => {
     it('should render token selector for wallet-based token selection', () => {
       render(<BuyCard {...mockProps} />)
       expect(screen.getByTestId('token-selector')).toBeInTheDocument()
+    })
+
+    it('should ignore manual edits when the amount is read-only', () => {
+      render(<BuyCard {...mockProps} readOnly={true} />)
+      const input = screen.getByPlaceholderText('0')
+
+      fireEvent.change(input, { target: { value: '75' } })
+      fireEvent.blur(input, { target: { value: '75' } })
+
+      expect(mockProps.setReceiveAmount).not.toHaveBeenCalled()
+      expect(mockProps.calculateSpendAmount).not.toHaveBeenCalled()
     })
   })
 })

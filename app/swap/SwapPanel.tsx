@@ -1238,6 +1238,7 @@ export function SwapPanel() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Toggle order book panel"
                       className={`h-8 w-8 hidden lg:flex ${showProPanel ? 'text-blue-500' : 'text-muted-foreground'}`}
                       onClick={() => setShowProPanel(!showProPanel)}
                     >

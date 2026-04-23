@@ -34,6 +34,11 @@ describe("agora-swap-fee", () => {
     expect(summary.totalCostXec).toBeCloseTo(200, 2);
   });
 
+  it("returns zero spendable token budget when total budget cannot cover minimum fees", () => {
+    expect(estimateAgoraTokenCostFromBudget(15.46, 10)).toBe(0);
+    expect(estimateAgoraTokenCostFromBudget(15.45, 10)).toBe(0);
+  });
+
   it("exposes the minimum fees required for any non-zero buy", () => {
     expect(getMinimumAgoraBuyFeesXec(10)).toBe(15.46);
   });
