@@ -10,6 +10,7 @@ const STATUS_CACHE_TTL_MS = 60_000
 const STATUS_TIMEOUT_MS = 4_000
 const TOKEN_TIMEOUT_MS = 8_000
 const TOKEN_LIST_TIMEOUT_MS = 8_000
+const TOKEN_CANDLES_TIMEOUT_MS = 8_000
 const TOKEN_ID_PATTERN = /^[a-f0-9]{64}$/i
 const NANOSATS_PER_XEC = 100_000_000_000
 const ETOKENDB_TOP_VOLUME_PAGE_SIZE = 100
@@ -71,6 +72,32 @@ export type EtokenDbTokenListPayload = {
   error?: string
 }
 
+export type EtokenDbCandleInterval = "hour" | "day" | "week"
+
+export type EtokenDbTokenCandleRecord = {
+  bucketStart?: NumericLike
+  bucketEnd?: NumericLike
+  openPriceNanosatsPerAtom?: NumericLike
+  highPriceNanosatsPerAtom?: NumericLike
+  lowPriceNanosatsPerAtom?: NumericLike
+  closePriceNanosatsPerAtom?: NumericLike
+  tradeCount?: NumericLike
+  volumeSats?: NumericLike
+  soldAtoms?: NumericLike
+}
+
+export type EtokenDbTokenCandlesPayload = {
+  ok?: boolean
+  data?: {
+    tokenId?: string
+    interval?: EtokenDbCandleInterval
+    timezone?: string
+    items?: (EtokenDbTokenCandleRecord | null)[] | null
+    [key: string]: unknown
+  }
+  error?: string
+}
+
 export type EtokenDbMappedTokenSummary = {
   tokenId: string
   tokenDecimals: number
@@ -108,11 +135,42 @@ export type EtokenDbTopVolumeToken = {
   lastSyncedAt: number | null
 }
 
+export type EtokenDbMappedTokenCandle = {
+  bucketStart: number
+  bucketEnd: number
+  openPriceXec: number
+  highPriceXec: number
+  lowPriceXec: number
+  closePriceXec: number
+  tradeCount: number
+  volumeXec: number
+  soldTokenAmount: number
+}
+
+export type EtokenDbMappedTokenCandles = {
+  tokenId: string
+  interval: EtokenDbCandleInterval
+  timezone: string
+  tokenDecimals: number
+  items: EtokenDbMappedTokenCandle[]
+}
+
 type MapEtokenDbTokenSummaryOptions = {
   decimals?: number
 }
 
 type FetchEtokenDbTokenSummaryOptions = {
+  decimals?: number
+  chronikClient?: ChronikClient
+}
+
+type MapEtokenDbTokenCandlesOptions = {
+  decimals?: number
+}
+
+type FetchEtokenDbTokenCandlesOptions = {
+  interval?: EtokenDbCandleInterval
+  limit?: number
   decimals?: number
   chronikClient?: ChronikClient
 }
@@ -444,4 +502,87 @@ export const fetchEtokenDbTopVolumeTokens = async (
   })
 
   return tokens
+}
+
+export const mapEtokenDbTokenCandles = (
+  payload: EtokenDbTokenCandlesPayload,
+  options?: MapEtokenDbTokenCandlesOptions,
+): EtokenDbMappedTokenCandles => {
+  const data = payload?.data
+  const tokenId = data?.tokenId
+  const interval = data?.interval
+  const timezone = typeof data?.timezone === "string" && data.timezone.length > 0
+    ? data.timezone
+    : "UTC"
+  const tokenDecimals = Math.max(0, Math.trunc(options?.decimals ?? 0))
+
+  if (!payload?.ok || typeof tokenId !== "string" || !interval || !Array.isArray(data?.items)) {
+    throw new Error("Invalid etokendb token candles payload")
+  }
+
+  const items = data.items.flatMap((item) => {
+    const bucketStartSec = coerceCount(item?.bucketStart)
+    const bucketEndSec = coerceCount(item?.bucketEnd)
+
+    if (!bucketStartSec || !bucketEndSec) {
+      return []
+    }
+
+    const openPriceXec = nanosatsPerAtomToXec(item?.openPriceNanosatsPerAtom, tokenDecimals)
+    const highPriceXec = nanosatsPerAtomToXec(item?.highPriceNanosatsPerAtom, tokenDecimals)
+    const lowPriceXec = nanosatsPerAtomToXec(item?.lowPriceNanosatsPerAtom, tokenDecimals)
+    const closePriceXec = nanosatsPerAtomToXec(item?.closePriceNanosatsPerAtom, tokenDecimals)
+    const soldAtoms = coerceFiniteNumber(item?.soldAtoms)
+    const soldTokenAmount =
+      tokenDecimals > 0 ? soldAtoms / Math.pow(10, tokenDecimals) : soldAtoms
+
+    return [
+      {
+        bucketStart: bucketStartSec * 1000,
+        bucketEnd: bucketEndSec * 1000,
+        openPriceXec,
+        highPriceXec,
+        lowPriceXec,
+        closePriceXec,
+        tradeCount: coerceCount(item?.tradeCount),
+        volumeXec: satsToXec(item?.volumeSats),
+        soldTokenAmount: Number.isFinite(soldTokenAmount) ? soldTokenAmount : 0,
+      },
+    ]
+  })
+
+  return {
+    tokenId,
+    interval,
+    timezone,
+    tokenDecimals,
+    items,
+  }
+}
+
+export const fetchEtokenDbTokenCandles = async (
+  tokenId: string,
+  options?: FetchEtokenDbTokenCandlesOptions,
+): Promise<EtokenDbMappedTokenCandles> => {
+  if (!isValidEtokenDbTokenId(tokenId)) {
+    throw new Error("Invalid tokenId")
+  }
+
+  const interval = options?.interval ?? "day"
+  const limit = Math.min(200, Math.max(1, Math.trunc(options?.limit ?? 200)))
+  const params = new URLSearchParams({
+    interval,
+    limit: `${limit}`,
+  })
+  const payload = await fetchJsonWithTimeout<EtokenDbTokenCandlesPayload>(
+    `${ETOKENDB_TOKENS_API_BASE_PATH}/${encodeURIComponent(tokenId)}/candles?${params.toString()}`,
+    TOKEN_CANDLES_TIMEOUT_MS,
+  )
+
+  const decimals =
+    typeof options?.decimals === "number"
+      ? options.decimals
+      : await resolveTokenDecimals(tokenId, options?.chronikClient)
+
+  return mapEtokenDbTokenCandles(payload, { decimals })
 }

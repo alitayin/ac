@@ -271,6 +271,14 @@ describe("TokenPage buy panel", () => {
     )
   })
 
+  it("shows the updated chart selector label for the price chart", async () => {
+    renderTokenPage()
+
+    const selectors = screen.getAllByRole("combobox")
+    expect(selectors.some((node) => node.textContent?.includes("Price"))).toBe(true)
+    expect(screen.queryByText("Real-time Price")).not.toBeInTheDocument()
+  })
+
   it("saves a buy order after a valid sweep quote is created", async () => {
     renderTokenPage()
     await waitForOrderBook()

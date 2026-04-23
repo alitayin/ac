@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  fetchEtokenDbTokenCandles,
   fetchEtokenDbTopVolumeTokens,
   fetchEtokenDbTopVolumeTokenIds,
   fetchEtokenDbTokenSummary,
   getEtokenDbPriceChange24h,
   isEtokenDbAvailable,
   isEtokenDbAvailableWithRetry,
+  mapEtokenDbTokenCandles,
   mapEtokenDbTokenSummary,
   nanosatsPerAtomToXec,
   resetEtokenDbAvailabilityCache,
@@ -79,6 +81,53 @@ describe("etokendb", () => {
       lastTradeBlockHeight: 944789,
       lastTradeBlockTimestamp: 1776194157,
       lastSyncedAt: 1776194900068,
+    })
+  })
+
+  it("maps upstream candle payloads into normalized chart candles", () => {
+    const mapped = mapEtokenDbTokenCandles(
+      {
+        ok: true,
+        data: {
+          tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+          interval: "hour",
+          timezone: "UTC",
+          items: [
+            {
+              bucketStart: 1_710_000_000,
+              bucketEnd: 1_710_003_600,
+              openPriceNanosatsPerAtom: "1000000000",
+              highPriceNanosatsPerAtom: "1200000000",
+              lowPriceNanosatsPerAtom: "900000000",
+              closePriceNanosatsPerAtom: "1100000000",
+              tradeCount: 7,
+              volumeSats: "12345",
+              soldAtoms: "2500",
+            },
+          ],
+        },
+      },
+      { decimals: 2 },
+    )
+
+    expect(mapped).toEqual({
+      tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+      interval: "hour",
+      timezone: "UTC",
+      tokenDecimals: 2,
+      items: [
+        {
+          bucketStart: 1_710_000_000_000,
+          bucketEnd: 1_710_003_600_000,
+          openPriceXec: 1,
+          highPriceXec: 1.2,
+          lowPriceXec: 0.9,
+          closePriceXec: 1.1,
+          tradeCount: 7,
+          volumeXec: 123.45,
+          soldTokenAmount: 25,
+        },
+      ],
     })
   })
 
@@ -198,6 +247,62 @@ describe("etokendb", () => {
       has30DayVolume: true,
       lastTradeBlockHeight: 10,
     })
+  })
+
+  it("fetches token candles through the local proxy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+            interval: "hour",
+            timezone: "UTC",
+            items: [
+              {
+                bucketStart: 1_710_000_000,
+                bucketEnd: 1_710_003_600,
+                openPriceNanosatsPerAtom: "1000000000",
+                highPriceNanosatsPerAtom: "1100000000",
+                lowPriceNanosatsPerAtom: "950000000",
+                closePriceNanosatsPerAtom: "1050000000",
+                tradeCount: 3,
+                volumeSats: "1000",
+                soldAtoms: "500",
+              },
+            ],
+          },
+        }),
+      }),
+    )
+
+    await expect(
+      fetchEtokenDbTokenCandles(
+        "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+        {
+          interval: "hour",
+          limit: 24,
+          decimals: 2,
+        },
+      ),
+    ).resolves.toMatchObject({
+      interval: "hour",
+      items: [
+        {
+          openPriceXec: 1,
+          closePriceXec: 1.05,
+          volumeXec: 10,
+          tradeCount: 3,
+        },
+      ],
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/etokendb/tokens/c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4/candles?interval=hour&limit=24",
+      expect.any(Object),
+    )
   })
 
   it("fetches top-volume token ids through the local proxy and deduplicates them", async () => {

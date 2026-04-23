@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
 
 import {
@@ -10,13 +10,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
 } from "@/components/ui/chart"
-
 import {
   Select,
   SelectContent,
@@ -25,78 +23,77 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatNumber } from "@/lib/formatters"
+import {
+  formatTokenChartAxisLabel,
+  formatTokenChartTooltipLabel,
+  type TokenChartRange,
+} from "@/lib/token-chart-data"
 import { TokenListComponentProps } from "@/lib/types"
-import { useHourlyData } from "@/lib/use-hourly-data"
+import { useTokenChartData } from "@/lib/use-token-chart-data"
 
 const chartConfig = {
   views: { label: "Trading Volume" },
-  amount: { label: "XEC", color: "hsl(var(--chart-1))" },
+  volumeXec: { label: "XEC", color: "hsl(var(--chart-1))" },
 } satisfies ChartConfig
-
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null
-  
+
   const data = payload[0].payload
+
   return (
     <div className="rounded-lg bg-white p-2 shadow-md">
       <p className="text-sm text-gray-600">
-        {new Date(data.date).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric", 
-          year: "numeric",
-        })}
+        {formatTokenChartTooltipLabel(data.bucketStart, data.interval)}
       </p>
-      <p className="font-bold text-black">
-        {`${formatNumber(data.amount)} XEC`}
-      </p>
+      <p className="font-bold text-black">{`${formatNumber(data.volumeXec)} XEC`}</p>
     </div>
   )
 }
 
 export default function Component({ tokenIds }: TokenListComponentProps) {
-  const [timeRange, setTimeRange] = useState("7d")
-  const { data: chartData, isLoading } = useHourlyData(tokenIds, timeRange)
-
-  const totalVolume = useMemo(() => 
-    chartData.reduce((sum, item) => sum + item.amount, 0),
-    [chartData]
-  )
+  const [timeRange, setTimeRange] = useState<TokenChartRange>("7d")
+  const tokenId = tokenIds[0] || ""
+  const { data, interval, isLoading, source } = useTokenChartData(tokenId, timeRange)
+  const chartData = data.map((item) => ({
+    ...item,
+    interval,
+  }))
 
   return (
     <Card className="h-full border-none">
       <CardHeader className="flex items-center gap-2 space-y-0 py-5 sm:flex-row">
         <div className="grid flex-1 gap-1 text-center sm:text-left">
           <div className="flex items-center gap-2">
-            <CardTitle>Volume Chart </CardTitle>
+            <CardTitle>Volume Chart</CardTitle>
             {isLoading && (
-              <svg 
-                className="animate-spin h-4 w-4 text-gray-500" 
-                xmlns="http://www.w3.org/2000/svg" 
-                fill="none" 
+              <svg
+                className="h-4 w-4 animate-spin text-gray-500"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
                 viewBox="0 0 24 24"
               >
-                <circle 
-                  className="opacity-25" 
-                  cx="12" 
-                  cy="12" 
-                  r="10" 
-                  stroke="currentColor" 
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
                   strokeWidth="4"
                 />
-                <path 
-                  className="opacity-75" 
-                  fill="currentColor" 
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 />
               </svg>
             )}
           </div>
           <CardDescription>
-            Agora data
+            {source === "chronik" ? "Chronik fallback" : "etokendb candles"}
           </CardDescription>
         </div>
-        <Select value={timeRange} onValueChange={setTimeRange}>
+        <Select value={timeRange} onValueChange={(value) => setTimeRange(value as TokenChartRange)}>
           <SelectTrigger className="w-[160px] rounded-lg sm:ml-auto" aria-label="Select a value">
             <SelectValue placeholder="Last 7 days" />
           </SelectTrigger>
@@ -128,23 +125,17 @@ export default function Component({ tokenIds }: TokenListComponentProps) {
           >
             <CartesianGrid vertical={false} />
             <XAxis
-              dataKey="date"
+              dataKey="bucketStart"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
               minTickGap={32}
-              tickFormatter={(value) => {
-                const date = new Date(value)
-                return date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })
-              }}
+              tickFormatter={(value) => formatTokenChartAxisLabel(Number(value), interval)}
             />
             <ChartTooltip content={CustomTooltip} />
-            <Bar 
-              dataKey="amount"
-              fill={chartConfig.amount.color}
+            <Bar
+              dataKey="volumeXec"
+              fill={chartConfig.volumeXec.color}
               radius={4}
               activeBar={{ fill: "#fc72ff" }}
             />

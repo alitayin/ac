@@ -1,6 +1,8 @@
 "use client"
-import * as React from "react"
+
+import { useState } from "react"
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
+
 import {
   Card,
   CardContent,
@@ -12,7 +14,6 @@ import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
 } from "@/components/ui/chart"
 import {
   Select,
@@ -21,44 +22,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useHourlyData } from "@/lib/use-hourly-data"
+import {
+  formatTokenChartAxisLabel,
+  formatTokenChartTooltipLabel,
+  type TokenChartRange,
+} from "@/lib/token-chart-data"
+import { TokenListComponentProps } from "@/lib/types"
+import { useTokenChartData } from "@/lib/use-token-chart-data"
 
-interface TokenComponentProps {
-  tokenIds: string[]
+const chartConfig: ChartConfig = {
+  tradeCount: {
+    label: "Trade Count",
+    color: "hsl(var(--chart-2))",
+  },
 }
 
-export default function Component({ tokenIds }: TokenComponentProps) {
-  const [timeRange, setTimeRange] = React.useState("7d")
-  const { data: rawData, isLoading } = useHourlyData(tokenIds, timeRange)
-  const filteredData = rawData.map((d) => ({
-    date: d.date,
-    totalTx: d.totalTxCount,
-    matchedTx: d.matchedTxCount,
-  }))
-
-  const chartConfig: ChartConfig = {
-    transactions: {
-      label: "Transactions",
-    },
-    totalTx: {
-      label: "on-chain TX",
-      color: "hsl(var(--chart-1))",
-    },
-    matchedTx: {
-      label: "Agora TX",
-      color: "hsl(var(--chart-2))",
-    },
-  }
+export default function Component({ tokenIds }: TokenListComponentProps) {
+  const [timeRange, setTimeRange] = useState<TokenChartRange>("7d")
+  const tokenId = tokenIds[0] || ""
+  const { data, interval, isLoading, source } = useTokenChartData(tokenId, timeRange)
 
   return (
     <Card className="h-full border-none">
       <CardHeader className="flex items-center gap-2 space-y-0 py-5 sm:flex-row">
         <div className="grid flex-1 gap-1 text-center sm:text-left">
           <div className="flex items-center gap-2">
-            <CardTitle>Statistics</CardTitle>
+            <CardTitle>Trade Count</CardTitle>
             {isLoading && (
               <svg
-                className="animate-spin h-4 w-4 text-gray-500"
+                className="h-4 w-4 animate-spin text-gray-500"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -79,9 +71,11 @@ export default function Component({ tokenIds }: TokenComponentProps) {
               </svg>
             )}
           </div>
-          <CardDescription>Txs on Chain</CardDescription>
+          <CardDescription>
+            {source === "chronik" ? "Chronik fallback" : "Trades per candle"}
+          </CardDescription>
         </div>
-        <Select value={timeRange} onValueChange={setTimeRange}>
+        <Select value={timeRange} onValueChange={(value) => setTimeRange(value as TokenChartRange)}>
           <SelectTrigger
             className="w-[160px] rounded-lg sm:ml-auto"
             aria-label="Select a value"
@@ -109,58 +103,51 @@ export default function Component({ tokenIds }: TokenComponentProps) {
           config={chartConfig}
           className="aspect-auto h-[250px] w-full"
         >
-          <AreaChart data={filteredData}>
+          <AreaChart data={data}>
             <defs>
-              <linearGradient id="fillTotalTx" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-totalTx)" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="var(--color-totalTx)" stopOpacity={0.1} />
-              </linearGradient>
-              <linearGradient id="fillMatchedTx" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-matchedTx)" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="var(--color-matchedTx)" stopOpacity={0.1} />
+              <linearGradient id="fillTradeCount" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--color-tradeCount)" stopOpacity={0.8} />
+                <stop offset="95%" stopColor="var(--color-tradeCount)" stopOpacity={0.1} />
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} />
             <XAxis
-              dataKey="date"
+              dataKey="bucketStart"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
               minTickGap={32}
-              tickFormatter={(value) => {
-                const date = new Date(value)
-                return date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })
-              }}
+              tickFormatter={(value) => formatTokenChartAxisLabel(Number(value), interval)}
             />
             <ChartTooltip
               cursor={false}
-              content={
-                <ChartTooltipContent
-                  labelFormatter={(value) => {
-                    return new Date(value).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })
-                  }}
-                  indicator="dot"
-                />
-              }
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null
+                const data = payload[0].payload
+
+                return (
+                  <div className="rounded-lg border bg-background p-2 shadow-sm">
+                    <div className="grid gap-2">
+                      <div className="font-medium">
+                        {formatTokenChartTooltipLabel(data.bucketStart, interval)}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-2 w-2 rounded-full"
+                          style={{ background: chartConfig.tradeCount.color }}
+                        />
+                        <span>{data.tradeCount.toLocaleString()} trades</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }}
             />
             <Area
-              dataKey="matchedTx"
+              dataKey="tradeCount"
               type="natural"
-              fill="url(#fillMatchedTx)"
-              stroke="var(--color-matchedTx)"
-              stackId="a"
-            />
-            <Area
-              dataKey="totalTx"
-              type="natural"
-              fill="url(#fillTotalTx)"
-              stroke="var(--color-totalTx)"
+              fill="url(#fillTradeCount)"
+              stroke="var(--color-tradeCount)"
               stackId="a"
             />
           </AreaChart>

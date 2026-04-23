@@ -795,10 +795,10 @@ export default function TokenPage() {
                     <SelectValue placeholder="Select chart" />
                   </SelectTrigger>
                   <SelectContent className="rounded-lg">
-                    <SelectItem value="realtimeprice">Real-time Price</SelectItem>
+                    <SelectItem value="realtimeprice">Price</SelectItem>
                     <SelectItem value="piechart">Holdings Distribution</SelectItem>
                     <SelectItem value="volumechart">Trading Volume</SelectItem>
-                    <SelectItem value="pricechart">Trading Frequency</SelectItem>
+                    <SelectItem value="pricechart">Trade Count</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
