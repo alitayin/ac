@@ -96,7 +96,6 @@ import {
   fetchEtokenDbTopVolumeTokens,
   fetchEtokenDbTokenSummary,
   isEtokenDbAvailable,
-  isEtokenDbAvailableWithRetry,
   nanosatsPerAtomToXec,
 } from "@/lib/etokendb"
 import {
@@ -139,6 +138,11 @@ type BootstrapTokenCandidate = {
   etokenDbToken?: (Awaited<ReturnType<typeof fetchEtokenDbTopVolumeTokens>>)[number]
 }
 
+type TopVolumeTokensCachePayload = {
+  cachedAt: number
+  tokens: Awaited<ReturnType<typeof fetchEtokenDbTopVolumeTokens>>
+}
+
 const FILTER_OPTIONS: Array<{
   value: FilterOption
   label: string
@@ -166,10 +170,72 @@ const FILTER_OPTIONS: Array<{
   },
 ]
 
+const TOP_VOLUME_TOKENS_CACHE_KEY = "token_table_top_volume_tokens_v1"
+const TOP_VOLUME_TOKENS_CACHE_TTL_MS = 2 * 60 * 1000
+
 const EMPTY_TOKEN_LOOKUP_STATE: TokenLookupState = {
   status: "idle",
   tokenId: "",
   tokenInfo: null,
+}
+
+const getCachedTopVolumeTokens = (): Awaited<
+  ReturnType<typeof fetchEtokenDbTopVolumeTokens>
+> | null => {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    const stored = localStorage.getItem(TOP_VOLUME_TOKENS_CACHE_KEY)
+    if (!stored) {
+      return null
+    }
+
+    const payload = JSON.parse(stored) as TopVolumeTokensCachePayload | null
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      typeof payload.cachedAt !== "number" ||
+      !Array.isArray(payload.tokens)
+    ) {
+      return null
+    }
+
+    if (Date.now() - payload.cachedAt > TOP_VOLUME_TOKENS_CACHE_TTL_MS) {
+      return null
+    }
+
+    return payload.tokens
+  } catch (_error) {
+    return null
+  }
+}
+
+const setCachedTopVolumeTokens = (
+  tokens: Awaited<ReturnType<typeof fetchEtokenDbTopVolumeTokens>>,
+) => {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  try {
+    const payload: TopVolumeTokensCachePayload = {
+      cachedAt: Date.now(),
+      tokens,
+    }
+    localStorage.setItem(TOP_VOLUME_TOKENS_CACHE_KEY, JSON.stringify(payload))
+  } catch (_error) {}
+}
+
+const clearCachedTopVolumeTokens = () => {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  try {
+    localStorage.removeItem(TOP_VOLUME_TOKENS_CACHE_KEY)
+  } catch (_error) {}
 }
 
 const getTokenNameFromDetails = (
@@ -377,6 +443,7 @@ export default function Component() {
 
   const clearCacheAndReload = () => {
     clearTokenCache()
+    clearCachedTopVolumeTokens()
     setLoadedTokens(new Set())
     setLoadedIcons(new Set())
     setFailedIcons(new Set())
@@ -1844,159 +1911,219 @@ export default function Component() {
       }
 
       try {
-        try {
-          const info = await fetchBlockchainInfo(chronikClient)
-          setChainTipHeight(
-            typeof info?.tipHeight === "number" ? info.tipHeight : null,
-          )
-        } catch (_err) {
-          setChainTipHeight(null)
-        }
+        void fetchBlockchainInfo(chronikClient)
+          .then((info) => {
+            if (isCancelled) return
+            setChainTipHeight(
+              typeof info?.tipHeight === "number" ? info.tipHeight : null,
+            )
+          })
+          .catch(() => {
+            if (!isCancelled) {
+              setChainTipHeight(null)
+            }
+          })
 
         const customTokenIds = getCustomTokens()
         const configuredTokensById = new Map(
           Object.values(tokens).map((tokenConfig) => [tokenConfig.tokenId, tokenConfig]),
         )
-        const bootstrapCandidateMap = new Map<string, BootstrapTokenCandidate>()
-        const bootstrapCandidateOrder: string[] = []
-        const deferredWatchlistTokenIds: string[] = []
-        const upsertBootstrapCandidate = (candidate: BootstrapTokenCandidate) => {
-          const existing = bootstrapCandidateMap.get(candidate.tokenId)
-          if (existing) {
-            bootstrapCandidateMap.set(candidate.tokenId, {
-              tokenId: candidate.tokenId,
-              fallbackName: existing.fallbackName ?? candidate.fallbackName,
-              etokenDbToken: candidate.etokenDbToken ?? existing.etokenDbToken,
-              patch: {
-                ...(existing.patch || {}),
-                ...(candidate.patch || {}),
-              },
-            })
-            return
-          }
-
-          bootstrapCandidateMap.set(candidate.tokenId, candidate)
-          bootstrapCandidateOrder.push(candidate.tokenId)
-        }
-
-        let shouldUseConfiguredFallback = true
-        const etokenDbAvailable = await isEtokenDbAvailableWithRetry()
-        if (etokenDbAvailable) {
-          try {
-            const etokenDbTokens = await fetchEtokenDbTopVolumeTokens()
-
-            if (etokenDbTokens.length > 0) {
-              shouldUseConfiguredFallback = false
-
-              etokenDbTokens.forEach((token) => {
-                const tokenConfig = configuredTokensById.get(token.tokenId)
-                upsertBootstrapCandidate({
-                  tokenId: token.tokenId,
-                  fallbackName: tokenConfig?.name,
-                  etokenDbToken: token,
-                  patch: {
-                    ...getConfiguredTokenPatch(
-                      token.tokenId,
-                      customTokenIds.includes(token.tokenId),
-                    ),
-                  },
-                })
+        const createBootstrapRows = (
+          etokenDbTokens: Awaited<ReturnType<typeof fetchEtokenDbTopVolumeTokens>>,
+          shouldUseConfiguredFallback: boolean,
+        ): {
+          bootstrapCandidates: BootstrapTokenCandidate[]
+          initialTokens: TokenTableRow[]
+          deferredWatchlistTokenIds: string[]
+        } => {
+          const bootstrapCandidateMap = new Map<string, BootstrapTokenCandidate>()
+          const bootstrapCandidateOrder: string[] = []
+          const deferredWatchlistTokenIds: string[] = []
+          const upsertBootstrapCandidate = (candidate: BootstrapTokenCandidate) => {
+            const existing = bootstrapCandidateMap.get(candidate.tokenId)
+            if (existing) {
+              bootstrapCandidateMap.set(candidate.tokenId, {
+                tokenId: candidate.tokenId,
+                fallbackName: existing.fallbackName ?? candidate.fallbackName,
+                etokenDbToken: candidate.etokenDbToken ?? existing.etokenDbToken,
+                patch: {
+                  ...(existing.patch || {}),
+                  ...(candidate.patch || {}),
+                },
               })
+              return
             }
-          } catch (err) {
-            console.error("[etokendb token list] Failed to fetch top-volume tokens:", err)
+
+            bootstrapCandidateMap.set(candidate.tokenId, candidate)
+            bootstrapCandidateOrder.push(candidate.tokenId)
           }
-        }
 
-        if (shouldUseConfiguredFallback) {
-          Object.values(tokens).forEach((tokenConfig: any) => {
-            upsertBootstrapCandidate({
-              tokenId: tokenConfig.tokenId,
-              fallbackName: tokenConfig.name,
-              patch: getConfiguredTokenPatch(
-                tokenConfig.tokenId,
-                customTokenIds.includes(tokenConfig.tokenId),
-              ),
+          if (!shouldUseConfiguredFallback) {
+            etokenDbTokens.forEach((token) => {
+              const tokenConfig = configuredTokensById.get(token.tokenId)
+              upsertBootstrapCandidate({
+                tokenId: token.tokenId,
+                fallbackName: tokenConfig?.name,
+                etokenDbToken: token,
+                patch: {
+                  ...getConfiguredTokenPatch(
+                    token.tokenId,
+                    customTokenIds.includes(token.tokenId),
+                  ),
+                },
+              })
             })
-          })
-        }
+          }
 
-        if (shouldUseConfiguredFallback) {
-          customTokenIds.forEach((customTokenId) => {
-            upsertBootstrapCandidate({
-              tokenId: customTokenId,
-              patch: {
-                watchlist: true,
-              },
+          if (shouldUseConfiguredFallback) {
+            Object.values(tokens).forEach((tokenConfig: any) => {
+              upsertBootstrapCandidate({
+                tokenId: tokenConfig.tokenId,
+                fallbackName: tokenConfig.name,
+                patch: getConfiguredTokenPatch(
+                  tokenConfig.tokenId,
+                  customTokenIds.includes(tokenConfig.tokenId),
+                ),
+              })
             })
-          })
-        } else {
-          customTokenIds.forEach((customTokenId) => {
-            if (bootstrapCandidateMap.has(customTokenId)) {
+          }
+
+          if (shouldUseConfiguredFallback) {
+            customTokenIds.forEach((customTokenId) => {
               upsertBootstrapCandidate({
                 tokenId: customTokenId,
                 patch: {
                   watchlist: true,
                 },
               })
-              return
-            }
+            })
+          } else {
+            customTokenIds.forEach((customTokenId) => {
+              if (bootstrapCandidateMap.has(customTokenId)) {
+                upsertBootstrapCandidate({
+                  tokenId: customTokenId,
+                  patch: {
+                    watchlist: true,
+                  },
+                })
+                return
+              }
 
-            deferredWatchlistTokenIds.push(customTokenId)
+              deferredWatchlistTokenIds.push(customTokenId)
+            })
+          }
+
+          const bootstrapCandidates = bootstrapCandidateOrder
+            .map((tokenId) => bootstrapCandidateMap.get(tokenId) || null)
+            .filter((candidate): candidate is BootstrapTokenCandidate => candidate !== null)
+
+          const initialTokens = bootstrapCandidates.map((candidate) => {
+            const tokenConfig = configuredTokensById.get(candidate.tokenId)
+            const cachedTokenInfo = getCachedTokenDetails(candidate.tokenId)
+            const fallbackDecimals =
+              typeof tokenConfig?.decimals === "number" ? tokenConfig.decimals : 0
+            const tokenDecimals = getTokenDecimalsFromDetails(cachedTokenInfo, fallbackDecimals)
+            const hasResolvedTokenInfo =
+              Boolean(cachedTokenInfo) || typeof tokenConfig?.decimals === "number"
+            const tokenName =
+              getTokenNameFromDetails(cachedTokenInfo, candidate.fallbackName) ||
+              getTokenDisplayFallbackName(candidate.tokenId, candidate.fallbackName)
+            const etokenDbPatch = candidate.etokenDbToken
+              ? {
+                  latestPrice:
+                    candidate.etokenDbToken.hasLatestPrice && hasResolvedTokenInfo
+                      ? nanosatsPerAtomToXec(
+                          candidate.etokenDbToken.latestPriceNanosatsPerAtom,
+                          tokenDecimals,
+                        )
+                      : 0,
+                  priceChange24h: candidate.etokenDbToken.hasPriceChange24h
+                    ? candidate.etokenDbToken.priceChange24h
+                    : 0,
+                  last24HoursXECAmount: candidate.etokenDbToken.last24HoursXECAmount,
+                  last30DaysXECAmount: candidate.etokenDbToken.last7DaysXECAmount,
+                  last30DaysVolumeXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
+                  totalTransactions: candidate.etokenDbToken.recent7dTradeCount,
+                  totalXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
+                  has30DayVolume: candidate.etokenDbToken.has30DayVolume,
+                  hasInitialMarketData: true,
+                  hasResolvedTokenInfo,
+                }
+              : {
+                  hasInitialMarketData: false,
+                  hasResolvedTokenInfo,
+                }
+
+            return createInitialTokenRow(candidate.tokenId, tokenName, {
+              ...(candidate.patch || {}),
+              ...(etokenDbPatch || {}),
+            })
           })
+
+          return {
+            bootstrapCandidates,
+            initialTokens,
+            deferredWatchlistTokenIds,
+          }
         }
 
-        const bootstrapCandidates = bootstrapCandidateOrder
-          .map((tokenId) => bootstrapCandidateMap.get(tokenId) || null)
-          .filter((candidate): candidate is BootstrapTokenCandidate => candidate !== null)
+        const renderBootstrapRows = (
+          etokenDbTokens: Awaited<ReturnType<typeof fetchEtokenDbTopVolumeTokens>>,
+          shouldUseConfiguredFallback: boolean,
+        ) => {
+          const bootstrapRows = createBootstrapRows(
+            etokenDbTokens,
+            shouldUseConfiguredFallback,
+          )
 
-        const initialTokens = bootstrapCandidates.map((candidate) => {
-          const tokenConfig = configuredTokensById.get(candidate.tokenId)
-          const cachedTokenInfo = getCachedTokenDetails(candidate.tokenId)
-          const fallbackDecimals =
-            typeof tokenConfig?.decimals === "number" ? tokenConfig.decimals : 0
-          const tokenDecimals = getTokenDecimalsFromDetails(cachedTokenInfo, fallbackDecimals)
-          const hasResolvedTokenInfo =
-            Boolean(cachedTokenInfo) || typeof tokenConfig?.decimals === "number"
-          const tokenName =
-            getTokenNameFromDetails(cachedTokenInfo, candidate.fallbackName) ||
-            getTokenDisplayFallbackName(candidate.tokenId, candidate.fallbackName)
-          const etokenDbPatch = candidate.etokenDbToken
-            ? {
-                latestPrice:
-                  candidate.etokenDbToken.hasLatestPrice && hasResolvedTokenInfo
-                    ? nanosatsPerAtomToXec(
-                        candidate.etokenDbToken.latestPriceNanosatsPerAtom,
-                        tokenDecimals,
-                      )
-                    : 0,
-                priceChange24h: candidate.etokenDbToken.hasPriceChange24h
-                  ? candidate.etokenDbToken.priceChange24h
-                  : 0,
-                last24HoursXECAmount: candidate.etokenDbToken.last24HoursXECAmount,
-                last30DaysXECAmount: candidate.etokenDbToken.last7DaysXECAmount,
-                last30DaysVolumeXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
-                totalTransactions: candidate.etokenDbToken.recent7dTradeCount,
-                totalXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
-                has30DayVolume: candidate.etokenDbToken.has30DayVolume,
-                hasInitialMarketData: true,
-                hasResolvedTokenInfo,
-              }
-            : {
-                hasInitialMarketData: false,
-                hasResolvedTokenInfo,
-              }
+          if (isCancelled) {
+            return bootstrapRows
+          }
 
-          return createInitialTokenRow(candidate.tokenId, tokenName, {
-            ...(candidate.patch || {}),
-            ...(etokenDbPatch || {}),
-          })
-        })
+          setData(bootstrapRows.initialTokens)
+          setLoadedTokens(
+            new Set(
+              bootstrapRows.initialTokens
+                .filter((token) => token.hasInitialMarketData)
+                .map((token) => token.tokenId),
+            ),
+          )
+          setIsLoading(false)
+
+          return bootstrapRows
+        }
+
+        const cachedTopVolumeTokens = getCachedTopVolumeTokens()
+        let hasRenderedCachedRows = false
+        if (cachedTopVolumeTokens?.length) {
+          renderBootstrapRows(cachedTopVolumeTokens, false)
+          hasRenderedCachedRows = true
+        }
+
+        let shouldUseConfiguredFallback = true
+        let etokenDbTokens: Awaited<ReturnType<typeof fetchEtokenDbTopVolumeTokens>> = []
+        try {
+          etokenDbTokens = await fetchEtokenDbTopVolumeTokens()
+          if (etokenDbTokens.length > 0) {
+            shouldUseConfiguredFallback = false
+            setCachedTopVolumeTokens(etokenDbTokens)
+          }
+        } catch (err) {
+          console.error("[etokendb token list] Failed to fetch top-volume tokens:", err)
+        }
+
+        const bootstrapRows =
+          shouldUseConfiguredFallback && hasRenderedCachedRows
+            ? createBootstrapRows(cachedTopVolumeTokens || [], false)
+            : renderBootstrapRows(etokenDbTokens, shouldUseConfiguredFallback)
+
+        const {
+          bootstrapCandidates,
+          initialTokens,
+          deferredWatchlistTokenIds,
+        } = bootstrapRows
 
         if (isCancelled) return
-        setData(initialTokens)
-        setLoadedTokens(new Set())
-        setIsLoading(false)
 
         const tokensMissingTokenInfo = bootstrapCandidates.filter((candidate) => {
           if (!candidate.etokenDbToken) {

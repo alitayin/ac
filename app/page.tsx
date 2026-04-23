@@ -1,41 +1,47 @@
 "use client"
-import { Suspense, useState } from "react";
-import Header from "@/components/ui/header";
-import TokenTable from "@/components/ui/TokenTable";
-import PromotionalDialog from "@/components/ui/PromotionalDialog";
-import AgoraStats from "@/components/ui/AgoraStats";
-import RealTimeEtokenFlow from "@/components/ui/RealTimeEtokenFlow";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import AnnouncementBanner from "@/components/ui/AnnouncementBanner"
-import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+
+import dynamic from "next/dynamic"
+import { Suspense, useState } from "react"
+
+import Header from "@/components/ui/header"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import AgoraStats from "@/components/ui/AgoraStats"
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
+
+const TokenTable = dynamic(() => import("@/components/ui/TokenTable"), {
+  loading: () => <SectionLoading label="Loading token table..." />,
+})
+
+const RealTimeEtokenFlow = dynamic(
+  () => import("@/components/ui/RealTimeEtokenFlow"),
+  {
+    loading: () => <SectionLoading label="Loading eToken flow..." />,
+  },
+)
+
+function SectionLoading({ label }: { label: string }) {
+  return (
+    <div className="rounded-xl border bg-background p-6 text-sm text-muted-foreground">
+      {label}
+    </div>
+  )
+}
 
 export default function Home() {
-  const [view, setView] = useState<"table" | "flow" | "swap">("table");
-  const [flowCount, setFlowCount] = useState(0);
+  const [view, setView] = useState<"table" | "flow">("table")
+  const [flowCount, setFlowCount] = useState(0)
 
   return (
     <div className="min-h-screen flex flex-col">
-            {/* 
-      <PromotionalDialog />
-      */}
-      
-
-        {/*
-    <AnnouncementBanner 
-      message="AgoraCash ownership token is live, be the new owner of agoracash" 
-      link="/"
-    />
-    */}
-
-      
       <Header />
-      
+
       <main className="flex-1 p-0 sm:p-8">
         <div className="flex flex-col mx-auto md:max-w-6xl space-y-0">
-          <Suspense fallback={<div>loading...</div>}>
+          <Suspense fallback={<SectionLoading label="Loading Agora stats..." />}>
             <AgoraStats />
           </Suspense>
+
           <div className="p-4 space-y-4">
             <div className="flex flex-wrap gap-2">
               <Button
@@ -64,23 +70,16 @@ export default function Home() {
               </Button>
             </div>
 
-            <div className={view === "table" ? "block" : "hidden"}>
+            {view === "table" ? (
               <ErrorBoundary>
-                <Suspense fallback={<div>loading...</div>}>
-                  <TokenTable />
-                </Suspense>
+                <TokenTable />
               </ErrorBoundary>
-            </div>
-
-            <div className={view === "flow" ? "block" : "hidden"}>
-              <Suspense fallback={<div>loading...</div>}>
-                <RealTimeEtokenFlow onCountChange={setFlowCount} />
-              </Suspense>
-            </div>
-
+            ) : (
+              <RealTimeEtokenFlow onCountChange={setFlowCount} />
+            )}
           </div>
         </div>
       </main>
     </div>
-  );
+  )
 }
