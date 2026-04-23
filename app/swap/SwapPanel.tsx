@@ -134,7 +134,7 @@ export function SwapPanel() {
   const [showProPanel, setShowProPanel] = useState<boolean>(false);
   const [orderBook, setOrderBook] = useState<{ orders: any[] }>({ orders: [] });
   const [selectedTokenDecimals, setSelectedTokenDecimals] = useState<number>(0);
-  const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC); // Network fee estimated from UTXO count
+  const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC); // Network fee estimated from likely Agora buy tx size
   const [sellAmount, setSellAmount] = useState<string>('');
   const [sellPrice, setSellPrice] = useState<string>('');
   const [isCreatingListing, setIsCreatingListing] = useState<boolean>(false);

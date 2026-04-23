@@ -30,10 +30,7 @@ interface SwapPanelProps {
   isSwapActivated: boolean
   tokenId: string
   createSwapOrder: () => void
-  networkFee: number
-  swapFee: number
   totalFees: number
-  feeDescription: string
   onMaxClick: () => void
   showCashtabButton?: boolean
 }
@@ -43,7 +40,7 @@ export function SwapPanel({
   calculateReceiveAmount, selectedBuyToken, setSelectedBuyToken, userTokens,
   setReceiveAmount, setAvgExecutionPrice, setSlippage, setErrorMessage, setMaxPrice,
   errorMessage, avgExecutionPrice, slippage, isSwapActivated, tokenId,
-  createSwapOrder, networkFee, swapFee, totalFees, feeDescription,
+  createSwapOrder, totalFees,
   onMaxClick,
   showCashtabButton = true,
 }: SwapPanelProps) {
@@ -138,17 +135,9 @@ export function SwapPanel({
               </>
             )}
           </div>
-          <div className="mt-3 space-y-1 border-t border-muted/40 pt-3 text-sm">
+          <div className="mt-3 border-t border-muted/40 pt-3 text-sm">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span>{feeDescription}</span>
-              <span>{swapFee.toFixed(2)} XEC</span>
-            </div>
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span>Network fee</span>
-              <span>{networkFee.toFixed(2)} XEC</span>
-            </div>
-            <div className="flex items-center justify-between font-medium">
-              <span>Total fees</span>
+              <span>Estimated fees</span>
               <span>{totalFees.toFixed(2)} XEC</span>
             </div>
           </div>

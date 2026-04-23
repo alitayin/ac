@@ -50,7 +50,6 @@ import {
   estimateNetworkFeeXecFromAddress,
 } from "@/lib/networkFee"
 import {
-  AGORA_SWAP_FEE_DESCRIPTION,
   calculateAgoraFeeSummary,
   estimateAgoraTokenCostFromBudget,
   getMinimumAgoraBuyFeesXec,
@@ -739,10 +738,7 @@ export default function TokenPage() {
               isSwapActivated={isSwapActivated}
               tokenId={tokenData.tokenId}
               createSwapOrder={createSwapOrder}
-              networkFee={networkFee}
-              swapFee={estimatedBuyFeeSummary.swapFeeXec}
               totalFees={estimatedBuyFeeSummary.totalFeesXec}
-              feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
               showCashtabButton={false}
               onMaxClick={() => {
                 if (isWalletConnected) {
@@ -915,10 +911,7 @@ export default function TokenPage() {
               isSwapActivated={isSwapActivated}
               tokenId={tokenData.tokenId}
               createSwapOrder={createSwapOrder}
-              networkFee={networkFee}
-              swapFee={estimatedBuyFeeSummary.swapFeeXec}
               totalFees={estimatedBuyFeeSummary.totalFeesXec}
-              feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
               showCashtabButton={false}
               onMaxClick={() => {
                 if (isWalletConnected) {
