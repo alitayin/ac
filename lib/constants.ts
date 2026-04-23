@@ -1,22 +1,28 @@
 const DEFAULT_API_BASE_URL = 'https://acws.alitayin.com';
+const LEGACY_API_HOST = 'api.agora.cash';
+const CURRENT_API_HOST = 'acws.alitayin.com';
 
 function normalizeBaseUrl(url: string) {
   return url.replace(/\/+$/, '');
 }
 
+function replaceLegacyAgoraHost(url: string) {
+  return url.replaceAll(LEGACY_API_HOST, CURRENT_API_HOST);
+}
+
 function resolveApiBaseUrl() {
-  return normalizeBaseUrl(
+  return normalizeBaseUrl(replaceLegacyAgoraHost(
     process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL,
-  );
+  ));
 }
 
 function resolveWebSocketUrl(apiBaseUrl: string) {
   const configuredWsUrl = process.env.NEXT_PUBLIC_WS_SERVER_URL?.trim();
   if (configuredWsUrl) {
-    return configuredWsUrl;
+    return replaceLegacyAgoraHost(configuredWsUrl);
   }
 
-  const wsBaseUrl = apiBaseUrl
+  const wsBaseUrl = replaceLegacyAgoraHost(apiBaseUrl)
     .replace(/^https:\/\//, 'wss://')
     .replace(/^http:\/\//, 'ws://');
 
