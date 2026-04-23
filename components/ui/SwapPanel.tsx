@@ -132,7 +132,7 @@ export function SwapPanel({
                 </div>
                 <div className="text-sm">
                   Slippage: <span className={slippage > 0 ? "text-red-500" : "text-green-500"}>
-                    {slippage.toFixed(2)}%
+                    Market + {slippage.toFixed(2)}%
                   </span>
                 </div>
               </>

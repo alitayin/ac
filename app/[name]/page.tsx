@@ -55,6 +55,7 @@ import {
   estimateAgoraTokenCostFromBudget,
   getMinimumAgoraBuyFeesXec,
 } from "@/lib/agora-swap-fee"
+import { calculateAgoraSweepBuy } from "@/lib/agora-sweep-buy"
 import {
   getCachedTokenSummary,
   SUMMARY_CACHE_TTL_MS,
@@ -434,11 +435,7 @@ export default function TokenPage() {
       return
     }
 
-    const sortedOrders = [...buyTokenOrderBook.orders].sort((a, b) => a.price - b.price)
-    const marketPrice = sortedOrders[0]?.price || 0
-
     let xecAmount = Number(inputAmount)
-    const totalValue = buyTokenOrderBook.stats.total_value
 
     const currentBalance = parseFloat(balance || '0')
     if (isWalletConnected && !isNaN(currentBalance) && currentBalance > 0) {
@@ -448,59 +445,34 @@ export default function TokenPage() {
       }
     }
 
-    const availableXec = estimateAgoraTokenCostFromBudget(xecAmount, networkFee)
-    if (availableXec <= 0) {
-      setReceiveAmount('0')
-      setAvgExecutionPrice(0)
-      setSlippage(0)
-      setErrorMessage(`Amount must be greater than ${minimumBuyFees.toFixed(2)} XEC to cover the estimated swap and network fees`)
-      setMaxPrice(0)
-      return
-    }
+    const sweepResult = calculateAgoraSweepBuy({
+      spendAmountXec: xecAmount,
+      networkFeeXec: networkFee,
+      orderBook: buyTokenOrderBook,
+    })
 
-    if (availableXec > totalValue) {
+    if (!sweepResult.ok) {
       setReceiveAmount('0')
       setAvgExecutionPrice(0)
       setSlippage(0)
-      setErrorMessage(`Exceeds available amount: ${formatNumber(totalValue)} XEC`)
       setMaxPrice(0)
+      if (sweepResult.reason === "INSUFFICIENT_BUDGET") {
+        setErrorMessage(`Amount must be greater than ${minimumBuyFees.toFixed(2)} XEC to cover the estimated swap and network fees`)
+      } else if (sweepResult.reason === "EXCEEDS_AVAILABLE_AMOUNT") {
+        setErrorMessage(`Exceeds available amount: ${formatNumber(sweepResult.totalValueXec)} XEC`)
+      } else {
+        setErrorMessage('No matching sell orders available')
+      }
       return
     }
 
     setErrorMessage('')
+    setReceiveAmount(sweepResult.receiveAmount.toFixed(6))
+    setAvgExecutionPrice(sweepResult.avgExecutionPrice)
+    setSlippage(sweepResult.slippagePercent)
+    setMaxPrice(sweepResult.maxPrice)
 
-    let remainingXec = availableXec
-    let totalTokens = 0
-    let totalCost = 0
-    let highestPrice = 0
-
-    for (const order of sortedOrders) {
-      const orderCost = order.price * order.amount
-      if (remainingXec >= orderCost) {
-        totalTokens += order.amount
-        totalCost += orderCost
-        remainingXec -= orderCost
-        highestPrice = order.price
-      } else {
-        const partialAmount = remainingXec / order.price
-        totalTokens += partialAmount
-        totalCost += remainingXec
-        highestPrice = order.price
-        break
-      }
-      
-      if (remainingXec <= 0) break
-    }
-
-    if (totalTokens > 0) {
-      const avgPrice = totalCost / totalTokens
-      const slippagePercent = ((marketPrice - avgPrice) / marketPrice) * 100
-
-      setReceiveAmount(totalTokens.toFixed(6))
-      setAvgExecutionPrice(avgPrice)
-      setSlippage(slippagePercent)
-      setMaxPrice(highestPrice)
-    } else {
+    if (!sweepResult.receiveAmount) {
       setReceiveAmount('0')
       setAvgExecutionPrice(0)
       setSlippage(0)

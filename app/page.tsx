@@ -7,7 +7,6 @@ import AgoraStats from "@/components/ui/AgoraStats";
 import RealTimeEtokenFlow from "@/components/ui/RealTimeEtokenFlow";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SwapPanel } from "@/app/swap/SwapPanel";
 import AnnouncementBanner from "@/components/ui/AnnouncementBanner"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 

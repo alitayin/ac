@@ -17,6 +17,7 @@ interface BuyCardProps {
   label?: string;
   showTokenSelector?: boolean;
   showMaxBalance?: boolean;
+  readOnly?: boolean;
 }
 
 export const BuyCard: React.FC<BuyCardProps> = ({
@@ -31,6 +32,7 @@ export const BuyCard: React.FC<BuyCardProps> = ({
   label = "Buy",
   showTokenSelector = true,
   showMaxBalance = false,
+  readOnly = false,
 }) => {
   const rawAmount = userTokens[selectedToken.id] || "0";
   const maxBalance = Number(rawAmount) / Math.pow(10, selectedTokenDecimals);
@@ -53,10 +55,15 @@ export const BuyCard: React.FC<BuyCardProps> = ({
         <div className="flex items-center justify-between">
           <input
             type="text"
-            className="text-lg font-medium bg-transparent outline-none w-3/4"
+            className={`text-lg font-medium bg-transparent outline-none w-3/4 ${readOnly ? "cursor-default text-muted-foreground" : ""}`}
             placeholder="0"
             value={receiveAmount}
+            readOnly={readOnly}
             onChange={(e) => {
+              if (readOnly) {
+                return;
+              }
+
               const value = e.target.value;
               if (value === "" || /^[0-9]*\.?[0-9]*$/.test(value)) {
                 setReceiveAmount(value);
@@ -64,6 +71,10 @@ export const BuyCard: React.FC<BuyCardProps> = ({
               }
             }}
             onBlur={(e) => {
+              if (readOnly) {
+                return;
+              }
+
               const value = e.target.value;
               if (value && !isNaN(Number(value))) {
                 const numValue = parseFloat(value);

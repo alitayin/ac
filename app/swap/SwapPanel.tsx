@@ -50,6 +50,7 @@ import {
   estimateAgoraTokenCostFromBudget,
   getMinimumAgoraBuyFeesXec,
 } from "@/lib/agora-swap-fee";
+import { calculateAgoraSweepBuy } from "@/lib/agora-sweep-buy";
 import WalletConnectDrawerInner from "@/components/swap/WalletConnectDrawerInner";
 import PriceCard from "@/components/swap/PriceCard";
 import SpendCard from "@/components/swap/SpendCard";
@@ -71,6 +72,7 @@ const EMPTY_SELECTED_TOKEN = {
   id: "",
   name: "Select token",
 };
+type BuyMode = "limit" | "sweep";
 
 function shortenTokenId(tokenId: string): string {
   return `${tokenId.slice(0, 6)}...${tokenId.slice(-4)}`;
@@ -116,12 +118,17 @@ export function SwapPanel() {
   const [tokenPrice, setTokenPrice] = useState<number>(0);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState<boolean>(false);
   const [tokenPriceInput, setTokenPriceInput] = useState<string>('');
+  const [buyMode, setBuyMode] = useState<BuyMode>("limit");
+  const [buyErrorMessage, setBuyErrorMessage] = useState<string>('');
   const [showOrdersRainbow, setShowOrdersRainbow] = useState<boolean>(false);
   const [ordersRainbowTimer, setOrdersRainbowTimer] = useState<NodeJS.Timeout | null>(null);
   const [showUsdPrice, setShowUsdPrice] = useState<boolean>(false);
   const [useBestOrderPrice, setUseBestOrderPrice] = useState<boolean>(true);
   const xecPrice = useXECPrice();
   const [marketPrice, setMarketPrice] = useState<number>(0);
+  const [sweepMarketPrice, setSweepMarketPrice] = useState<number>(0);
+  const [sweepMaxPrice, setSweepMaxPrice] = useState<number>(0);
+  const [sweepQuoteVersion, setSweepQuoteVersion] = useState<number>(0);
   const [totalTokensBought, setTotalTokensBought] = useState<number>(0);
   const [isOfflineOrder, setIsOfflineOrder] = useState<boolean>(false);
   const [showProPanel, setShowProPanel] = useState<boolean>(false);
@@ -136,6 +143,7 @@ export function SwapPanel() {
   // Order book cache with 10 second TTL
   const orderBookCacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
   const pendingOrderBookRequestsRef = useRef<Map<string, Promise<any>>>(new Map());
+  const sweepCalculationRequestRef = useRef(0);
   const ORDERBOOK_CACHE_TTL_MS = 10000;
 
   const handleGenerateMnemonic = () => {
@@ -340,46 +348,139 @@ export function SwapPanel() {
     };
   }, []);
 
-  const calculateReceiveAmount = (inputAmount: string) => {
+  const resetBuyEstimateState = (nextReceiveAmount = '') => {
+    setReceiveAmount(nextReceiveAmount);
+    setAvgExecutionPrice(0);
+    setSlippage(0);
+    setTotalTokensBought(0);
+    setSweepMarketPrice(0);
+    setSweepMaxPrice(0);
+    setBuyErrorMessage('');
+  };
+
+  const calculateLimitReceiveAmount = (inputAmount: string) => {
     if (!inputAmount || isNaN(Number(inputAmount))) {
-      setReceiveAmount('');
+      resetBuyEstimateState('');
       return;
     }
 
     if (!selectedToken.id || tokenPrice <= 0) {
-      setReceiveAmount('0');
+      resetBuyEstimateState('0');
       return;
     }
-    
+
     let spend = parseFloat(inputAmount);
     if (isNaN(spend)) {
-      setReceiveAmount('');
+      resetBuyEstimateState('');
       return;
     }
-    
+
     const maxSpend = parseFloat(balance);
     if (spend > maxSpend) {
       spend = maxSpend;
       setSpendAmount(maxSpend.toFixed(2));
     }
-    
+
     const availableSpend = estimateAgoraTokenCostFromBudget(spend, networkFee);
     if (availableSpend <= 0) {
-      setReceiveAmount('0');
+      resetBuyEstimateState('0');
       return;
     }
-    
+
     const receive = availableSpend / tokenPrice;
     const tokenDecimals = selectedTokenDecimals;
     const power = Math.pow(10, tokenDecimals);
     const truncatedReceive = Math.floor(receive * power) / power;
-    
+
+    setBuyErrorMessage('');
+    setSweepMaxPrice(0);
     setReceiveAmount(truncatedReceive.toString());
-    
+
     calculateAverageExecutionPrice(truncatedReceive, availableSpend, selectedToken.id);
   };
 
+  const calculateSweepReceiveAmount = useCallback(async (inputAmount: string) => {
+    const requestId = ++sweepCalculationRequestRef.current;
+
+    if (!inputAmount || isNaN(Number(inputAmount))) {
+      resetBuyEstimateState('');
+      return;
+    }
+
+    if (!selectedToken.id) {
+      resetBuyEstimateState('0');
+      return;
+    }
+
+    let spend = parseFloat(inputAmount);
+    if (isNaN(spend)) {
+      resetBuyEstimateState('');
+      return;
+    }
+
+    const maxSpend = parseFloat(balance);
+    if (spend > maxSpend) {
+      spend = maxSpend;
+      setSpendAmount(maxSpend.toFixed(2));
+    }
+
+    const latestOrderBook = await fetchOrderBookCached(selectedToken.id);
+    if (requestId !== sweepCalculationRequestRef.current) {
+      return;
+    }
+
+    const sweepResult = calculateAgoraSweepBuy({
+      spendAmountXec: spend,
+      networkFeeXec: networkFee,
+      orderBook: latestOrderBook,
+    });
+
+    if (!sweepResult.ok) {
+      setAvgExecutionPrice(0);
+      setSlippage(0);
+      setTotalTokensBought(0);
+      setSweepMarketPrice(0);
+      setSweepMaxPrice(0);
+      setReceiveAmount('0');
+
+      if (sweepResult.reason === "INSUFFICIENT_BUDGET") {
+        setBuyErrorMessage(
+          `Amount must be greater than ${getMinimumAgoraBuyFeesXec(networkFee).toFixed(2)} XEC to cover the estimated swap and network fees`,
+        );
+      } else if (sweepResult.reason === "EXCEEDS_AVAILABLE_AMOUNT") {
+        setBuyErrorMessage(
+          `Exceeds available amount: ${sweepResult.totalValueXec.toFixed(2)} XEC`,
+        );
+      } else {
+        setBuyErrorMessage("No matching sell orders available");
+      }
+      return;
+    }
+
+    setBuyErrorMessage('');
+    setReceiveAmount(sweepResult.receiveAmount.toFixed(6));
+    setAvgExecutionPrice(sweepResult.avgExecutionPrice);
+    setSlippage(sweepResult.slippagePercent);
+    setTotalTokensBought(sweepResult.receiveAmount);
+    setSweepMarketPrice(sweepResult.marketPrice);
+    setSweepMaxPrice(sweepResult.maxPrice);
+    setSweepQuoteVersion((currentVersion) => currentVersion + 1);
+  }, [balance, fetchOrderBookCached, networkFee, selectedToken.id]);
+
+  const calculateReceiveAmount = (inputAmount: string) => {
+    if (buyMode === "sweep") {
+      void calculateSweepReceiveAmount(inputAmount);
+      return;
+    }
+
+    calculateLimitReceiveAmount(inputAmount);
+  };
+
   const calculateSpendAmount = (inputAmount: string) => {
+    if (buyMode === "sweep") {
+      return;
+    }
+
     if (!inputAmount || isNaN(Number(inputAmount))) {
       setSpendAmount('');
       return;
@@ -563,9 +664,36 @@ export function SwapPanel() {
     [tokenPrice, xecPrice]
   );
 
+  const effectiveBuyMaxPrice = useMemo(
+    () => (buyMode === "sweep" ? sweepMaxPrice : tokenPrice),
+    [buyMode, sweepMaxPrice, tokenPrice],
+  );
+  const sweepQuoteText = useMemo(() => {
+    if (
+      buyMode !== "sweep" ||
+      sweepMarketPrice <= 0 ||
+      sweepMaxPrice <= 0 ||
+      avgExecutionPrice <= 0 ||
+      !receiveAmount ||
+      parseFloat(receiveAmount) <= 0
+    ) {
+      return "";
+    }
+
+    return `Best ask ${formatTokenPrice(sweepMarketPrice)} XEC | Avg execution ${avgExecutionPrice.toFixed(4)} XEC | Slippage +${slippage.toFixed(2)}% | Max matched ${formatTokenPrice(sweepMaxPrice)} XEC`;
+  }, [
+    avgExecutionPrice,
+    buyMode,
+    formatTokenPrice,
+    receiveAmount,
+    slippage,
+    sweepMarketPrice,
+    sweepMaxPrice,
+  ]);
+
   // Memoize price comparison for warning
   const priceWarningData = useMemo(() => {
-    if (marketPrice > 0 && tokenPrice > 0) {
+    if (buyMode === "limit" && marketPrice > 0 && tokenPrice > 0) {
       const percentDiff = ((tokenPrice - marketPrice) / marketPrice) * 100;
       return {
         shouldShow: percentDiff > 100,
@@ -573,24 +701,24 @@ export function SwapPanel() {
       };
     }
     return { shouldShow: false, percent: 0 };
-  }, [tokenPrice, marketPrice]);
+  }, [buyMode, tokenPrice, marketPrice]);
 
   // Memoize order validation
   const isOrderValid = useMemo(() => {
-    const validPrice = tokenPrice > 0;
+    const validPrice = effectiveBuyMaxPrice > 0;
     const validSpend = spendAmount && parseFloat(spendAmount) > 0;
     const validReceive = receiveAmount && parseFloat(receiveAmount) > 0;
     return validPrice && validSpend && validReceive;
-  }, [tokenPrice, spendAmount, receiveAmount]);
+  }, [effectiveBuyMaxPrice, spendAmount, receiveAmount]);
 
   const estimatedTokenCost = useMemo(() => {
     const receive = parseFloat(receiveAmount || "0");
-    if (!Number.isFinite(receive) || receive <= 0 || tokenPrice <= 0) {
+    if (!Number.isFinite(receive) || receive <= 0 || effectiveBuyMaxPrice <= 0) {
       return 0;
     }
 
-    return receive * tokenPrice;
-  }, [receiveAmount, tokenPrice]);
+    return receive * effectiveBuyMaxPrice;
+  }, [effectiveBuyMaxPrice, receiveAmount]);
 
   const estimatedFeeSummary = useMemo(
     () => calculateAgoraFeeSummary(estimatedTokenCost, networkFee),
@@ -609,7 +737,7 @@ export function SwapPanel() {
       setTokenPriceInput('0.00');
       setMarketPrice(0);
       setSpendAmount('');
-      setReceiveAmount('');
+      resetBuyEstimateState('');
       return;
     }
 
@@ -620,7 +748,7 @@ export function SwapPanel() {
       setMarketPrice(price);
     });
     setSpendAmount('');
-    setReceiveAmount('');
+    resetBuyEstimateState('');
   };
 
   useEffect(() => {
@@ -637,6 +765,12 @@ export function SwapPanel() {
       setMarketPrice(price);
     });
   }, [useBestOrderPrice]);
+
+  useEffect(() => {
+    if (buyMode === "sweep" && spendAmount) {
+      void calculateSweepReceiveAmount(spendAmount);
+    }
+  }, [buyMode, calculateSweepReceiveAmount, networkFee, selectedToken.id, spendAmount]);
 
   useEffect(() => {
     return () => {
@@ -661,8 +795,16 @@ export function SwapPanel() {
     setOrdersRainbowTimer(timer);
   };
 
+  const handleSweepModeToggle = () => {
+    setBuyMode((currentMode) => currentMode === "sweep" ? "limit" : "sweep");
+    setSpendAmount('');
+    resetBuyEstimateState('');
+  };
+
   const createOrder = async () => {
-    if (!isWalletConnected || !ecashAddress || !selectedToken.id || !tokenPrice || !receiveAmount) {
+    const orderMaxPrice = effectiveBuyMaxPrice;
+
+    if (!isWalletConnected || !ecashAddress || !selectedToken.id || !orderMaxPrice || !receiveAmount) {
       return;
     }
     
@@ -699,7 +841,7 @@ export function SwapPanel() {
 
     const exactReceiveAmount = parseFloat(receiveAmount);
 
-    const orderKey = createSwapOrderKey(selectedToken.id, ecashAddress, tokenPrice);
+    const orderKey = createSwapOrderKey(selectedToken.id, ecashAddress, orderMaxPrice);
     
     const orderData: {
       remainingAmount: number;
@@ -712,7 +854,7 @@ export function SwapPanel() {
       selectedUtxos?: any[];
     } = {
       remainingAmount: exactReceiveAmount,
-      maxPrice: tokenPrice,
+      maxPrice: orderMaxPrice,
       status: "pending",
       orderType: isOfflineOrder ? "offline" : "online",
       transactions: [],
@@ -726,7 +868,7 @@ export function SwapPanel() {
           throw new Error('Wallet mnemonic not found');
         }
 
-        const proxyBuyAmount = tokenPrice * exactReceiveAmount;
+        const proxyBuyAmount = orderMaxPrice * exactReceiveAmount;
         const config = {
           amount: proxyBuyAmount,
           maxPrice: 1.0000,
@@ -781,7 +923,7 @@ export function SwapPanel() {
     }
     
     setSpendAmount('');
-    setReceiveAmount('');
+    resetBuyEstimateState('');
     
     setIsConfirmDialogOpen(false);
     
@@ -813,13 +955,15 @@ export function SwapPanel() {
     if (!isOrderValid) {
       toast({
         title: "Invalid input",
-        description: "Please ensure you have entered a valid price, spend amount and buy amount",
+        description: buyMode === "sweep"
+          ? "Please ensure you have entered a valid spend amount and there is enough sell-side liquidity"
+          : "Please ensure you have entered a valid price, spend amount and buy amount",
         variant: "destructive",
       });
       return;
     }
     
-    const tokenCost = tokenPrice * parseFloat(receiveAmount || '0');
+    const tokenCost = effectiveBuyMaxPrice * parseFloat(receiveAmount || '0');
     const totalAmount = calculateAgoraFeeSummary(tokenCost, currentFee).totalCostXec;
     if (totalAmount < MIN_ORDER_TOTAL_XEC) {
       toast({
@@ -843,7 +987,7 @@ export function SwapPanel() {
       if (!isNaN(newPrice)) {
         setTokenPrice(newPrice);
         setSpendAmount('');
-        setReceiveAmount('');
+        resetBuyEstimateState('');
       }
     }
   };
@@ -860,17 +1004,24 @@ export function SwapPanel() {
 
     setTokenPrice(newPrice);
     setSpendAmount('');
-    setReceiveAmount('');
+    resetBuyEstimateState('');
   };
 
   const handleMarketClick = () => {
     getTokenPrice(selectedToken.id).then(price => {
       if (price) {
+        setTokenPrice(price);
         setTokenPriceInput(formatTokenPrice(price));
+        setMarketPrice(price);
+        if (buyMode === "sweep" && spendAmount) {
+          void calculateSweepReceiveAmount(spendAmount);
+        }
       }
     });
-    setSpendAmount('');
-    setReceiveAmount('');
+    if (buyMode === "limit") {
+      setSpendAmount('');
+      resetBuyEstimateState('');
+    }
   };
 
   const handleOneDollarClick = () => {
@@ -879,7 +1030,7 @@ export function SwapPanel() {
       setTokenPrice(xecPerDollar);
       setTokenPriceInput(formatTokenPrice(xecPerDollar));
       setSpendAmount('');
-      setReceiveAmount('');
+      resetBuyEstimateState('');
     } else {
       toast({
         title: "Unable to get XEC price",
@@ -909,7 +1060,7 @@ export function SwapPanel() {
         setSelectedTokenDecimals(0);
         setOrderBook({ orders: [] });
         setSpendAmount('');
-        setReceiveAmount('');
+        resetBuyEstimateState('');
         return;
       }
 
@@ -1117,7 +1268,7 @@ export function SwapPanel() {
                           onClick={() => {
                             disconnectWallet();
                             setSpendAmount('');
-                            setReceiveAmount('');
+                            resetBuyEstimateState('');
                             setMnemonicWords(new Array(12).fill(''));
 
                             toast({
@@ -1157,12 +1308,30 @@ export function SwapPanel() {
                   showUsdPrice={showUsdPrice}
                   setShowUsdPrice={setShowUsdPrice}
                   onMarketClick={handleMarketClick}
-                  onOneDollarClick={handleOneDollarClick}
-                  showUsdPriceValue={showUsdPrice && tokenPrice > 0}
+                  showUsdPriceValue={showUsdPrice && buyMode === "limit" && tokenPrice > 0}
                   usdPriceText={calculateTokenUsdPrice()}
                   onTokenSelect={handleTokenSelect}
                   onTokenMetaChange={(meta) => setSelectedTokenDecimals(meta.decimals)}
                   showTokenSelector={false}
+                  title={buyMode === "sweep" ? `Sweep ${selectedToken.name} from current asks` : undefined}
+                  showPriceInput={buyMode === "limit"}
+                  staticPriceLabel={
+                    sweepMarketPrice > 0
+                      ? `Current best ask ${formatTokenPrice(sweepMarketPrice)} XEC`
+                      : "Sweep current sell book"
+                  }
+                  staticPriceHint={
+                    sweepMaxPrice > 0
+                      ? `Estimated max matched price: ${formatTokenPrice(sweepMaxPrice)} XEC`
+                      : "Enter the XEC you want to spend and we will quote from the live sell order book."
+                  }
+                  showOneDollarButton={false}
+                  sweepModeEnabled={buyMode === "sweep"}
+                  onSweepModeToggle={handleSweepModeToggle}
+                  disablePriceBasisToggle={buyMode === "sweep"}
+                  transientHintText={sweepQuoteText || undefined}
+                  transientHintKey={sweepQuoteVersion}
+                  transientHintDurationMs={10000}
                 />
 
                 <SpendCard
@@ -1187,6 +1356,8 @@ export function SwapPanel() {
                   onTokenSelect={handleTokenSelect}
                   onTokenMetaChange={(meta) => setSelectedTokenDecimals(meta.decimals)}
                   selectedTokenDecimals={selectedTokenDecimals}
+                  label={buyMode === "sweep" ? "Estimated buy" : "Buy"}
+                  readOnly={buyMode === "sweep"}
                 />
 
                 <div className="space-y-2 mt-2">
@@ -1223,13 +1394,14 @@ export function SwapPanel() {
                     selectedToken={selectedToken}
                     receiveAmount={receiveAmount}
                     spendAmount={spendAmount}
-                    tokenPrice={tokenPrice}
+                    tokenPrice={effectiveBuyMaxPrice}
                     networkFee={networkFee}
                     swapFee={estimatedFeeSummary.swapFeeXec}
                     totalFees={estimatedFeeSummary.totalFeesXec}
                     tokenCost={estimatedFeeSummary.tokenCostXec}
                     feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
                     formatTokenPrice={formatTokenPrice}
+                    priceLabel={buyMode === "sweep" ? "Max matched price" : "Price per token"}
                     onClose={() => setIsConfirmDialogOpen(false)}
                     onConfirm={createOrder}
                   />
@@ -1247,7 +1419,7 @@ export function SwapPanel() {
                     </AccordionItem>
                   </Accordion>
 
-                  {tokenPrice > marketPrice && tokenPrice > 0 && marketPrice > 0 && receiveAmount && parseFloat(receiveAmount) > 0 && (
+                  {buyMode === "limit" && tokenPrice > marketPrice && tokenPrice > 0 && marketPrice > 0 && receiveAmount && parseFloat(receiveAmount) > 0 && (
                     <div className="mt-2 space-y-1 text-sm">
                       <Accordion type="single" collapsible className="w-full">
                         <AccordionItem value="market-details" className="border-b-0">
@@ -1265,7 +1437,7 @@ export function SwapPanel() {
                               </div>
                               <div className="flex items-center justify-between">
                                 <span className="text-muted-foreground">Price impact:</span>
-                                <span className={slippage > 3 ? 'text-destructive' : 'text-green-500'}>
+                                <span className={slippage > 0 ? 'text-destructive' : 'text-green-500'}>
                                   Market Price + {slippage.toFixed(2)}%
                                 </span>
                               </div>
@@ -1281,7 +1453,20 @@ export function SwapPanel() {
                     </div>
                   )}
 
-                
+                  {buyErrorMessage && (
+                    <Alert className="relative mt-2">
+                      <div className="flex items-center">
+                        <div className="p-2 bg-orange-100 dark:bg-orange-400 rounded-md">
+                          <CircleAlert className="h-5 w-5" />
+                        </div>
+                        <AlertDescription className="flex items-center justify-between flex-1">
+                          <div className="ml-2 flex items-center leading-7 tracking-tight">
+                            {buyErrorMessage}
+                          </div>
+                        </AlertDescription>
+                      </div>
+                    </Alert>
+                  )}
 
                   {priceWarningData.shouldShow && (
                     <Alert className="relative mt-2 dark:bg-dark-400/50 bg-pink-">
@@ -1298,7 +1483,7 @@ export function SwapPanel() {
                     </Alert>
                   )}
                   
-                  {receiveAmount && tokenPrice && (estimatedFeeSummary.totalCostXec < MIN_ORDER_TOTAL_XEC) && (
+                  {receiveAmount && effectiveBuyMaxPrice && (estimatedFeeSummary.totalCostXec < MIN_ORDER_TOTAL_XEC) && (
                     <Alert className="relative mt-2">
                       <div className="flex items-center">
                         <div className="p-2 bg-orange-100 dark:bg-orange-400 rounded-md">

@@ -31,6 +31,7 @@ interface ConfirmOrderDialogProps {
   tokenCost: number;
   feeDescription: string;
   formatTokenPrice: (price: number) => string;
+  priceLabel?: string;
   onClose: () => void;
   onConfirm: () => void;
 }
@@ -86,6 +87,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   tokenCost,
   feeDescription,
   formatTokenPrice,
+  priceLabel = "Price per token",
   onClose,
   onConfirm,
 }) => {
@@ -201,7 +203,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
           <Card className="shadow-none">
             <CardContent className="flex flex-col gap-2.5 p-4">
               <BreakdownRow label="Order value" value={formattedTokenCost} />
-              <BreakdownRow label="Price per token" value={formatTokenPrice(tokenPrice)} />
+              <BreakdownRow label={priceLabel} value={formatTokenPrice(tokenPrice)} />
               <BreakdownRow label={feeDescription} value={formattedSwapFee} />
               <BreakdownRow label="Network fee" value={formattedNetworkFee} />
               <div className="rounded-lg bg-muted/60 p-2.5">
