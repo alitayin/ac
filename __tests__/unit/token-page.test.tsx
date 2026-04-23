@@ -8,7 +8,7 @@ const {
   mockGetTokenSupply,
   mockIsEtokenDbAvailable,
   mockLoadTokenPageStats,
-  mockPushOrdersToServer,
+  mockQueueOrdersSync,
   mockToast,
   mockUseParams,
   mockUseWallet,
@@ -20,7 +20,7 @@ const {
   mockGetTokenSupply: vi.fn(),
   mockIsEtokenDbAvailable: vi.fn(),
   mockLoadTokenPageStats: vi.fn(),
-  mockPushOrdersToServer: vi.fn(),
+  mockQueueOrdersSync: vi.fn(),
   mockToast: vi.fn(),
   mockUseParams: vi.fn(),
   mockUseWallet: vi.fn(),
@@ -118,7 +118,7 @@ vi.mock("@/lib/agora-ws", () => ({
 }))
 
 vi.mock("@/lib/Auto.js", () => ({
-  pushOrdersToServer: mockPushOrdersToServer,
+  queueOrdersSync: mockQueueOrdersSync,
 }))
 
 vi.mock("@/lib/networkFee", () => ({
@@ -174,6 +174,7 @@ describe("TokenPage buy panel", () => {
       utxoCount: 1,
       selectedInputCount: 1,
     })
+    mockQueueOrdersSync.mockResolvedValue(true)
     mockFetchAgoraOrderBook.mockResolvedValue({
       success: true,
       data: ORDER_BOOK,
@@ -195,7 +196,7 @@ describe("TokenPage buy panel", () => {
       },
     })
     mockWatchAgoraTokens.mockReturnValue(() => {})
-    mockPushOrdersToServer.mockResolvedValue({})
+    mockQueueOrdersSync.mockResolvedValue(true)
     mockExecuteOrders.mockResolvedValue(undefined)
   })
 
@@ -310,7 +311,7 @@ describe("TokenPage buy panel", () => {
     })
     expect(storedOrders[orderKey].remainingAmount).toBeCloseTo(144.89, 6)
     expect(mockExecuteOrders).toHaveBeenCalledTimes(1)
-    expect(mockPushOrdersToServer).toHaveBeenCalledWith(
+    expect(mockQueueOrdersSync).toHaveBeenCalledWith(
       storedOrders,
       "ecash:test-address",
     )

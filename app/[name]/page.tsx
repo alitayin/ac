@@ -61,7 +61,7 @@ import {
 } from "@/lib/token-stats"
 import { watchAgoraTokens } from "@/lib/agora-ws"
 import { loadTokenPageStats } from "@/lib/token-page-stats"
-import { pushOrdersToServer } from "@/lib/Auto.js"
+import { queueOrdersSync } from "@/lib/Auto.js"
 import {
   createSwapOrderKey,
   dispatchOrdersUpdated,
@@ -586,11 +586,13 @@ export default function TokenPage() {
     dispatchOrdersUpdated("processed");
 
     if (ecashAddress) {
-      try {
-        await pushOrdersToServer(existingOrders, ecashAddress);
-      } catch (error) {
-        console.error('❌ Failed to push adjusted orders to server:', error);
-      }
+      void queueOrdersSync(existingOrders, ecashAddress).then((synced) => {
+        if (synced) {
+          return;
+        }
+
+        console.error('❌ Failed to push adjusted orders to server');
+      });
     }
 
     if (adjustedCount > 0) {
@@ -670,16 +672,18 @@ export default function TokenPage() {
 
     executeOrders().catch(() => {});
 
-    try {
-      await pushOrdersToServer(existingOrders, ecashAddress);
-    } catch (error) {
-      console.error('❌ Failed to push orders to server:', error);
+    void queueOrdersSync(existingOrders, ecashAddress).then((synced) => {
+      if (synced) {
+        return;
+      }
+
+      console.error('❌ Failed to push orders to server');
       toast({
         title: "Warning",
         description: "Order saved locally but failed to sync with server. It will sync later.",
         variant: "destructive",
       });
-    }
+    })
     
     toast({
       title: "✅ Order created successfully",

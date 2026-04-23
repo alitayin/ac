@@ -39,7 +39,6 @@ import {
 } from "@/components/ui/drawer";
 import { Card, CardContent } from "@/components/ui/card";
 import { FlickeringGrid } from "@/components/magicui/flickering-grid";
-import { useWebSocketStatus } from "@/lib/context/WebSocketContext";
 import { useWallet } from "@/lib/context/WalletContext";
 import { useXECPrice } from "@/lib/price";
 import appVersion from "@/version.json";
@@ -48,6 +47,10 @@ import TelegramAgoraBotDialog from "@/components/ui/TelegramAgoraBotDialog";
 import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerInner";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import {
+  useAddressNotifier,
+  useWebSocketStatus as useOrderSyncStatus,
+} from "@/lib/websocket-client";
 
 interface HeaderProps {
   isOnline?: boolean;
@@ -74,7 +77,8 @@ export default function Header({
   const [currentTheme, setCurrentTheme] = useState<string>("light");
   const [tokenDetails, setTokenDetails] = useState<{[key: string]: any}>({});
   const tokenDetailsRef = useRef<{[key: string]: any}>({});
-  const { isNotifying } = useWebSocketStatus();
+  useAddressNotifier(isWalletConnected ? ecashAddress || undefined : undefined);
+  const isNotifying = useOrderSyncStatus() === "connected";
   const [isLoginDrawerOpen, setIsLoginDrawerOpen] = useState(false);
   const [mnemonicWords, setMnemonicWords] = useState<string[]>(new Array(12).fill(""));
   const [mnemonicError, setMnemonicError] = useState<string>("");
@@ -433,7 +437,7 @@ export default function Header({
                       </span>
                       <span 
                         className={`h-2 w-2 rounded-full flex-shrink-0 ${isNotifying ? 'bg-green-500' : 'bg-gray-400'}`} 
-                        title={isNotifying ? "Wallet notifications connected" : "Wallet notifications offline"}
+                        title={isNotifying ? "Order sync connected" : "Order sync offline"}
                       ></span>
                     </div>
                   </Button>

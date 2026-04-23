@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import Script from "next/script";
 import { Toaster } from "@/components/ui/toaster"
-import { WebSocketProvider } from "@/lib/context/WebSocketContext";
 import { ThemeProvider } from "../components/ui/theme-provider"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { WalletProvider } from '@/lib/context/WalletContext';
@@ -80,15 +79,13 @@ export default function RootLayout({
         >
           <ErrorBoundary>
             <ChronikProvider>
-              <WebSocketProvider>
-                <WalletProvider>
-                  <AutoExecutionProvider>
-                    {children}
-                    <Footer />
-                    <Toaster />
-                  </AutoExecutionProvider>
-                </WalletProvider>
-              </WebSocketProvider>
+              <WalletProvider>
+                <AutoExecutionProvider>
+                  {children}
+                  <Footer />
+                  <Toaster />
+                </AutoExecutionProvider>
+              </WalletProvider>
             </ChronikProvider>
           </ErrorBoundary>
         </ThemeProvider>

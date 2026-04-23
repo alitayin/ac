@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-04-24
+
+### 🎉 v4.1.7 发布
+
+**主要改动：**
+- 将 `api.agora.cash/ws` 从全局 provider 链路中移除，避免订单同步连接影响 swap 主流程
+- 将订单同步改为后台队列并增加超时控制，`api.agora.cash` 不可用时不再阻塞本地自动执行
+- 更新 header 状态语义，明确显示为 `Order sync` 连接状态
+
+**验证：**
+- ✅ `npm test -- __tests__/unit/header-analytics.test.tsx __tests__/unit/WalletContext.test.tsx __tests__/unit/Auto.test.js __tests__/unit/token-page.test.tsx __tests__/unit/AutoExecutionContext.test.tsx __tests__/unit/SwapPanel.behavior.test.tsx` 通过
+
+---
+
 ## 2026-04-20
 
 ### 🎉 v4.0.9 发布

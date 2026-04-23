@@ -40,10 +40,9 @@ vi.mock("@/hooks/use-toast", () => ({
   }),
 }))
 
-vi.mock("@/lib/context/WebSocketContext", () => ({
-  useWebSocketStatus: () => ({
-    isNotifying: false,
-  }),
+vi.mock("@/lib/websocket-client", () => ({
+  useAddressNotifier: () => false,
+  useWebSocketStatus: () => "disconnected",
 }))
 
 vi.mock("@/lib/context/WalletContext", () => ({

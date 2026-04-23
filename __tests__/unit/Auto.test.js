@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   validateOrdersData,
   checkServerDataHash,
+  processOrders,
   pushOrdersToServer,
   getTokenInfo,
 } from '@/lib/Auto.js';
@@ -19,7 +20,14 @@ import {
   cloneOrders,
 } from '../fixtures/auto';
 
+const buyMainMock = vi.fn();
+const dispatchOrdersUpdatedMock = vi.fn();
+
 // Mock dependencies
+vi.mock('@/lib/Buy.js', () => ({
+  main: (...args) => buyMainMock(...args),
+}));
+
 vi.mock('@/lib/chronik.ts', () => ({
   chronik: {
     token: vi.fn(),
@@ -28,6 +36,10 @@ vi.mock('@/lib/chronik.ts', () => ({
   getTokenDecimalsFromDetails: vi.fn((tokenData, fallback) =>
     tokenData?.genesisInfo?.decimals ?? fallback,
   ),
+}));
+
+vi.mock('@/lib/swap-order-utils', () => ({
+  dispatchOrdersUpdated: (...args) => dispatchOrdersUpdatedMock(...args),
 }));
 
 global.fetch = vi.fn();
@@ -41,10 +53,13 @@ global.localStorage = {
 describe('Auto.js', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    buyMainMock.mockReset();
+    dispatchOrdersUpdatedMock.mockReset();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   describe('validateOrdersData', () => {
@@ -358,6 +373,85 @@ describe('Auto.js', () => {
       const result = await pushOrdersToServer(orders, 'addr1');
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe('processOrders', () => {
+    it('does not wait for server sync requests before releasing the execution promise', async () => {
+      vi.useFakeTimers();
+
+      const { chronik } = await import('@/lib/chronik.ts');
+
+      vi.mocked(chronik.token).mockResolvedValue({
+        genesisInfo: {
+          decimals: 0,
+          tokenTicker: 'TEST',
+          tokenName: 'Test Token',
+        },
+      });
+
+      buyMainMock.mockResolvedValue({
+        success: true,
+        txid: 'tx-1',
+        actualAmount: 10,
+        networkFee: 1,
+        swapFee: 1,
+        totalFees: 2,
+        transactions: [
+          {
+            txid: 'tx-1',
+            amount: 10,
+            networkFee: 1,
+            swapFee: 1,
+            totalFees: 2,
+          },
+        ],
+      });
+
+      localStorage.getItem.mockImplementation((key) => {
+        if (key === 'swap_orders') {
+          return JSON.stringify({
+            'token1|addr1|100|rand1': {
+              remainingAmount: 10,
+              maxPrice: 100,
+              status: 'pending',
+              orderType: 'online',
+              transactions: [],
+            },
+          });
+        }
+
+        if (key === 'wallet_address') {
+          return 'addr1';
+        }
+
+        if (key === 'wallet_mnemonic') {
+          return 'seed phrase';
+        }
+
+        return null;
+      });
+
+      let rejectFirstFetch;
+      global.fetch = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((_resolve, reject) => {
+              rejectFirstFetch = reject;
+            }),
+        )
+        .mockRejectedValue(new Error('Network error'));
+
+      const resultPromise = processOrders();
+
+      await resultPromise;
+      expect(buyMainMock).toHaveBeenCalledTimes(1);
+
+      rejectFirstFetch?.(new Error('Network error'));
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(5000);
+      await Promise.resolve();
     });
   });
 });

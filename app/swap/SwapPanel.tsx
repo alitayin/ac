@@ -18,7 +18,7 @@ import { Power, CircleAlert, ArrowDownUp, ShieldAlert, Layout } from "lucide-rea
 import { useToast } from "@/hooks/use-toast";
 import { OrderList } from "@/components/ui/orderlist";
 import { ListingList } from "@/components/ui/listinglist";
-import { pushOrdersToServer } from '@/lib/Auto.js';
+import { queueOrdersSync } from '@/lib/Auto.js';
 import { main as createOfflineBuyTransaction } from '@/lib/offlinebuy.js';
 import Image from "next/image";
 import {
@@ -911,16 +911,18 @@ export function SwapPanel() {
       executeOrders().catch(() => {});
     }
     
-    try {
-      await pushOrdersToServer(existingOrders, ecashAddress);
-    } catch (error) {
-      console.error('❌ Failed to push orders to server:', error);
+    void queueOrdersSync(existingOrders, ecashAddress).then((synced) => {
+      if (synced) {
+        return;
+      }
+
+      console.error('❌ Failed to push orders to server');
       toast({
         title: "Warning",
         description: "Order saved locally but failed to sync with server. It will sync later.",
         variant: "destructive",
       });
-    }
+    });
     
     setSpendAmount('');
     resetBuyEstimateState('');
