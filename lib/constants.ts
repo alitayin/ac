@@ -1,4 +1,30 @@
-export const API_BASE_URL = 'https://api.agora.cash';
+const DEFAULT_API_BASE_URL = 'https://acws.alitayin.com';
+
+function normalizeBaseUrl(url: string) {
+  return url.replace(/\/+$/, '');
+}
+
+function resolveApiBaseUrl() {
+  return normalizeBaseUrl(
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL,
+  );
+}
+
+function resolveWebSocketUrl(apiBaseUrl: string) {
+  const configuredWsUrl = process.env.NEXT_PUBLIC_WS_SERVER_URL?.trim();
+  if (configuredWsUrl) {
+    return configuredWsUrl;
+  }
+
+  const wsBaseUrl = apiBaseUrl
+    .replace(/^https:\/\//, 'wss://')
+    .replace(/^http:\/\//, 'ws://');
+
+  return `${wsBaseUrl}/ws`;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
+export const WS_SERVER_URL = resolveWebSocketUrl(API_BASE_URL);
 export const API_ENDPOINTS = {
   TOKEN_ORDERS: (tokenId: string) => `/orders/token/${tokenId}`,
 } as const;

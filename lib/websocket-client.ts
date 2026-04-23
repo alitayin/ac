@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
+import { WS_SERVER_URL } from './constants';
 
-const WS_SERVER_URL = 'wss://api.agora.cash/ws';
 const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 const HEARTBEAT_INTERVAL = 30000;
@@ -204,5 +204,4 @@ export function disconnectAddress(address: string) {
     closeConnection();
   }
 }
-
 
