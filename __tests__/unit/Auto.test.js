@@ -287,16 +287,10 @@ describe('Auto.js', () => {
     });
 
     it('should push orders successfully', async () => {
-      global.fetch = vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          text: async () => JSON.stringify({ match: true }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          text: async () => JSON.stringify({ success: true }),
-        });
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ success: true }),
+      });
 
       const orders = {
         'token1|addr1|100|rand1': {
@@ -310,22 +304,7 @@ describe('Auto.js', () => {
       const result = await pushOrdersToServer(orders, 'addr1');
 
       expect(result).toBe(true);
-    });
-
-    it('should return true if hashes match (no push needed)', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify({ match: true }),
-      });
-
-      const orders = {
-        'token1|addr1|100|rand1': { status: 'pending', remainingAmount: 100 },
-      };
-
-      const result = await pushOrdersToServer(orders, 'addr1');
-
-      expect(result).toBe(true);
-      expect(global.fetch).toHaveBeenCalledTimes(1); // Only hash check, no push
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('should return true if no orders for address', async () => {
@@ -339,20 +318,26 @@ describe('Auto.js', () => {
     });
 
     it('should handle push failure', async () => {
-      global.fetch = vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          text: async () =>
-            JSON.stringify({
-              match: false,
-              diffKeys: ['token1|addr1|100|rand1'],
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          text: async () => JSON.stringify({ success: false }),
-        });
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ success: false }),
+      });
+
+      const orders = {
+        'token1|addr1|100|rand1': { status: 'pending', remainingAmount: 100 },
+      };
+
+      const result = await pushOrdersToServer(orders, 'addr1');
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle non-OK push responses', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ success: false, error: 'bad request' }),
+      });
 
       const orders = {
         'token1|addr1|100|rand1': { status: 'pending', remainingAmount: 100 },

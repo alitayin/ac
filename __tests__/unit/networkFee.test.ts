@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_BASE_NETWORK_FEE_XEC,
+  DEFAULT_PER_UTXO_FEE_XEC,
   estimateAgoraNetworkFeeXec,
   estimateNetworkFeeXecFromAddress,
   estimateNetworkFeeXecFromUtxos,
@@ -26,18 +27,19 @@ describe('networkFee', () => {
   });
 
   describe('estimateAgoraNetworkFeeXec', () => {
-    it('uses the shared default base fee for a single buyer input', () => {
+    it('uses the shared default base fee when no UTXOs are available', () => {
+      expect(DEFAULT_BASE_NETWORK_FEE_XEC).toBe(10);
       expect(estimateAgoraNetworkFeeXec()).toBe(DEFAULT_BASE_NETWORK_FEE_XEC);
-      expect(DEFAULT_BASE_NETWORK_FEE_XEC).toBeCloseTo(4.76, 2);
     });
 
-    it('adds incremental fee as more buyer inputs are required', () => {
-      expect(estimateAgoraNetworkFeeXec(2)).toBeGreaterThan(
-        estimateAgoraNetworkFeeXec(1),
-      );
-      expect(estimateAgoraNetworkFeeXec(5)).toBeGreaterThan(
-        estimateAgoraNetworkFeeXec(2),
-      );
+    it('adds 6 XEC per wallet UTXO', () => {
+      expect(DEFAULT_PER_UTXO_FEE_XEC).toBe(6);
+      expect(estimateAgoraNetworkFeeXec(1)).toBe(16);
+      expect(estimateAgoraNetworkFeeXec(5)).toBe(40);
+    });
+
+    it('never drops below the base fee', () => {
+      expect(estimateAgoraNetworkFeeXec(-1)).toBe(DEFAULT_BASE_NETWORK_FEE_XEC);
     });
   });
 
@@ -46,21 +48,21 @@ describe('networkFee', () => {
       expect(estimateNetworkFeeXecFromUtxos(utxosEmpty)).toEqual({
         fee: DEFAULT_BASE_NETWORK_FEE_XEC,
         utxoCount: 0,
-        selectedInputCount: 1,
+        selectedInputCount: 0,
       });
     });
 
-    it('selects only the minimal number of inputs needed for the reference spend', () => {
+    it('charges for every spendable wallet UTXO', () => {
       const result = estimateNetworkFeeXecFromUtxos(utxosThreeDistinct, 45);
 
       expect(result).toEqual({
-        fee: estimateAgoraNetworkFeeXec(2),
+        fee: estimateAgoraNetworkFeeXec(3),
         utxoCount: 3,
-        selectedInputCount: 2,
+        selectedInputCount: 3,
       });
     });
 
-    it('keeps all available inputs when the wallet cannot cover the reference spend', () => {
+    it('keeps the linear per-UTXO fee for larger wallets', () => {
       const result = estimateNetworkFeeXecFromUtxos(utxosFive, 100);
 
       expect(result).toEqual({
@@ -70,21 +72,21 @@ describe('networkFee', () => {
       });
     });
 
-    it('caps the estimate to the inputs actually needed even with many UTXOs', () => {
+    it('does not cap the fee when the wallet has many UTXOs', () => {
       const result = estimateNetworkFeeXecFromUtxos(utxosHundred, 100);
 
       expect(result.utxoCount).toBe(100);
-      expect(result.selectedInputCount).toBe(10);
-      expect(result.fee).toBe(estimateAgoraNetworkFeeXec(10));
+      expect(result.selectedInputCount).toBe(100);
+      expect(result.fee).toBe(estimateAgoraNetworkFeeXec(100));
     });
 
-    it('treats non-positive reference spend as a one-input estimate', () => {
+    it('ignores the reference spend and still uses the wallet UTXO count', () => {
       const result = estimateNetworkFeeXecFromUtxos(utxosTwo, 0);
 
       expect(result).toEqual({
-        fee: DEFAULT_BASE_NETWORK_FEE_XEC,
+        fee: estimateAgoraNetworkFeeXec(2),
         utxoCount: 2,
-        selectedInputCount: 1,
+        selectedInputCount: 2,
       });
     });
   });
@@ -102,13 +104,13 @@ describe('networkFee', () => {
       const result = await estimateNetworkFeeXecFromAddress('ecash:test123');
 
       expect(result).toEqual({
-        fee: DEFAULT_BASE_NETWORK_FEE_XEC,
+        fee: estimateAgoraNetworkFeeXec(1),
         utxoCount: 1,
         selectedInputCount: 1,
       });
     });
 
-    it('supports a custom reference spend when estimating from address', async () => {
+    it('keeps the same count-based fee even when a custom reference spend is passed', async () => {
       vi.mocked(chronik.fetchAddressXecUtxos).mockResolvedValue(
         utxosThreeDistinct as any,
       );
@@ -139,7 +141,7 @@ describe('networkFee', () => {
 
       expect(result.utxoCount).toBe(0);
       expect(result.fee).toBe(DEFAULT_BASE_NETWORK_FEE_XEC);
-      expect(result.selectedInputCount).toBe(1);
+      expect(result.selectedInputCount).toBe(0);
     });
   });
 });

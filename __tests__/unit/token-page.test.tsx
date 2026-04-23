@@ -122,7 +122,7 @@ vi.mock("@/lib/Auto.js", () => ({
 }))
 
 vi.mock("@/lib/networkFee", () => ({
-  DEFAULT_BASE_NETWORK_FEE_XEC: 4.76,
+  DEFAULT_BASE_NETWORK_FEE_XEC: 10,
   estimateNetworkFeeXecFromAddress: mockEstimateNetworkFeeXecFromAddress,
 }))
 
@@ -170,7 +170,7 @@ describe("TokenPage buy panel", () => {
       userTokens: {},
     })
     mockEstimateNetworkFeeXecFromAddress.mockResolvedValue({
-      fee: 4.76,
+      fee: 16,
       utxoCount: 1,
       selectedInputCount: 1,
     })
@@ -214,7 +214,7 @@ describe("TokenPage buy panel", () => {
     })
 
     expect(screen.getAllByText("Estimated fees")).toHaveLength(2)
-    expect(screen.getAllByText("4.76 XEC")).toHaveLength(2)
+    expect(screen.getAllByText("16.00 XEC")).toHaveLength(2)
     expect(screen.queryByText("Network fee")).not.toBeInTheDocument()
     expect(screen.queryByText("Total fees")).not.toBeInTheDocument()
     expect(screen.queryByText("22.00 XEC")).not.toBeInTheDocument()
@@ -227,11 +227,11 @@ describe("TokenPage buy panel", () => {
     fireEvent.change(getSpendInputs()[0], { target: { value: "200" } })
 
     await waitFor(() => {
-      expect(screen.getAllByDisplayValue("144.890000").length).toBeGreaterThan(0)
+      expect(screen.getAllByDisplayValue("139.270000").length).toBeGreaterThan(0)
     })
-    expect(screen.getAllByText("Average Price: 1.3098 XEC").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("Market + 30.98%").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("10.22 XEC").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Average Price: 1.2820 XEC").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Market + 28.20%").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("21.46 XEC").length).toBeGreaterThan(0)
   })
 
   it("shows the minimum fee error when the spend amount cannot cover buy fees", async () => {
@@ -243,7 +243,7 @@ describe("TokenPage buy panel", () => {
     await waitFor(() => {
       expect(
         screen.getAllByText(
-          "Amount must be greater than 10.22 XEC to cover the estimated swap and network fees",
+          "Amount must be greater than 21.46 XEC to cover the estimated swap and network fees",
         ).length,
       ).toBeGreaterThan(0)
     })
@@ -266,7 +266,7 @@ describe("TokenPage buy panel", () => {
       expect.objectContaining({
         title: "Insufficient balance",
         description:
-          "You need at least 10.22 XEC to cover the estimated swap and network fees",
+          "You need at least 15.46 XEC to cover the estimated swap and network fees",
         variant: "destructive",
       }),
     )
@@ -286,7 +286,7 @@ describe("TokenPage buy panel", () => {
 
     fireEvent.change(getSpendInputs()[0], { target: { value: "200" } })
     await waitFor(() => {
-      expect(screen.getAllByDisplayValue("144.890000").length).toBeGreaterThan(0)
+      expect(screen.getAllByDisplayValue("139.270000").length).toBeGreaterThan(0)
     })
 
     fireEvent.click(screen.getAllByRole("button", { name: "Swap🔥" })[0])
@@ -309,7 +309,7 @@ describe("TokenPage buy panel", () => {
       status: "pending",
       transactions: [],
     })
-    expect(storedOrders[orderKey].remainingAmount).toBeCloseTo(144.89, 6)
+    expect(storedOrders[orderKey].remainingAmount).toBeCloseTo(139.27, 6)
     expect(mockExecuteOrders).toHaveBeenCalledTimes(1)
     expect(mockQueueOrdersSync).toHaveBeenCalledWith(
       storedOrders,
