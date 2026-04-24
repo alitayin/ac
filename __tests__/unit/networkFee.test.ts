@@ -28,14 +28,14 @@ describe('networkFee', () => {
 
   describe('estimateAgoraNetworkFeeXec', () => {
     it('uses the shared default base fee when no UTXOs are available', () => {
-      expect(DEFAULT_BASE_NETWORK_FEE_XEC).toBe(10);
+      expect(DEFAULT_BASE_NETWORK_FEE_XEC).toBe(12);
       expect(estimateAgoraNetworkFeeXec()).toBe(DEFAULT_BASE_NETWORK_FEE_XEC);
     });
 
-    it('adds 6 XEC per wallet UTXO', () => {
-      expect(DEFAULT_PER_UTXO_FEE_XEC).toBe(6);
-      expect(estimateAgoraNetworkFeeXec(1)).toBe(16);
-      expect(estimateAgoraNetworkFeeXec(5)).toBe(40);
+    it('adds 7 XEC per wallet UTXO', () => {
+      expect(DEFAULT_PER_UTXO_FEE_XEC).toBe(7);
+      expect(estimateAgoraNetworkFeeXec(1)).toBe(19);
+      expect(estimateAgoraNetworkFeeXec(5)).toBe(47);
     });
 
     it('never drops below the base fee', () => {

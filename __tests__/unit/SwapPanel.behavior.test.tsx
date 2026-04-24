@@ -64,7 +64,7 @@ vi.mock("@/lib/chronik-transactions", () => ({
 }));
 
 vi.mock("@/lib/networkFee", () => ({
-  DEFAULT_BASE_NETWORK_FEE_XEC: 10,
+  DEFAULT_BASE_NETWORK_FEE_XEC: 12,
   estimateNetworkFeeXecFromAddress: estimateNetworkFeeMock,
 }));
 
@@ -207,7 +207,7 @@ describe("SwapPanel current behavior", () => {
     fetchAgoraOrderBookMock.mockResolvedValue(orderBookResponse);
     fetchAgoraTransactionsMock.mockResolvedValue([{ price: 0.18 }]);
     estimateNetworkFeeMock.mockResolvedValue({
-      fee: 10,
+      fee: 19,
       utxoCount: 1,
       selectedInputCount: 1,
     });
@@ -318,7 +318,7 @@ describe("SwapPanel current behavior", () => {
 
     expect(
       screen.getByText(
-        "Amount must be greater than 15.46 XEC to cover the estimated swap and network fees",
+        "Amount must be greater than 17.46 XEC to cover the estimated swap and network fees",
       ),
     ).toBeInTheDocument();
   });
