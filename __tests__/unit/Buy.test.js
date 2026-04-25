@@ -8,12 +8,28 @@ import {
 } from '@/lib/agora-swap-fee';
 
 vi.mock('ecash-quicksend', () => ({
-  buyAgoraTokens: vi.fn(),
+  fetchAgoraOffers: vi.fn(),
+  acceptAgoraOffer: vi.fn(),
 }));
+
+const buildOffer = (overrides = {}) => ({
+  offerType: 'PARTIAL',
+  pricePerToken: 0.0001,
+  totalTokenAmount: 1000000n,
+  totalXEC: 100,
+  offer: {},
+  ...overrides,
+});
 
 describe('Buy.js', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([]);
+    vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
+      success: false,
+      reason: 'NO_SUITABLE_OFFERS',
+      message: 'No matching offers found',
+    });
   });
 
   describe('main', () => {
@@ -26,39 +42,33 @@ describe('Buy.js', () => {
     });
 
     it('should successfully buy tokens with valid config', async () => {
-      const mockResult = {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer(),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
         success: true,
-        transactions: [
-          {
-            txid: 'abc123',
-            amount: 1000000n, // 1 token with 6 decimals
-            price: 0.0001, // XEC per atom
-            fee: 10,
-            swapFee: 5.46,
-          },
-        ],
+        txid: 'abc123',
+        actualAmount: 1000000n,
         totalXECPaid: 110,
-        totalSwapFeePaid: 5.46,
-      };
+        pricePerToken: 0.0001,
+        networkFee: 10,
+        swapFeePaid: 5.46,
+      });
 
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
+      const result = await main({
         tokenId: 'token123',
         tokenDecimals: 6,
-        amount: 1, // 1 token
-        maxPrice: 100, // 100 XEC per token
+        amount: 1,
+        maxPrice: 100,
         buyerAddress: 'ecash:test',
         buyerMnemonic: 'test mnemonic words here',
-      };
-
-      const result = await main(config);
+      });
 
       expect(result.success).toBe(true);
       expect(result.txid).toBe('abc123');
-      expect(result.actualAmount).toBe(1); // 1000000 / 10^6
+      expect(result.actualAmount).toBe(1);
       expect(result.totalXECPaid).toBe(110);
-      expect(result.pricePerToken).toBe(100); // 0.0001 * 10^6
+      expect(result.pricePerToken).toBe(100);
       expect(result.networkFee).toBe(10);
       expect(result.swapFee).toBe(5.46);
       expect(result.totalFees).toBe(15.46);
@@ -72,102 +82,72 @@ describe('Buy.js', () => {
         }),
       ]);
       expect(result.explorerLink).toBe('https://explorer.e.cash/tx/abc123');
-      expect(ecashQuicksend.buyAgoraTokens).toHaveBeenCalledWith(
-        expect.objectContaining({
-          feeOutput: {
-            address: AGORA_SWAP_FEE_ADDRESS,
-            feeBps: AGORA_SWAP_FEE_BPS,
-            minSats: AGORA_SWAP_FEE_MIN_SATS,
-          },
-        }),
-      );
     });
 
     it('should handle token with 0 decimals', async () => {
-      const mockResult = {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          pricePerToken: 1,
+          totalTokenAmount: 100n,
+          totalXEC: 100,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
         success: true,
-        transactions: [
-          {
-            txid: 'def456',
-            amount: 100n,
-            price: 1,
-            fee: 5,
-          },
-        ],
+        txid: 'def456',
+        actualAmount: 100n,
         totalXECPaid: 105,
-      };
+        pricePerToken: 1,
+        networkFee: 5,
+        swapFeePaid: 0,
+      });
 
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
+      const result = await main({
         tokenId: 'token456',
         tokenDecimals: 0,
         amount: 100,
         maxPrice: 1,
         buyerAddress: 'ecash:test',
         buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
+      });
 
       expect(result.success).toBe(true);
       expect(result.actualAmount).toBe(100);
       expect(result.pricePerToken).toBe(1);
     });
 
-    it('should handle token with 8 decimals', async () => {
-      const mockResult = {
-        success: true,
-        transactions: [
-          {
-            txid: 'ghi789',
-            amount: 100000000n, // 1 token with 8 decimals
-            price: 0.00000001, // XEC per atom
-            fee: 15,
-          },
-        ],
-        totalXECPaid: 16,
-      };
-
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
-        tokenId: 'token789',
-        tokenDecimals: 8,
-        amount: 1,
-        maxPrice: 1,
-        buyerAddress: 'ecash:test',
-        buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
-
-      expect(result.success).toBe(true);
-      expect(result.actualAmount).toBe(1);
-    });
-
     it('should aggregate multi-transaction fills and fee totals', async () => {
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue({
-        success: true,
-        transactions: [
-          {
-            txid: 'tx-1',
-            amount: 200n,
-            price: 1.5,
-            fee: 10,
-            swapFee: 5.46,
-          },
-          {
-            txid: 'tx-2',
-            amount: 300n,
-            price: 1.4,
-            fee: 12,
-            swapFee: 5.46,
-          },
-        ],
-        totalXECPaid: 732.92,
-        totalSwapFeePaid: 10.92,
-      });
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          pricePerToken: 1.5,
+          totalTokenAmount: 200n,
+          totalXEC: 300,
+        }),
+        buildOffer({
+          pricePerToken: 1.4,
+          totalTokenAmount: 300n,
+          totalXEC: 420,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer)
+        .mockResolvedValueOnce({
+          success: true,
+          txid: 'tx-1',
+          actualAmount: 200n,
+          totalXECPaid: 315.46,
+          pricePerToken: 1.5,
+          networkFee: 10,
+          swapFeePaid: 5.46,
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          txid: 'tx-2',
+          actualAmount: 300n,
+          totalXECPaid: 417.46,
+          pricePerToken: 1.35,
+          networkFee: 12,
+          swapFeePaid: 5.46,
+        });
 
       const result = await main({
         tokenId: 'token-aggregate',
@@ -185,154 +165,133 @@ describe('Buy.js', () => {
       expect(result.transactions).toHaveLength(2);
     });
 
-    it('should handle insufficient balance error', async () => {
-      const mockResult = {
+    it('should surface acceptAgoraOffer failure reason when matched offers cannot execute', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer(),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
         success: false,
-        message: 'Insufficient balance to complete transaction',
-        skippedOffers: [],
-      };
+        reason: 'INSUFFICIENT_BALANCE_WITH_FEE',
+        message: 'Need at least 11365840 sats total including network fee, have 11365834 sats',
+      });
 
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
+      const result = await main({
         tokenId: 'token123',
         tokenDecimals: 6,
-        amount: 1000,
+        amount: 1,
         maxPrice: 100,
         buyerAddress: 'ecash:test',
         buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
+      });
 
       expect(result.success).toBe(false);
-      expect(result.reason).toBe('INSUFFICIENT_BALANCE');
-      expect(result.message).toContain('balance');
+      expect(result.reason).toBe('INSUFFICIENT_BALANCE_WITH_FEE');
+      expect(result.message).toContain('Need at least');
+      expect(result.details.skippedOffers).toEqual([
+        expect.objectContaining({
+          reason: 'INSUFFICIENT_BALANCE_WITH_FEE',
+        }),
+      ]);
     });
 
-    it('should handle no suitable offers error', async () => {
-      const mockResult = {
-        success: false,
-        message: 'No offers found matching criteria',
-        skippedOffers: [{ reason: 'price too high' }],
-      };
+    it('should handle no suitable offers error when no offers match the price', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([]);
 
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
+      const result = await main({
         tokenId: 'token123',
         tokenDecimals: 6,
         amount: 1,
         maxPrice: 0.01,
         buyerAddress: 'ecash:test',
         buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
+      });
 
       expect(result.success).toBe(false);
       expect(result.reason).toBe('NO_SUITABLE_OFFERS');
-      expect(result.details.skippedOffers).toHaveLength(1);
+      expect(result.details.skippedOffers).toHaveLength(0);
+      expect(result.details.matchingOffersCount).toBe(0);
     });
 
-    it('should handle empty transactions array', async () => {
-      const mockResult = {
+    it('should include matching offer diagnostics for zero-fill failures', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          offerType: 'ONE_TO_ONE',
+          pricePerToken: 0.01,
+          totalTokenAmount: 5000n,
+          totalXEC: 50,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
         success: false,
-        transactions: [],
-        message: 'No transactions created',
-      };
+        reason: 'ONE_TO_ONE_REQUIRED',
+        message: 'This offer requires buying the full amount (ONE_TO_ONE)',
+      });
 
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
-        tokenId: 'token123',
-        tokenDecimals: 6,
-        amount: 1,
-        maxPrice: 100,
+      const result = await main({
+        tokenId: 'token-diagnostic',
+        tokenDecimals: 2,
+        amount: 25,
+        maxPrice: 1,
         buyerAddress: 'ecash:test',
         buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
+      });
 
       expect(result.success).toBe(false);
-      expect(result.reason).toBe('NO_SUITABLE_OFFERS');
-    });
-
-    it('should handle exception with insufficient balance message', async () => {
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockRejectedValue(
-        new Error('Insufficient XEC balance for transaction')
-      );
-
-      const config = {
-        tokenId: 'token123',
-        tokenDecimals: 6,
-        amount: 1,
-        maxPrice: 100,
-        buyerAddress: 'ecash:test',
-        buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
-
-      expect(result.success).toBe(false);
-      expect(result.reason).toBe('INSUFFICIENT_BALANCE_WITH_FEE');
-      expect(result.message).toContain('Insufficient');
-    });
-
-    it('should handle generic execution error', async () => {
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockRejectedValue(
-        new Error('Network timeout')
-      );
-
-      const config = {
-        tokenId: 'token123',
-        tokenDecimals: 6,
-        amount: 1,
-        maxPrice: 100,
-        buyerAddress: 'ecash:test',
-        buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
-
-      expect(result.success).toBe(false);
-      expect(result.reason).toBe('EXECUTION_ERROR');
-      expect(result.message).toBe('Network timeout');
-    });
-
-    it('should convert amount to atoms correctly', async () => {
-      const mockResult = {
-        success: true,
-        transactions: [
-          {
-            txid: 'test',
-            amount: 1234567n,
-            price: 0.0001,
-            fee: 10,
-          },
-        ],
-        totalXECPaid: 133.4567,
-      };
-
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
-        tokenId: 'token123',
-        tokenDecimals: 6,
-        amount: 1.234567, // Fractional amount
-        maxPrice: 100,
-        buyerAddress: 'ecash:test',
-        buyerMnemonic: 'test mnemonic',
-      };
-
-      await main(config);
-
-      expect(ecashQuicksend.buyAgoraTokens).toHaveBeenCalledWith(
+      expect(result.reason).toBe('ONE_TO_ONE_REQUIRED');
+      expect(result.details).toEqual(
         expect.objectContaining({
-          tokenId: 'token123',
-          amount: 1234567n, // Should be converted to atoms
-          maxPrice: 0.0001, // 100 / 10^6
+          matchingOffersCount: 1,
+          matchingOffers: [
+            expect.objectContaining({
+              offerType: 'ONE_TO_ONE',
+              compatible: false,
+              incompatibleReason: 'ONE_TO_ONE_REQUIRES_FULL_AMOUNT',
+              totalAmount: 50,
+            }),
+          ],
+          skippedOffers: [
+            expect.objectContaining({
+              reason: 'ONE_TO_ONE_REQUIRED',
+            }),
+          ],
+        }),
+      );
+    });
+
+    it('should convert amount to atoms correctly for acceptAgoraOffer', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          totalTokenAmount: 1234567n,
+          totalXEC: 123.4567,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
+        success: true,
+        txid: 'test',
+        actualAmount: 1234567n,
+        totalXECPaid: 133.4567,
+        pricePerToken: 0.0001,
+        networkFee: 10,
+        swapFeePaid: 0,
+      });
+
+      await main({
+        tokenId: 'token123',
+        tokenDecimals: 6,
+        amount: 1.234567,
+        maxPrice: 100,
+        buyerAddress: 'ecash:test',
+        buyerMnemonic: 'test mnemonic',
+      });
+
+      expect(ecashQuicksend.fetchAgoraOffers).toHaveBeenCalledWith({
+        tokenId: 'token123',
+        maxPrice: 0.0001,
+      });
+      expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          amount: 1234567n,
           mnemonic: 'test mnemonic',
           feeOutput: {
             address: AGORA_SWAP_FEE_ADDRESS,
@@ -344,79 +303,65 @@ describe('Buy.js', () => {
     });
 
     it('should handle missing tokenDecimals (default to 0)', async () => {
-      const mockResult = {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          pricePerToken: 1,
+          totalTokenAmount: 10n,
+          totalXEC: 10,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
         success: true,
-        transactions: [
-          {
-            txid: 'test',
-            amount: 10n,
-            price: 1,
-            fee: 5,
-          },
-        ],
+        txid: 'test',
+        actualAmount: 10n,
         totalXECPaid: 15,
-      };
+        pricePerToken: 1,
+        networkFee: 5,
+        swapFeePaid: 0,
+      });
 
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
+      const result = await main({
         tokenId: 'token123',
         amount: 10,
         maxPrice: 1,
         buyerAddress: 'ecash:test',
         buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
+      });
 
       expect(result.success).toBe(true);
       expect(result.actualAmount).toBe(10);
     });
 
-    it('should handle very large amounts', async () => {
-      const mockResult = {
-        success: true,
-        transactions: [
-          {
-            txid: 'test',
-            amount: 1000000000000n, // 1 million tokens with 6 decimals
-            price: 0.0001,
-            fee: 20,
-          },
-        ],
-        totalXECPaid: 100000020,
-      };
+    it('should handle generic execution error', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockRejectedValue(
+        new Error('Network timeout'),
+      );
 
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockResolvedValue(mockResult);
-
-      const config = {
-        tokenId: 'token123',
-        tokenDecimals: 6,
-        amount: 1000000, // 1 million tokens
-        maxPrice: 100,
-        buyerAddress: 'ecash:test',
-        buyerMnemonic: 'test mnemonic',
-      };
-
-      const result = await main(config);
-
-      expect(result.success).toBe(true);
-      expect(result.actualAmount).toBe(1000000);
-    });
-
-    it('should handle error without message property', async () => {
-      vi.mocked(ecashQuicksend.buyAgoraTokens).mockRejectedValue('String error');
-
-      const config = {
+      const result = await main({
         tokenId: 'token123',
         tokenDecimals: 6,
         amount: 1,
         maxPrice: 100,
         buyerAddress: 'ecash:test',
         buyerMnemonic: 'test mnemonic',
-      };
+      });
 
-      const result = await main(config);
+      expect(result.success).toBe(false);
+      expect(result.reason).toBe('EXECUTION_ERROR');
+      expect(result.message).toBe('Network timeout');
+    });
+
+    it('should handle error without message property', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockRejectedValue('String error');
+
+      const result = await main({
+        tokenId: 'token123',
+        tokenDecimals: 6,
+        amount: 1,
+        maxPrice: 100,
+        buyerAddress: 'ecash:test',
+        buyerMnemonic: 'test mnemonic',
+      });
 
       expect(result.success).toBe(false);
       expect(result.reason).toBe('EXECUTION_ERROR');

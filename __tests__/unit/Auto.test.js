@@ -362,6 +362,72 @@ describe('Auto.js', () => {
   });
 
   describe('processOrders', () => {
+    it('logs detailed failure info when a buy attempt returns success=false', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { chronik } = await import('@/lib/chronik.ts');
+
+      vi.mocked(chronik.token).mockResolvedValue({
+        genesisInfo: {
+          decimals: 0,
+          tokenTicker: 'TEST',
+          tokenName: 'Test Token',
+        },
+      });
+
+      buyMainMock.mockResolvedValue({
+        success: false,
+        reason: 'INSUFFICIENT_BALANCE_WITH_FEE',
+        message: 'Need at least 11365840 sats total including network fee, have 11365834 sats',
+        details: {
+          shortfall: 6n,
+        },
+      });
+
+      localStorage.getItem.mockImplementation((key) => {
+        if (key === 'swap_orders') {
+          return JSON.stringify({
+            'token1|addr1|100|rand1': {
+              remainingAmount: 10,
+              maxPrice: 100,
+              status: 'pending',
+              orderType: 'online',
+              transactions: [],
+            },
+          });
+        }
+
+        if (key === 'wallet_address') {
+          return 'addr1';
+        }
+
+        if (key === 'wallet_mnemonic') {
+          return 'seed phrase';
+        }
+
+        return null;
+      });
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ success: true }),
+      });
+
+      await processOrders();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[Auto.js] Buy execution failed',
+        expect.objectContaining({
+          orderKey: 'token1|addr1|100|rand1',
+          tokenId: 'token1',
+          requestedAmount: 10,
+          requestedMaxPrice: 100,
+          executionMaxPrice: 100.2,
+          reason: 'INSUFFICIENT_BALANCE_WITH_FEE',
+          message: 'Need at least 11365840 sats total including network fee, have 11365834 sats',
+        }),
+      );
+    });
+
     it('does not wait for server sync requests before releasing the execution promise', async () => {
       vi.useFakeTimers();
 

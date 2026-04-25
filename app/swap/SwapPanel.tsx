@@ -358,21 +358,24 @@ export function SwapPanel() {
     setBuyErrorMessage('');
   };
 
-  const calculateLimitReceiveAmount = (inputAmount: string) => {
+  const calculateLimitReceiveAmount = (
+    inputAmount: string,
+    feeXec: number = networkFee,
+  ) => {
     if (!inputAmount || isNaN(Number(inputAmount))) {
       resetBuyEstimateState('');
-      return;
+      return { ok: false as const };
     }
 
     if (!selectedToken.id || tokenPrice <= 0) {
       resetBuyEstimateState('0');
-      return;
+      return { ok: false as const };
     }
 
     let spend = parseFloat(inputAmount);
     if (isNaN(spend)) {
       resetBuyEstimateState('');
-      return;
+      return { ok: false as const };
     }
 
     const maxSpend = parseFloat(balance);
@@ -381,10 +384,10 @@ export function SwapPanel() {
       setSpendAmount(maxSpend.toFixed(2));
     }
 
-    const availableSpend = estimateAgoraTokenCostFromBudget(spend, networkFee);
+    const availableSpend = estimateAgoraTokenCostFromBudget(spend, feeXec);
     if (availableSpend <= 0) {
       resetBuyEstimateState('0');
-      return;
+      return { ok: false as const };
     }
 
     const receive = availableSpend / tokenPrice;
@@ -397,25 +400,35 @@ export function SwapPanel() {
     setReceiveAmount(truncatedReceive.toString());
 
     calculateAverageExecutionPrice(truncatedReceive, availableSpend, selectedToken.id);
+
+    return {
+      ok: true as const,
+      availableSpend,
+      receiveAmount: truncatedReceive,
+      spendAmount: spend,
+    };
   };
 
-  const calculateSweepReceiveAmount = useCallback(async (inputAmount: string) => {
+  const calculateSweepReceiveAmount = useCallback(async (
+    inputAmount: string,
+    feeXec: number = networkFee,
+  ) => {
     const requestId = ++sweepCalculationRequestRef.current;
 
     if (!inputAmount || isNaN(Number(inputAmount))) {
       resetBuyEstimateState('');
-      return;
+      return null;
     }
 
     if (!selectedToken.id) {
       resetBuyEstimateState('0');
-      return;
+      return null;
     }
 
     let spend = parseFloat(inputAmount);
     if (isNaN(spend)) {
       resetBuyEstimateState('');
-      return;
+      return null;
     }
 
     const maxSpend = parseFloat(balance);
@@ -431,7 +444,7 @@ export function SwapPanel() {
 
     const sweepResult = calculateAgoraSweepBuy({
       spendAmountXec: spend,
-      networkFeeXec: networkFee,
+      networkFeeXec: feeXec,
       orderBook: latestOrderBook,
     });
 
@@ -445,7 +458,7 @@ export function SwapPanel() {
 
       if (sweepResult.reason === "INSUFFICIENT_BUDGET") {
         setBuyErrorMessage(
-          `Amount must be greater than ${getMinimumAgoraBuyFeesXec(networkFee).toFixed(2)} XEC to cover the estimated swap and network fees`,
+          `Amount must be greater than ${getMinimumAgoraBuyFeesXec(feeXec).toFixed(2)} XEC to cover the estimated swap and network fees`,
         );
       } else if (sweepResult.reason === "EXCEEDS_AVAILABLE_AMOUNT") {
         setBuyErrorMessage(
@@ -454,7 +467,7 @@ export function SwapPanel() {
       } else {
         setBuyErrorMessage("No matching sell orders available");
       }
-      return;
+      return sweepResult;
     }
 
     setBuyErrorMessage('');
@@ -465,6 +478,7 @@ export function SwapPanel() {
     setSweepMarketPrice(sweepResult.marketPrice);
     setSweepMaxPrice(sweepResult.maxPrice);
     setSweepQuoteVersion((currentVersion) => currentVersion + 1);
+    return sweepResult;
   }, [balance, fetchOrderBookCached, networkFee, selectedToken.id]);
 
   const calculateReceiveAmount = (inputAmount: string) => {
@@ -553,6 +567,15 @@ export function SwapPanel() {
       return DEFAULT_BASE_NETWORK_FEE_XEC;
     }
   };
+
+  useEffect(() => {
+    if (!isWalletConnected || !ecashAddress) {
+      setNetworkFee(DEFAULT_BASE_NETWORK_FEE_XEC);
+      return;
+    }
+
+    void calculateNetworkFeeFromUtxos();
+  }, [ecashAddress, isWalletConnected]);
 
   const getTokenPrice = async (tokenId: string) => {
     if (!tokenId) {
@@ -953,6 +976,45 @@ export function SwapPanel() {
       return;
     }
     const currentFee = await calculateNetworkFeeFromUtxos();
+    let latestReceiveAmount = parseFloat(receiveAmount || '0');
+    let latestMaxPrice = effectiveBuyMaxPrice;
+
+    if (spendAmount && parseFloat(spendAmount) > 0) {
+      if (buyMode === "sweep") {
+        const refreshedSweepQuote = await calculateSweepReceiveAmount(
+          spendAmount,
+          currentFee,
+        );
+
+        if (!refreshedSweepQuote?.ok) {
+          toast({
+            title: "Quote updated",
+            description: "The latest network fee changed your available buy amount. Please review the updated quote.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        latestReceiveAmount = refreshedSweepQuote.receiveAmount;
+        latestMaxPrice = refreshedSweepQuote.maxPrice;
+      } else {
+        const refreshedLimitQuote = calculateLimitReceiveAmount(
+          spendAmount,
+          currentFee,
+        );
+
+        if (!refreshedLimitQuote?.ok) {
+          toast({
+            title: "Quote updated",
+            description: "The latest network fee changed your available buy amount. Please review the updated quote.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        latestReceiveAmount = refreshedLimitQuote.receiveAmount;
+      }
+    }
     
     if (!isOrderValid) {
       toast({
@@ -965,8 +1027,17 @@ export function SwapPanel() {
       return;
     }
     
-    const tokenCost = effectiveBuyMaxPrice * parseFloat(receiveAmount || '0');
+    const tokenCost = latestMaxPrice * latestReceiveAmount;
     const totalAmount = calculateAgoraFeeSummary(tokenCost, currentFee).totalCostXec;
+    const currentBalance = parseFloat(balance || '0');
+    if (Number.isFinite(currentBalance) && totalAmount > currentBalance) {
+      toast({
+        title: "Insufficient balance",
+        description: `Required: ${totalAmount.toFixed(2)} XEC, Available: ${currentBalance.toFixed(2)} XEC`,
+        variant: "destructive",
+      });
+      return;
+    }
     if (totalAmount < MIN_ORDER_TOTAL_XEC) {
       toast({
         title: "Order amount too small",
