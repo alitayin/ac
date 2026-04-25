@@ -6,6 +6,18 @@
 
 ## 2026-04-24
 
+### 🎉 v4.1.8 发布
+
+**主要改动：**
+- 将订单服务与 WebSocket 默认地址切换到 `acws.alitayin.com`，并兼容旧的 `api.agora.cash` 环境变量覆写
+- 强化 `Auto.js` 订单同步链路，补充请求失败、响应解析失败和服务端拒绝时的日志与保护逻辑
+- 将 Agora 买单 `network fee` 估算改为按可花 XEC UTXO 数量计算，当前公式为 `12 + 7 * UTXO 数量`
+
+**验证：**
+- ✅ `npm test -- --run __tests__/unit/Auto.test.js __tests__/unit/networkFee.test.ts __tests__/unit/token-page.test.tsx __tests__/unit/SwapPanel.behavior.test.tsx` 通过
+
+---
+
 ### 🎉 v4.1.7 发布
 
 **主要改动：**
