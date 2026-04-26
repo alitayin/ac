@@ -318,7 +318,7 @@ describe("SwapPanel current behavior", () => {
 
     expect(
       screen.getByText(
-        "Amount must be greater than 17.46 XEC to cover the estimated swap and network fees",
+        "Amount must be greater than 24.46 XEC to cover the estimated swap and network fees",
       ),
     ).toBeInTheDocument();
   });
