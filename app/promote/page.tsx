@@ -768,14 +768,20 @@ export default function PromotePage() {
       ),
     [messagePlan.estimates],
   );
+  const tokenPromoteFeeRecipientCount = distributionPlan.length;
+  const messagePromoteFeeRecipientCount = recipients.length;
 
   const tokenPromoteFeeSats = useMemo(
-    () => calculatePromoteFeeSats("token-airdrop"),
-    [],
+    () => calculatePromoteFeeSats("token-airdrop", tokenPromoteFeeRecipientCount),
+    [tokenPromoteFeeRecipientCount],
   );
   const messagePromoteFeeSats = useMemo(
-    () => calculatePromoteFeeSats("platform-message"),
-    [],
+    () =>
+      calculatePromoteFeeSats(
+        "platform-message",
+        messagePromoteFeeRecipientCount,
+      ),
+    [messagePromoteFeeRecipientCount],
   );
   const totalMessageSpendSats = messageEstimatedRequiredSats + messagePromoteFeeSats;
   const totalTokenSpendSats = tokenEstimatedRequiredSats + tokenPromoteFeeSats;
@@ -956,20 +962,23 @@ export default function PromotePage() {
     setFeeTxId("");
   }, []);
 
-  const sendPromoteFee = useCallback(async (mode: PromoteMode) => {
-    const feeRecipients = getPromoteFeeRecipients(mode);
+  const sendPromoteFee = useCallback(
+    async (mode: PromoteMode, recipientCount: number) => {
+      const feeRecipients = getPromoteFeeRecipients(mode, recipientCount);
 
-    if (!mnemonic || feeRecipients.length === 0) {
-      return "";
-    }
+      if (!mnemonic || feeRecipients.length === 0) {
+        return "";
+      }
 
-    const feeResult = await quick.sendXec(feeRecipients, {
-      mnemonic,
-      utxoStrategy: "minimal",
-    });
+      const feeResult = await quick.sendXec(feeRecipients, {
+        mnemonic,
+        utxoStrategy: "minimal",
+      });
 
-    return feeResult.txid;
-  }, [mnemonic]);
+      return feeResult.txid;
+    },
+    [mnemonic],
+  );
 
   const handleSendTokenAirdrop = useCallback(async () => {
     if (!mnemonic || tokenSendDisabledReason) {
@@ -982,7 +991,10 @@ export default function PromotePage() {
     try {
       let promoteFeeTxid = "";
       if (PROMOTE_FEE_CONFIG.enabled) {
-        promoteFeeTxid = await sendPromoteFee("token-airdrop");
+        promoteFeeTxid = await sendPromoteFee(
+          "token-airdrop",
+          distributionPlan.length,
+        );
         if (promoteFeeTxid) {
           setFeeTxId(promoteFeeTxid);
         }
@@ -1055,6 +1067,7 @@ export default function PromotePage() {
     resetExecutionState,
     sendPromoteFee,
     toast,
+    distributionPlan.length,
     tokenBatches,
     tokenSendDisabledReason,
     totalAirdropAtoms,
@@ -1071,7 +1084,10 @@ export default function PromotePage() {
     try {
       let promoteFeeTxid = "";
       if (PROMOTE_FEE_CONFIG.enabled) {
-        promoteFeeTxid = await sendPromoteFee("platform-message");
+        promoteFeeTxid = await sendPromoteFee(
+          "platform-message",
+          recipients.length,
+        );
         if (promoteFeeTxid) {
           setFeeTxId(promoteFeeTxid);
         }
@@ -1675,13 +1691,30 @@ export default function PromotePage() {
                     <Alert>
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>Skipping unsupported recipients</AlertTitle>
-                      <AlertDescription>
-                        {unsupportedRecipients.length.toLocaleString()} selected address
-                        {unsupportedRecipients.length === 1 ? "" : "es"} use P2SH scripts.
-                        Promote currently sends only to P2PKH addresses, so these will not be included.
-                        {unsupportedRecipientPreview.length > 0
-                          ? ` Example${unsupportedRecipientPreview.length === 1 ? "" : "s"}: ${unsupportedRecipientPreview.map((recipient) => recipient.address).join(", ")}`
-                          : ""}
+                      <AlertDescription className="space-y-1.5">
+                        <p>
+                          {unsupportedRecipients.length.toLocaleString()} selected address
+                          {unsupportedRecipients.length === 1 ? "" : "es"} use P2SH scripts.
+                        </p>
+                        <p>
+                          Promote currently sends only to P2PKH addresses, so these
+                          will not be included.
+                        </p>
+                        {unsupportedRecipientPreview.length > 0 ? (
+                          <div className="space-y-1">
+                            <p>
+                              Example{unsupportedRecipientPreview.length === 1 ? "" : "s"}:
+                            </p>
+                            {unsupportedRecipientPreview.map((recipient) => (
+                              <div
+                                key={recipient.address}
+                                className="break-all font-mono text-xs text-muted-foreground"
+                              >
+                                {recipient.address}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </AlertDescription>
                     </Alert>
                   ) : null}

@@ -122,8 +122,10 @@ describe("promote utils", () => {
   });
 
   it("applies the active promote fee by mode", () => {
-    expect(calculatePromoteFeeSats("token-airdrop")).toBe(10_000n);
-    expect(calculatePromoteFeeSats("platform-message")).toBe(10_000n);
+    expect(calculatePromoteFeeSats("token-airdrop", 1)).toBe(10_000n);
+    expect(calculatePromoteFeeSats("platform-message", 1)).toBe(10_000n);
+    expect(calculatePromoteFeeSats("token-airdrop", 3)).toBe(30_000n);
+    expect(calculatePromoteFeeSats("platform-message", 0)).toBe(0n);
 
     const enabledConfig = {
       enabled: true,
@@ -134,12 +136,12 @@ describe("promote utils", () => {
       messageBroadcastLabel: "test message",
     } as const;
 
-    expect(calculatePromoteFeeSats("token-airdrop", enabledConfig)).toBe(200n);
-    expect(calculatePromoteFeeSats("platform-message", enabledConfig)).toBe(300n);
-    expect(getPromoteFeeRecipients("platform-message", enabledConfig)).toEqual([
+    expect(calculatePromoteFeeSats("token-airdrop", 4, enabledConfig)).toBe(800n);
+    expect(calculatePromoteFeeSats("platform-message", 3, enabledConfig)).toBe(900n);
+    expect(getPromoteFeeRecipients("platform-message", 3, enabledConfig)).toEqual([
       {
         address: enabledConfig.address,
-        amount: 300n,
+        amount: 900n,
       },
     ]);
   });

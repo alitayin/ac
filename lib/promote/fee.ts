@@ -10,21 +10,29 @@ export const PROMOTE_FEE_CONFIG: PromoteFeeConfig = {
   address: "ecash:qpaw7v7sfvlsm4px33saggr63jgsalsx4q49m7n6v4",
   tokenAirdropSats: 10_000n,
   messageBroadcastSats: 10_000n,
-  tokenAirdropLabel: "100 XEC per token send",
-  messageBroadcastLabel: "100 XEC per message send",
+  tokenAirdropLabel: "100 XEC per token recipient",
+  messageBroadcastLabel: "100 XEC per message recipient",
 };
 
 export const calculatePromoteFeeSats = (
   mode: PromoteMode,
+  recipientCount: number,
   config: PromoteFeeConfig = PROMOTE_FEE_CONFIG,
 ): bigint => {
   if (!config.enabled) {
     return 0n;
   }
 
-  return mode === "token-airdrop"
-    ? config.tokenAirdropSats
-    : config.messageBroadcastSats;
+  if (recipientCount <= 0) {
+    return 0n;
+  }
+
+  const feePerRecipient =
+    mode === "token-airdrop"
+      ? config.tokenAirdropSats
+      : config.messageBroadcastSats;
+
+  return feePerRecipient * BigInt(recipientCount);
 };
 
 export const getPromoteFeeLabel = (
@@ -38,9 +46,10 @@ export const getPromoteFeeLabel = (
 
 export const getPromoteFeeRecipients = (
   mode: PromoteMode,
+  recipientCount: number,
   config: PromoteFeeConfig = PROMOTE_FEE_CONFIG,
 ): SendRecipient[] => {
-  const feeSats = calculatePromoteFeeSats(mode, config);
+  const feeSats = calculatePromoteFeeSats(mode, recipientCount, config);
 
   if (feeSats === 0n) {
     return [];
