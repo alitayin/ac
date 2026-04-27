@@ -38,8 +38,10 @@ const TX_OVERHEAD_BYTES = 10;
 
 export const SATS_PER_XEC = 100n;
 export const DUST_SATS = DEFAULT_DUST_SATS;
-export const SLP_MAX_BATCH_SIZE = 19;
-export const ALP_MAX_BATCH_SIZE = 29;
+// Reserve one token-bearing output for change so Promote stays within
+// standard policy limits for typical token sends.
+export const SLP_MAX_BATCH_SIZE = 18;
+export const ALP_MAX_BATCH_SIZE = 28;
 
 const formatBigIntWithCommas = (value: bigint): string => {
   const sign = value < 0n ? "-" : "";
@@ -131,6 +133,36 @@ export const parseDecimalToAtoms = (
 
 export const normalizeAddress = (value: string): string =>
   Address.parse(value.trim()).cash().withPrefix("ecash").toString();
+
+export const isP2pkhAddress = (value: string): boolean =>
+  Address.parse(value.trim()).type === "p2pkh";
+
+export const partitionP2pkhRecipients = <T extends { address: string }>(
+  values: T[],
+): {
+  supported: T[];
+  unsupported: T[];
+} => {
+  const supported: T[] = [];
+  const unsupported: T[] = [];
+
+  for (const value of values) {
+    try {
+      if (isP2pkhAddress(value.address)) {
+        supported.push(value);
+      } else {
+        unsupported.push(value);
+      }
+    } catch {
+      unsupported.push(value);
+    }
+  }
+
+  return {
+    supported,
+    unsupported,
+  };
+};
 
 export const parseManualAddresses = (value: string): ManualAddressParseResult => {
   const parts = value

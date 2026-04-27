@@ -9,6 +9,7 @@ import {
   getMaxTokenBatchSize,
   mergeRecipients,
   parseManualAddresses,
+  partitionP2pkhRecipients,
   validateMessageInput,
 } from "@/lib/promote/utils";
 
@@ -82,9 +83,37 @@ describe("promote utils", () => {
   });
 
   it("returns protocol-aware token batch sizes", () => {
-    expect(getMaxTokenBatchSize("SLP")).toBe(SLP_MAX_BATCH_SIZE);
-    expect(getMaxTokenBatchSize("ALP")).toBe(ALP_MAX_BATCH_SIZE);
-    expect(getMaxTokenBatchSize("UNKNOWN")).toBe(SLP_MAX_BATCH_SIZE);
+    expect(SLP_MAX_BATCH_SIZE).toBe(18);
+    expect(ALP_MAX_BATCH_SIZE).toBe(28);
+    expect(getMaxTokenBatchSize("SLP")).toBe(18);
+    expect(getMaxTokenBatchSize("ALP")).toBe(28);
+    expect(getMaxTokenBatchSize("UNKNOWN")).toBe(18);
+  });
+
+  it("separates P2PKH recipients from unsupported P2SH recipients", () => {
+    const recipients = [
+      {
+        address: "ecash:qzey4jkh2x23q2zngq50z8uxgw0ek4xazgh65we6y0",
+        sources: ["holders"] as const,
+        holdingAtoms: 50n,
+      },
+      {
+        address: "ecash:prt9avp9jlcc9u0zhpagyuct047prywa55t9pk8t5n",
+        sources: ["manual"] as const,
+        holdingAtoms: 0n,
+      },
+    ];
+
+    const result = partitionP2pkhRecipients(recipients);
+
+    expect(result.supported).toHaveLength(1);
+    expect(result.supported[0].address).toBe(
+      "ecash:qzey4jkh2x23q2zngq50z8uxgw0ek4xazgh65we6y0",
+    );
+    expect(result.unsupported).toHaveLength(1);
+    expect(result.unsupported[0].address).toBe(
+      "ecash:prt9avp9jlcc9u0zhpagyuct047prywa55t9pk8t5n",
+    );
   });
 
   it("validates XEC app message byte length", () => {

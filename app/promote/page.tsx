@@ -71,6 +71,7 @@ import {
   getMaxTokenBatchSize,
   getUtf8ByteLength,
   mergeRecipients,
+  partitionP2pkhRecipients,
   parseDecimalToAtoms,
   parseManualAddresses,
   splitIntoBatches,
@@ -552,9 +553,19 @@ export default function PromotePage() {
   const activeHolderRows = isHolderAudience ? holderRows : [];
   const activeManualAddresses = isManualAudience ? manualParse.addresses : [];
 
-  const recipients = useMemo(
+  const allRecipients = useMemo(
     () => mergeRecipients(activeHolderRows, activeManualAddresses),
     [activeHolderRows, activeManualAddresses],
+  );
+  const recipientSupport = useMemo(
+    () => partitionP2pkhRecipients(allRecipients),
+    [allRecipients],
+  );
+  const recipients = recipientSupport.supported;
+  const unsupportedRecipients = recipientSupport.unsupported;
+  const unsupportedRecipientPreview = useMemo(
+    () => unsupportedRecipients.slice(0, 2),
+    [unsupportedRecipients],
   );
 
   const totalHoldingAtoms = useMemo(() => sumHoldingAtoms(recipients), [recipients]);
@@ -793,6 +804,9 @@ export default function PromotePage() {
     if (isManualAudience && manualParse.invalidEntries.length > 0) {
       return "Fix invalid manual addresses before sending.";
     }
+    if (recipients.length === 0 && unsupportedRecipients.length > 0) {
+      return "All selected recipients use unsupported P2SH scripts. Promote currently sends only to P2PKH addresses.";
+    }
     if (recipients.length === 0) {
       return "Add at least one recipient.";
     }
@@ -844,6 +858,7 @@ export default function PromotePage() {
     totalAirdropAtoms,
     totalAtomsError,
     totalTokenSpendSats,
+    unsupportedRecipients.length,
     xecBalanceSats,
   ]);
 
@@ -862,6 +877,9 @@ export default function PromotePage() {
     }
     if (isManualAudience && manualParse.invalidEntries.length > 0) {
       return "Fix invalid manual addresses before sending.";
+    }
+    if (recipients.length === 0 && unsupportedRecipients.length > 0) {
+      return "All selected recipients use unsupported P2SH scripts. Promote currently sends only to P2PKH addresses.";
     }
     if (recipients.length === 0) {
       return "Add at least one recipient.";
@@ -898,6 +916,7 @@ export default function PromotePage() {
     mnemonic,
     recipients.length,
     totalMessageSpendSats,
+    unsupportedRecipients.length,
     xecBalanceSats,
   ]);
 
@@ -1648,6 +1667,21 @@ export default function PromotePage() {
                       <AlertTitle>Guest wallet connected</AlertTitle>
                       <AlertDescription>
                         Preview works, but sending requires a mnemonic-backed wallet.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+
+                  {unsupportedRecipients.length > 0 ? (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Skipping unsupported recipients</AlertTitle>
+                      <AlertDescription>
+                        {unsupportedRecipients.length.toLocaleString()} selected address
+                        {unsupportedRecipients.length === 1 ? "" : "es"} use P2SH scripts.
+                        Promote currently sends only to P2PKH addresses, so these will not be included.
+                        {unsupportedRecipientPreview.length > 0
+                          ? ` Example${unsupportedRecipientPreview.length === 1 ? "" : "s"}: ${unsupportedRecipientPreview.map((recipient) => recipient.address).join(", ")}`
+                          : ""}
                       </AlertDescription>
                     </Alert>
                   ) : null}
