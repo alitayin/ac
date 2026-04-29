@@ -1,11 +1,16 @@
 import { render, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OrderList } from '@/components/ui/orderlist';
-import { fetchTokenDetails, getTokenDecimalsFromDetails } from '@/lib/chronik';
+import {
+  fetchTokenDetails,
+  getCachedTokenDetails,
+  getTokenDecimalsFromDetails,
+} from '@/lib/chronik';
 
 // Mock dependencies
 vi.mock('@/lib/chronik', () => ({
   fetchTokenDetails: vi.fn(),
+  getCachedTokenDetails: vi.fn(),
   getTokenDecimalsFromDetails: vi.fn(),
 }));
 
@@ -39,6 +44,7 @@ vi.mock('@/hooks/use-toast', () => ({
 }));
 
 const mockFetchTokenDetails = fetchTokenDetails as ReturnType<typeof vi.fn>;
+const mockGetCachedTokenDetails = getCachedTokenDetails as ReturnType<typeof vi.fn>;
 const mockGetTokenDecimalsFromDetails = getTokenDecimalsFromDetails as ReturnType<typeof vi.fn>;
 
 describe('OrderList - Token Metadata Parallel Loading', () => {
@@ -49,6 +55,7 @@ describe('OrderList - Token Metadata Parallel Loading', () => {
     localStorage.clear();
 
     // Setup default mock behavior
+    mockGetCachedTokenDetails.mockReturnValue(undefined);
     mockGetTokenDecimalsFromDetails.mockImplementation((detail, fallback) => fallback);
   });
 

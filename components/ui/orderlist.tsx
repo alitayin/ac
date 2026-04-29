@@ -9,7 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CircleX, Trash2, CircleCheck, LoaderCircle, RefreshCw, History } from "lucide-react";
-import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
+import {
+  fetchTokenDetails,
+  getCachedTokenDetails,
+  getTokenDecimalsFromDetails,
+} from "@/lib/chronik";
 import {
   ORDERS_UPDATED_EVENT,
   clearSwapOrdersForAddress,
@@ -46,6 +50,28 @@ interface OrderListProps {
   balance?: number;
 }
 
+function shortenTokenId(tokenId: string): string {
+  return `${tokenId.substring(0, 6)}...${tokenId.substring(tokenId.length - 4)}`;
+}
+
+function getTokenNameFromDetail(
+  detail: any,
+  tokenId: string,
+  fallbackName?: string,
+): string {
+  const tokenName = detail?.genesisInfo?.tokenName?.trim();
+  if (tokenName) {
+    return tokenName;
+  }
+
+  const tokenTicker = detail?.genesisInfo?.tokenTicker?.trim();
+  if (tokenTicker) {
+    return tokenTicker;
+  }
+
+  return fallbackName || shortenTokenId(tokenId);
+}
+
 export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
   const { toast } = useToast();
   const [orders, setOrders] = useState<Record<string, Order>>({});
@@ -61,14 +87,22 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
   const [tokenDecimalsMap, setTokenDecimalsMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    // Load orders from localStorage
-    const loadOrders = () => {
+    let cancelled = false;
+
+    const getConfiguredToken = (tokenId: string) =>
+      Object.values(tokens).find(token => token.tokenId === tokenId);
+
+    const getInitialTokenName = (tokenId: string) => {
+      const tokenInfo = getConfiguredToken(tokenId);
+      return tokenInfo?.name || shortenTokenId(tokenId);
+    };
+
+    const loadOrders = async () => {
       const savedOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
       
       // Process orders and add extra info
       const processedOrders: Record<string, Order> = {};
       const tokenSet = new Set<string>();
-      const tokenList: Array<{id: string, name: string}> = [];
       
       Object.entries(savedOrders).forEach(([key, orderData]) => {
         const parts = key.split('|');
@@ -103,29 +137,30 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
           }
           
           // Look up token info by tokenId
-          const tokenInfo = Object.values(tokens).find(token => token.tokenId === tokenId);
-          
-          if (tokenInfo) {
-            order.tokenName = tokenInfo.name;
-            
-            // Collect unique tokens for filter options
-            if (!tokenSet.has(tokenId)) {
-              tokenSet.add(tokenId);
-              tokenList.push({
-                id: tokenId,
-                name: tokenInfo.name
-              });
-            }
-          } else {
-            order.tokenName = 'Unknown token';
+          order.tokenName = getInitialTokenName(tokenId);
+
+          if (!tokenSet.has(tokenId)) {
+            tokenSet.add(tokenId);
           }
           
           processedOrders[key] = order;
         }
       });
-      
+
+      const tokenIds = Array.from(tokenSet);
+      const initialTokenList = tokenIds
+        .map((tokenId) => ({
+          id: tokenId,
+          name: getInitialTokenName(tokenId),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name));
+
+      if (cancelled) {
+        return;
+      }
+
       setOrders(processedOrders);
-      setAvailableTokens(tokenList);
+      setAvailableTokens(initialTokenList);
       
       // If any orders are auto-marked complete, persist to localStorage
       const hasChanges = Object.entries(processedOrders).some(([key, order]) => {
@@ -150,66 +185,88 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
       
       // Check whether orders are sufficiently funded
       checkOrdersFunding(processedOrders);
-    };
-    
-    if (ecashAddress) {
-      loadOrders();
-    } else {
-      setOrders({});
-      setAvailableTokens([]);
-    }
-  }, [ecashAddress, refreshTrigger, balance]);
 
-  // Load Chronik token detail from available token list to get precise decimals
-  useEffect(() => {
-    const loadTokenMeta = async () => {
-      if (!availableTokens.length) return;
+      if (tokenIds.length === 0) {
+        if (!cancelled) {
+          setTokenDecimalsMap({});
+        }
+        return;
+      }
 
-      // Filter tokens that need loading (not already cached)
-      const tokensToLoad = availableTokens.filter(
-        token => tokenDecimalsMap[token.id] === undefined
-      );
-
-      if (!tokensToLoad.length) return;
-
-      // Load all tokens in parallel using Promise.allSettled
-      // This ensures partial failures don't block other tokens
-      const results = await Promise.allSettled(
-        tokensToLoad.map(async (token) => {
-          const tokenId = token.id;
-          const detail = await fetchTokenDetails(tokenId);
-          // Try decimals from tokens.ts as a fallback
-          const tokenInfo = Object.values(tokens).find(t => t.tokenId === tokenId);
+      const tokenMetaResults = await Promise.allSettled(
+        tokenIds.map(async (tokenId) => {
+          const tokenInfo = getConfiguredToken(tokenId);
           const fallbackDecimals = (tokenInfo as any)?.decimals ?? 0;
-          const decimals = getTokenDecimalsFromDetails(detail, fallbackDecimals);
-          return { tokenId, decimals };
-        })
+          const cachedDetail = getCachedTokenDetails(tokenId);
+          const detail = cachedDetail || await fetchTokenDetails(tokenId);
+
+          return {
+            tokenId,
+            name: getTokenNameFromDetail(detail, tokenId, getInitialTokenName(tokenId)),
+            decimals: getTokenDecimalsFromDetails(detail, fallbackDecimals),
+          };
+        }),
       );
 
-      // Process results and update state once with all successful loads
-      const newDecimalsMap: Record<string, number> = {};
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          const { tokenId, decimals } = result.value;
-          newDecimalsMap[tokenId] = decimals;
+      if (cancelled) {
+        return;
+      }
+
+      const resolvedOrders: Record<string, Order> = {};
+      Object.entries(processedOrders).forEach(([key, order]) => {
+        resolvedOrders[key] = { ...order };
+      });
+
+      const nextTokenList = tokenIds.map((tokenId) => ({
+        id: tokenId,
+        name: getInitialTokenName(tokenId),
+      }));
+      const nextDecimalsMap: Record<string, number> = {};
+
+      tokenMetaResults.forEach((result, index) => {
+        const tokenId = tokenIds[index];
+        const tokenInfo = getConfiguredToken(tokenId);
+        const fallbackDecimals = (tokenInfo as any)?.decimals ?? 0;
+
+        if (result.status === "fulfilled") {
+          const { name, decimals } = result.value;
+          nextDecimalsMap[tokenId] = decimals;
+
+          for (const order of Object.values(resolvedOrders)) {
+            if (order.tokenId === tokenId) {
+              order.tokenName = name;
+            }
+          }
+
+          const tokenListEntry = nextTokenList.find((token) => token.id === tokenId);
+          if (tokenListEntry) {
+            tokenListEntry.name = name;
+          }
         } else {
-          const tokenId = tokensToLoad[index].id;
           console.error(`Failed to load token detail: ${tokenId}`, result.reason);
-          // On failure keep default 0 to avoid rendering impact
+          nextDecimalsMap[tokenId] = fallbackDecimals;
         }
       });
 
-      // Batch update state once instead of multiple times
-      if (Object.keys(newDecimalsMap).length > 0) {
-        setTokenDecimalsMap(prev => ({
-          ...prev,
-          ...newDecimalsMap,
-        }));
-      }
+      setOrders(resolvedOrders);
+      setAvailableTokens(
+        nextTokenList.sort((left, right) => left.name.localeCompare(right.name)),
+      );
+      setTokenDecimalsMap(nextDecimalsMap);
     };
+    
+    if (ecashAddress) {
+      void loadOrders();
+    } else {
+      setOrders({});
+      setAvailableTokens([]);
+      setTokenDecimalsMap({});
+    }
 
-    loadTokenMeta();
-  }, [availableTokens, tokenDecimalsMap]);
+    return () => {
+      cancelled = true;
+    };
+  }, [ecashAddress, refreshTrigger, balance]);
 
   // Check whether orders are sufficiently funded
   const checkOrdersFunding = (ordersList: Record<string, Order>) => {
