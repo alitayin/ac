@@ -37,7 +37,6 @@ import {
   CheckCircle,
   DollarSign,
   Filter,
-  ListPlus,
   Plus,
   RotateCcw,
   Search,
@@ -68,6 +67,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -177,6 +177,28 @@ const EMPTY_TOKEN_LOOKUP_STATE: TokenLookupState = {
   tokenId: "",
   tokenInfo: null,
 }
+
+type LookupMetaCardProps = {
+  label: string
+  value: React.ReactNode
+  mono?: boolean
+}
+
+const LookupMetaCard = ({ label, value, mono = false }: LookupMetaCardProps) => (
+  <div className="rounded-xl border bg-background/80 p-4">
+    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+      {label}
+    </p>
+    <div
+      className={cn(
+        "mt-3 text-sm font-medium text-foreground",
+        mono && "break-all font-mono text-xs sm:text-sm",
+      )}
+    >
+      {value}
+    </div>
+  </div>
+)
 
 const getCachedTopVolumeTokens = (): Awaited<
   ReturnType<typeof fetchEtokenDbTopVolumeTokens>
@@ -372,6 +394,7 @@ export default function Component() {
   const [showClearCacheConfirm, setShowClearCacheConfirm] = React.useState(false)
   const [tokenUpdatedAt, setTokenUpdatedAt] = React.useState<Map<string, number>>(new Map())
   const [isAddingToWatchlist, setIsAddingToWatchlist] = React.useState(false)
+  const [isLocalFallbackMode, setIsLocalFallbackMode] = React.useState(false)
   const router = useRouter()
   
   const loadingTokens = React.useRef<Set<string>>(new Set())
@@ -1724,6 +1747,11 @@ export default function Component() {
     }
   }
 
+  const customTokenOrder = React.useMemo(() => {
+    const customTokens = getCustomTokens()
+    return new Map(customTokens.map((tokenId, index) => [tokenId, index]))
+  }, [refreshNonce])
+
   const addCustomToken = (tokenId: string): boolean => {
     try {
       const isInConfig = Object.values(tokens).some(t => t.tokenId === tokenId)
@@ -1900,6 +1928,7 @@ export default function Component() {
     let isCancelled = false
 
     cancelledRef.current = false
+    setIsLocalFallbackMode(false)
 
     const bootstrap = async () => {
       if (!chronikClient) {
@@ -2112,6 +2141,12 @@ export default function Component() {
           shouldUseConfiguredFallback && hasRenderedCachedRows
             ? createBootstrapRows(cachedTopVolumeTokens || [], false)
             : renderBootstrapRows(etokenDbTokens, shouldUseConfiguredFallback)
+
+        if (!isCancelled) {
+          setIsLocalFallbackMode(
+            shouldUseConfiguredFallback && !hasRenderedCachedRows,
+          )
+        }
 
         const {
           bootstrapCandidates,
@@ -2375,6 +2410,22 @@ export default function Component() {
     };
 
     return [...filteredData].sort((a, b) => {
+      const aCustomTokenIndex = customTokenOrder.get(a.tokenId)
+      const bCustomTokenIndex = customTokenOrder.get(b.tokenId)
+      const aIsCustomToken = typeof aCustomTokenIndex === "number"
+      const bIsCustomToken = typeof bCustomTokenIndex === "number"
+
+      if (aIsCustomToken !== bIsCustomToken) {
+        return aIsCustomToken ? -1 : 1
+      }
+
+      if (aIsCustomToken && bIsCustomToken) {
+        const customOrderSort = bCustomTokenIndex! - aCustomTokenIndex!
+        if (customOrderSort !== 0) {
+          return customOrderSort
+        }
+      }
+
       const primarySort = sortFunction(a, b)
       if (primarySort !== 0) {
         return primarySort
@@ -2392,7 +2443,7 @@ export default function Component() {
 
       return a.name.localeCompare(b.name)
     });
-  }, [data, sortBy, filteredTokens]);
+  }, [data, sortBy, filteredTokens, customTokenOrder]);
 
   const tableData = React.useMemo(() => {
     return sortedData
@@ -2504,6 +2555,30 @@ export default function Component() {
     tokenLookup.tokenInfo?.genesisInfo?.tokenName?.trim() || "Unknown token"
   const lookupTokenTicker = tokenLookup.tokenInfo?.genesisInfo?.tokenTicker?.trim()
   const lookupTokenUrl = tokenLookup.tokenInfo?.genesisInfo?.url?.trim()
+  const lookupActionTokenId = tokenLookup.tokenInfo?.tokenId || tokenLookup.tokenId
+  const listedLookupToken =
+    tokenLookup.status === "listed"
+      ? data.find(
+          (token) => token.tokenId.toLowerCase() === tokenLookup.tokenId.toLowerCase(),
+        ) ?? null
+      : null
+  const isLookupTokenAlreadyInData = Boolean(
+    lookupActionTokenId &&
+      data.some(
+        (token) => token.tokenId.toLowerCase() === lookupActionTokenId.toLowerCase(),
+      ),
+  )
+  const isLookupTokenInCustomList = Boolean(
+    lookupActionTokenId && customTokenOrder.has(lookupActionTokenId),
+  )
+  const isLookupTokenAlreadyTracked =
+    isLookupTokenAlreadyInData || isLookupTokenInCustomList
+  const lookupStatusBadgeLabel =
+    tokenLookup.status === "listed"
+      ? "Already listed"
+      : tokenLookup.status === "not-found"
+          ? "Unavailable"
+          : null
   const lookupDialogTitle =
     tokenLookup.status === "loading"
       ? "Searching token"
@@ -2577,42 +2652,45 @@ export default function Component() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <AlertDialog
-                  open={showClearCacheConfirm}
-                  onOpenChange={setShowClearCacheConfirm}
-                >
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="icon" aria-label="Rebuild table">
-                      <RotateCcw className="size-4" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Clear cached token data?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This rebuilds the market table from scratch and refreshes cached token stats and icons.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={clearCacheAndReload}>
-                        Clear cache
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                {isLocalFallbackMode ? (
+                  <AlertDialog
+                    open={showClearCacheConfirm}
+                    onOpenChange={setShowClearCacheConfirm}
+                  >
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="icon" aria-label="Rebuild table">
+                        <RotateCcw className="size-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Clear cached token data?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This rebuilds the market table from scratch and refreshes cached token stats and icons.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={clearCacheAndReload}>
+                          Clear cache
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                ) : null}
 
                 {searchExpanded ? (
                   <div
                     ref={searchContainerRef}
-                    className="flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1 sm:w-auto sm:min-w-[18rem]"
+                    className="flex w-full items-center gap-2 rounded-2xl border border-border/60 bg-background/70 px-3 py-2 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-background/55 dark:border-white/[0.08] dark:bg-white/[0.03] sm:w-auto sm:min-w-[19rem]"
                   >
+                    <Search className="size-4 shrink-0 text-muted-foreground/70" />
                     <Input
                       type="text"
                       placeholder="Enter token ID"
                       value={searchInput}
                       onChange={(event) => setSearchInput(event.target.value)}
-                      className="h-8 w-full border-0 px-1 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                      className="h-8 w-full border-0 bg-transparent px-0 text-sm shadow-none placeholder:text-muted-foreground/55 focus-visible:ring-0 focus-visible:ring-offset-0"
                       onKeyDown={(event) => {
                         if (event.key === "Enter" && isSearchTokenId) {
                           event.preventDefault()
@@ -2622,26 +2700,27 @@ export default function Component() {
                     />
                     {isSearchTokenId && (
                       <Button
-                        size="sm"
+                        size="icon"
                         variant="ghost"
-                        className="h-8 px-2"
+                        className="h-8 w-8 rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
                         onClick={() => void handleSearchToken()}
                         disabled={
                           isChronikLoading ||
                           (tokenLookup.status === "loading" &&
                             tokenLookup.tokenId === trimmedSearchInput)
                         }
+                        aria-label="Search token"
                       >
                         {tokenLookup.status === "loading" &&
                         tokenLookup.tokenId === trimmedSearchInput
                           ? "..."
-                          : "Search"}
+                          : <Search className="size-4" />}
                       </Button>
                     )}
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8"
+                      className="h-8 w-8 rounded-xl text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
                       onClick={() => {
                         setSearchExpanded(false)
                         setSearchInput("")
@@ -2742,38 +2821,59 @@ export default function Component() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{lookupDialogTitle}</DialogTitle>
-            <DialogDescription>
-              {tokenLookup.tokenId
-                ? `Token ID: ${tokenLookup.tokenId}`
-                : "Search for an on-chain token by full token ID."}
+        <DialogContent className="overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="gap-3 border-b bg-muted/10 px-6 py-5 pr-14">
+            <div className="flex flex-wrap items-center gap-2">
+              <DialogTitle>{lookupDialogTitle}</DialogTitle>
+              {lookupStatusBadgeLabel ? (
+                <Badge
+                  variant={tokenLookup.status === "not-found" ? "outline" : "secondary"}
+                >
+                  {lookupStatusBadgeLabel}
+                </Badge>
+              ) : null}
+            </div>
+            <DialogDescription className="max-w-2xl">
+              Search for an on-chain token by full token ID.
             </DialogDescription>
           </DialogHeader>
 
           {tokenLookup.status === "loading" ? (
-            <div className="flex flex-col items-center gap-4 py-10 text-center">
-              <Spinner className="size-8" />
-              <div className="space-y-1">
-                <p className="text-lg font-semibold">Fetching token metadata</p>
-                <p className="text-sm text-muted-foreground">
-                  Looking up this token on Chronik.
+            <div className="flex min-h-[18rem] flex-col items-center justify-center gap-5 px-6 py-10 text-center">
+              <div className="flex size-14 items-center justify-center rounded-full border bg-muted/20">
+                <Spinner className="size-6" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-base font-semibold">Fetching token metadata</p>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  Looking up this token on Chronik and checking whether it already appears in the market table.
                 </p>
+              </div>
+              <div className="w-full max-w-xl">
+                <LookupMetaCard label="Token ID" value={tokenLookup.tokenId} mono />
               </div>
             </div>
           ) : tokenLookup.status === "listed" ? (
-            <div className="flex flex-col gap-6 py-2">
-              <div className="flex flex-col items-center gap-4 rounded-xl border bg-muted/20 px-6 py-8 text-center">
-                <CheckCircle className="size-12 text-primary" />
-                <div className="space-y-1">
-                  <p className="text-lg font-semibold">This token is already listed</p>
-                  <p className="text-sm text-muted-foreground">
-                    It already appears in the market table, so you can jump straight to the token page.
-                  </p>
-                </div>
+            <div className="flex flex-col gap-5 px-6 py-5">
+              <Alert className="border-primary/15 bg-primary/5">
+                <CheckCircle className="size-4 text-primary" />
+                <AlertTitle>
+                  {listedLookupToken?.name || "This token is already listed"}
+                </AlertTitle>
+                <AlertDescription>
+                  It already appears in the market table, so you can jump straight to the token page instead of listing it again.
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <LookupMetaCard label="Token ID" value={tokenLookup.tokenId} mono />
+                <LookupMetaCard
+                  label="Market status"
+                  value="Listed and available in Agora market"
+                />
               </div>
-              <DialogFooter className="gap-2 sm:justify-between">
+
+              <DialogFooter className="gap-2 border-t pt-4 sm:justify-between">
                 <Button variant="outline" onClick={closeLookupDialog}>
                   Close
                 </Button>
@@ -2788,18 +2888,22 @@ export default function Component() {
               </DialogFooter>
             </div>
           ) : tokenLookup.status === "found" && tokenLookup.tokenInfo ? (
-            <div className="flex flex-col gap-4">
-              <div className="rounded-xl border bg-muted/20 p-4">
+            <div className="flex flex-col gap-5 px-6 py-5">
+              <div className="rounded-2xl border bg-muted/15 p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="space-y-1">
-                    <p className="text-lg font-semibold">{lookupTokenName}</p>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xl font-semibold tracking-tight">
+                      {lookupTokenName}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {lookupTokenTicker || "No ticker available"}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="secondary">
-                      {tokenLookup.tokenInfo.tokenType?.protocol || "Unknown"} /{" "}
+                    <Badge variant="outline">
+                      {tokenLookup.tokenInfo.tokenType?.protocol || "Unknown"}
+                    </Badge>
+                    <Badge variant="outline">
                       {tokenLookup.tokenInfo.tokenType?.type || "Unknown"}
                     </Badge>
                     <Badge variant="outline">
@@ -2810,96 +2914,76 @@ export default function Component() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border bg-muted/10 p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Token ID</p>
-                  <p className="mt-2 break-all font-mono text-sm">{tokenLookup.tokenInfo.tokenId}</p>
-                </div>
-                <div className="rounded-lg border bg-muted/10 p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Block Height</p>
-                  <p className="mt-2 text-sm font-medium">
-                    {tokenLookup.tokenInfo.block?.height ?? "N/A"}
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-muted/10 p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Name</p>
-                  <p className="mt-2 text-sm font-medium">{lookupTokenName}</p>
-                </div>
-                <div className="rounded-lg border bg-muted/10 p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Ticker</p>
-                  <p className="mt-2 text-sm font-medium">{lookupTokenTicker || "N/A"}</p>
-                </div>
+                <LookupMetaCard
+                  label="Token ID"
+                  value={tokenLookup.tokenInfo.tokenId}
+                  mono
+                />
+                <LookupMetaCard
+                  label="Block height"
+                  value={tokenLookup.tokenInfo.block?.height ?? "N/A"}
+                />
+                <LookupMetaCard label="Name" value={lookupTokenName} />
+                <LookupMetaCard label="Ticker" value={lookupTokenTicker || "N/A"} />
               </div>
 
               {lookupTokenUrl && (
-                <div className="rounded-lg border bg-muted/10 p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Project URL</p>
-                  <a
-                    href={lookupTokenUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 block break-all text-sm text-primary underline-offset-4 hover:underline"
-                  >
-                    {lookupTokenUrl}
-                  </a>
-                </div>
+                <LookupMetaCard
+                  label="Project URL"
+                  value={
+                    <a
+                      href={lookupTokenUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block break-all font-mono text-xs text-primary underline-offset-4 hover:underline sm:text-sm"
+                    >
+                      {lookupTokenUrl}
+                    </a>
+                  }
+                />
               )}
 
-              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+              <DialogFooter className="gap-2 border-t pt-4 sm:justify-between">
                 <Button variant="outline" onClick={closeLookupDialog}>
                   Close
                 </Button>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Button
-                    variant="outline"
-                    onClick={() => {
-                      closeLookupDialog()
-                      router.push("/list")
-                    }}
-                    className="gap-2"
-                  >
-                    <ListPlus data-icon="inline-start" />
-                    List This Token
-                  </Button>
-                  <Button
                     onClick={handleAddToWatchlist}
-                    disabled={isAddingToWatchlist}
+                    disabled={isAddingToWatchlist || isLookupTokenAlreadyTracked}
                     className="gap-2"
                   >
                     {isAddingToWatchlist ? (
                       <Spinner data-icon="inline-start" />
+                    ) : isLookupTokenAlreadyTracked ? (
+                      <CheckCircle data-icon="inline-start" />
                     ) : (
                       <Plus data-icon="inline-start" />
                     )}
-                    {isAddingToWatchlist ? "Adding..." : "Add to Watchlist"}
+                    {isAddingToWatchlist
+                      ? "Adding..."
+                      : isLookupTokenAlreadyTracked
+                        ? "Already in list"
+                        : "Add to Watchlist"}
                   </Button>
                 </div>
               </DialogFooter>
             </div>
           ) : (
-            <div className="flex flex-col gap-6 py-2">
-              <div className="flex flex-col items-center gap-4 rounded-xl border bg-muted/20 px-6 py-8 text-center">
-                <AlertTriangle className="size-12 text-amber-500" />
-                <div className="space-y-1">
-                  <p className="text-lg font-semibold">Token not found</p>
-                  <p className="text-sm text-muted-foreground">
-                    We could not fetch metadata for this token ID from Chronik.
-                  </p>
-                </div>
-              </div>
-              <DialogFooter className="gap-2 sm:justify-between">
+            <div className="flex flex-col gap-5 px-6 py-5">
+              <Alert className="bg-muted/20">
+                <AlertTriangle className="size-4 text-amber-500" />
+                <AlertTitle>Token metadata unavailable</AlertTitle>
+                <AlertDescription>
+                  We could not fetch metadata for this token ID from Chronik. The token may be invalid, not indexed yet, or temporarily unavailable.
+                </AlertDescription>
+              </Alert>
+
+              <LookupMetaCard label="Token ID" value={tokenLookup.tokenId} mono />
+
+              <DialogFooter className="gap-2 border-t pt-4 sm:justify-between">
                 <Button variant="outline" onClick={closeLookupDialog}>
                   Close
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    closeLookupDialog()
-                    router.push("/list")
-                  }}
-                  className="gap-2"
-                >
-                  <ListPlus data-icon="inline-start" />
-                  List This Token
                 </Button>
               </DialogFooter>
             </div>
