@@ -79,7 +79,6 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useXECPrice } from "@/lib/price"
 import { TokenBadge } from "@/components/ui/tokenbadge"
-import AllEtokensView from "@/components/ui/AllEtokensView"
 import { formatNumber, formatPrice } from "@/lib/formatters"
 import { Token, SortType, Transaction } from "@/lib/types"
 import { UI_CONSTANTS } from "@/lib/constants"
@@ -373,9 +372,6 @@ export default function Component() {
   const [showClearCacheConfirm, setShowClearCacheConfirm] = React.useState(false)
   const [tokenUpdatedAt, setTokenUpdatedAt] = React.useState<Map<string, number>>(new Map())
   const [isAddingToWatchlist, setIsAddingToWatchlist] = React.useState(false)
-  const [viewMode, setViewMode] = React.useState<
-    "normal" | "all-etokens"
-  >("normal")
   const router = useRouter()
   
   const loadingTokens = React.useRef<Set<string>>(new Set())
@@ -2534,241 +2530,205 @@ export default function Component() {
                 )}
               </CardTitle>
               <CardDescription className="font-normal tracking-tight">
-                {viewMode === "normal"
-                  ? "Agora sales data. Showing the 100 tokens with the highest 7-day trading volume."
-                  : "All active eTokens on Agora"}
+                Agora sales data. Showing the 100 tokens with the highest 7-day trading volume.
               </CardDescription>
             </div>
 
             <div className="flex w-full flex-col gap-3 lg:max-w-3xl lg:items-end">
               <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
-                <div className="flex items-center gap-0.5 rounded-md border p-1">
-                  <button
-                    onClick={() => setViewMode("normal")}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-sm font-normal tracking-tight transition-colors",
-                      viewMode === "normal"
-                        ? "bg-accent font-semibold"
-                        : "text-muted-foreground hover:bg-accent/50",
-                    )}
-                  >
-                    7D Active Tokens
-                  </button>
-                  <button
-                    onClick={() => setViewMode("all-etokens")}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-sm font-normal tracking-tight transition-colors",
-                      viewMode === "all-etokens"
-                        ? "bg-accent font-semibold"
-                        : "text-muted-foreground hover:bg-accent/50",
-                    )}
-                  >
-                    All eTokens
-                  </button>
-                </div>
-
-                {viewMode === "normal" && (
-                  <>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "gap-2",
-                            filterOption !== "all" &&
-                              "border-primary/30 text-primary hover:text-primary",
-                          )}
-                        >
-                          <Filter data-icon="inline-start" />
-                          Filters
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-72">
-                        {FILTER_OPTIONS.map((option) => (
-                          <DropdownMenuItem
-                            key={option.value}
-                            onSelect={() => setFilterOption(option.value)}
-                            className={cn(
-                              "cursor-pointer",
-                              filterOption === option.value && "bg-accent",
-                            )}
-                          >
-                            <div className="flex w-full items-center justify-between gap-3">
-                              <div className="flex flex-col gap-0.5">
-                                <span>{option.label}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {option.summary}
-                                </span>
-                              </div>
-                              {filterOption === option.value && (
-                                <CheckCircle className="size-4 text-primary" />
-                              )}
-                            </div>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <AlertDialog
-                      open={showClearCacheConfirm}
-                      onOpenChange={setShowClearCacheConfirm}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Filter tokens"
+                      title="Filter tokens"
+                      className={cn(
+                        filterOption !== "all" &&
+                          "border-primary/30 text-primary hover:text-primary",
+                      )}
                     >
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="icon" aria-label="Rebuild table">
-                          <RotateCcw className="size-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Clear cached token data?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This rebuilds the market table from scratch and refreshes cached token stats and icons.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={clearCacheAndReload}>
-                            Clear cache
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-
-                    {searchExpanded ? (
-                      <div
-                        ref={searchContainerRef}
-                        className="flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1 sm:w-auto sm:min-w-[18rem]"
-                      >
-                        <Input
-                          type="text"
-                          placeholder="Enter token ID"
-                          value={searchInput}
-                          onChange={(event) => setSearchInput(event.target.value)}
-                          className="h-8 w-full border-0 px-1 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" && isSearchTokenId) {
-                              event.preventDefault()
-                              void handleSearchToken()
-                            }
-                          }}
-                        />
-                        {isSearchTokenId && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 px-2"
-                            onClick={() => void handleSearchToken()}
-                            disabled={
-                              isChronikLoading ||
-                              (tokenLookup.status === "loading" &&
-                                tokenLookup.tokenId === trimmedSearchInput)
-                            }
-                          >
-                            {tokenLookup.status === "loading" &&
-                            tokenLookup.tokenId === trimmedSearchInput
-                              ? "..."
-                              : "Search"}
-                          </Button>
+                      <Filter className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-72">
+                    {FILTER_OPTIONS.map((option) => (
+                      <DropdownMenuItem
+                        key={option.value}
+                        onSelect={() => setFilterOption(option.value)}
+                        className={cn(
+                          "cursor-pointer",
+                          filterOption === option.value && "bg-accent",
                         )}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setSearchExpanded(false)
-                            setSearchInput("")
-                          }}
-                          aria-label="Close token search"
-                        >
-                          <X className="size-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setSearchExpanded(true)}
-                        aria-label="Search by token ID"
                       >
-                        <Search className="size-4" />
+                        <div className="flex w-full items-center justify-between gap-3">
+                          <div className="flex flex-col gap-0.5">
+                            <span>{option.label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {option.summary}
+                            </span>
+                          </div>
+                          {filterOption === option.value && (
+                            <CheckCircle className="size-4 text-primary" />
+                          )}
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <AlertDialog
+                  open={showClearCacheConfirm}
+                  onOpenChange={setShowClearCacheConfirm}
+                >
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Rebuild table">
+                      <RotateCcw className="size-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Clear cached token data?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This rebuilds the market table from scratch and refreshes cached token stats and icons.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={clearCacheAndReload}>
+                        Clear cache
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
+                {searchExpanded ? (
+                  <div
+                    ref={searchContainerRef}
+                    className="flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1 sm:w-auto sm:min-w-[18rem]"
+                  >
+                    <Input
+                      type="text"
+                      placeholder="Enter token ID"
+                      value={searchInput}
+                      onChange={(event) => setSearchInput(event.target.value)}
+                      className="h-8 w-full border-0 px-1 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && isSearchTokenId) {
+                          event.preventDefault()
+                          void handleSearchToken()
+                        }
+                      }}
+                    />
+                    {isSearchTokenId && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2"
+                        onClick={() => void handleSearchToken()}
+                        disabled={
+                          isChronikLoading ||
+                          (tokenLookup.status === "loading" &&
+                            tokenLookup.tokenId === trimmedSearchInput)
+                        }
+                      >
+                        {tokenLookup.status === "loading" &&
+                        tokenLookup.tokenId === trimmedSearchInput
+                          ? "..."
+                          : "Search"}
                       </Button>
                     )}
-                  </>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setSearchExpanded(false)
+                        setSearchInput("")
+                      }}
+                      aria-label="Close token search"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setSearchExpanded(true)}
+                    aria-label="Search by token ID"
+                  >
+                    <Search className="size-4" />
+                  </Button>
                 )}
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className={viewMode === "all-etokens" ? "block" : "hidden"}>
-            <AllEtokensView />
-          </div>
-
-          <div className={viewMode === "normal" ? "block" : "hidden"}>
-            {tableData.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => {
-                        const sortType = 
-                          header.id === 'last24HoursXECAmount'
-                            ? '24h'
-                            : header.id === 'last30DaysXECAmount'
-                            ? '7d'
-                            : header.id === 'totalXECAmount'
-                            ? 'history'
-                            : null;
-                        return (
-                          <TableHead key={header.id}>
-                            {sortType ? (
-                              <div className="flex items-center">
-                                {flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext()
-                                )}
-                                <button
-                                  className={cn(
-                                    "ml-2 rounded p-1 transition-colors hover:bg-accent",
-                                    sortBy === sortType && "bg-accent/60",
-                                  )}
-                                  onClick={() => sortType && setSortBy(sortType)}
-                                >
-                                  {sortBy === sortType ? (
-                                    <ArrowDown className="h-4 w-4 text-foreground" />
-                                  ) : (
-                                    <ArrowUp className="h-4 w-4 text-muted-foreground/70" />
-                                  )}
-                                </button>
-                              </div>
-                            ) : (
-                              flexRender(
+          {tableData.length > 0 ? (
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => {
+                      const sortType = 
+                        header.id === 'last24HoursXECAmount'
+                          ? '24h'
+                          : header.id === 'last30DaysXECAmount'
+                          ? '7d'
+                          : header.id === 'totalXECAmount'
+                          ? 'history'
+                          : null;
+                      return (
+                        <TableHead key={header.id}>
+                          {sortType ? (
+                            <div className="flex items-center">
+                              {flexRender(
                                 header.column.columnDef.header,
                                 header.getContext()
-                              )
-                            )}
-                          </TableHead>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.map((row) => (
-                    <MemoizedTableRow 
-                      key={row.id} 
-                      row={row} 
-                      router={router}
-                      showUSD={showUSD}
-                      xecPrice={xecPrice}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div>No data available.</div>
-            )}
-          </div>
+                              )}
+                              <button
+                                className={cn(
+                                  "ml-2 rounded p-1 transition-colors hover:bg-accent",
+                                  sortBy === sortType && "bg-accent/60",
+                                )}
+                                onClick={() => sortType && setSortBy(sortType)}
+                              >
+                                {sortBy === sortType ? (
+                                  <ArrowDown className="h-4 w-4 text-foreground" />
+                                ) : (
+                                  <ArrowUp className="h-4 w-4 text-muted-foreground/70" />
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )
+                          )}
+                        </TableHead>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows.map((row) => (
+                  <MemoizedTableRow 
+                    key={row.id} 
+                    row={row} 
+                    router={router}
+                    showUSD={showUSD}
+                    xecPrice={xecPrice}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div>No data available.</div>
+          )}
         </CardContent>
       </Card>
       </TooltipProvider>

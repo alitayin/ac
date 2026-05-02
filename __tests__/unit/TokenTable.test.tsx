@@ -71,10 +71,6 @@ vi.mock("@/config/tokens", () => ({
   },
 }))
 
-vi.mock("@/components/ui/AllEtokensView", () => ({
-  default: () => <div data-testid="all-etokens-view" />,
-}))
-
 vi.mock("@/lib/context/ChronikContext", () => ({
   useChronik: () => useChronikMock(),
 }))
