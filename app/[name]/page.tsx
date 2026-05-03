@@ -952,6 +952,24 @@ export default function TokenPage() {
             />
           </div>
 
+          {tokenData.tokenId && activeTab !== 'comments' && (
+            <div className="hidden lg:block">
+              <TokenCommentsPanel
+                tokenId={tokenData.tokenId}
+                tokenName={tokenData.name}
+                variant="sidebar"
+              />
+            </div>
+          )}
+
+          {activeTab !== 'orderbook' && (
+            <div className="hidden lg:block">
+              <ErrorBoundary>
+                <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
+              </ErrorBoundary>
+            </div>
+          )}
+
           <div className="p-4">
             <h2 className="text-lg font-bold mb-6">Info</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -998,24 +1016,6 @@ export default function TokenPage() {
               </Badge>
             </div>
           </div>
-
-          {activeTab !== 'orderbook' && (
-            <div className="hidden lg:block">
-              <ErrorBoundary>
-                <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
-              </ErrorBoundary>
-            </div>
-          )}
-
-          {tokenData.tokenId && activeTab !== 'comments' && (
-            <div className="hidden lg:block">
-              <TokenCommentsPanel
-                tokenId={tokenData.tokenId}
-                tokenName={tokenData.name}
-                variant="sidebar"
-              />
-            </div>
-          )}
         </div>
       </div>
      

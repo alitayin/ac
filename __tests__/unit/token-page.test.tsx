@@ -294,6 +294,23 @@ describe("TokenPage buy panel", () => {
     expect(screen.queryByTestId("token-comments-panel-main")).not.toBeInTheDocument()
   })
 
+  it("renders the desktop right rail in comments, order book, info order", () => {
+    renderTokenPage()
+
+    const sidebarComments = screen.getByTestId("token-comments-panel-sidebar")
+    const orderBook = screen.getByTestId("order-book")
+    const infoHeading = screen.getByText("Info")
+
+    expect(
+      sidebarComments.compareDocumentPosition(orderBook) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      orderBook.compareDocumentPosition(infoHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
   it("moves comments into the main area when the Comments tab is selected", () => {
     renderTokenPage()
 
