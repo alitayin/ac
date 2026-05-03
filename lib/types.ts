@@ -23,6 +23,11 @@ export interface Token {
   stablecoin?: boolean;
   apyTag?: string;
   watchlist?: boolean;
+  reviewAverageScore: number | null;
+  reviewScorerCount: number;
+  reviewCountTotal: number;
+  reviewCommentCountTotal: number;
+  lastReviewAt: number | null;
 }
 
 // Transaction Data Types

@@ -3,10 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerInner";
 
-vi.mock("next/image", () => ({
-  default: (props: any) => <img {...props} />,
-}));
-
 vi.mock("@/components/ui/drawer", () => ({
   DrawerHeader: ({ children }: any) => <div>{children}</div>,
   DrawerTitle: ({ children }: any) => <div>{children}</div>,
@@ -28,7 +24,6 @@ describe("WalletConnectDrawerInner", () => {
     handlePaste: vi.fn(),
     handleGenerateMnemonic: vi.fn(),
     handleSaveMnemonic: vi.fn(),
-    handleConnectCashtab: vi.fn(),
   };
 
   it("lowercases edited words and clears the current error", () => {
@@ -67,12 +62,10 @@ describe("WalletConnectDrawerInner", () => {
       screen.getByRole("button", { name: /generate new recovery phrase/i }),
     );
     fireEvent.click(screen.getByRole("button", { name: /^connect$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /connect with cashtab/i }));
 
     expect(baseProps.handlePaste).toHaveBeenCalled();
     expect(baseProps.handlePaste.mock.calls[0][1]).toBe(1);
     expect(baseProps.handleGenerateMnemonic).toHaveBeenCalledTimes(1);
     expect(baseProps.handleSaveMnemonic).toHaveBeenCalledTimes(1);
-    expect(baseProps.handleConnectCashtab).toHaveBeenCalledTimes(1);
   });
 });

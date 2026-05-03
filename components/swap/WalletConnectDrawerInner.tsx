@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { MnemonicActions } from "@/components/ui/MnemonicActions";
 import { Button } from "@/components/ui/button";
 import { KeyRound, Plug2, XCircle } from "lucide-react";
-import Image from "next/image";
 
 export interface WalletConnectDrawerInnerProps {
   mnemonicWords: string[];
@@ -16,7 +15,6 @@ export interface WalletConnectDrawerInnerProps {
   handlePaste: (e: React.ClipboardEvent<HTMLInputElement>, index: number) => void;
   handleGenerateMnemonic: () => void;
   handleSaveMnemonic: () => void;
-  handleConnectCashtab: () => void;
 }
 
 export const WalletConnectDrawerInner: React.FC<WalletConnectDrawerInnerProps> = ({
@@ -27,7 +25,6 @@ export const WalletConnectDrawerInner: React.FC<WalletConnectDrawerInnerProps> =
   handlePaste,
   handleGenerateMnemonic,
   handleSaveMnemonic,
-  handleConnectCashtab,
 }) => {
   return (
     <div className="mx-auto w-full max-w-xl p-4">
@@ -101,25 +98,10 @@ export const WalletConnectDrawerInner: React.FC<WalletConnectDrawerInnerProps> =
             <span>Cancel</span>
           </Button>
         </DrawerClose>
-        <Button
-          variant="outline"
-          className="w-full mb-4 flex items-center justify-center gap-2"
-          onClick={handleConnectCashtab}
-        >
-          <span>Connect with Cashtab</span>
-          <Image
-            src="/cashtab.png"
-            alt="Cashtab Logo"
-            width={49}
-            height={49}
-            className="inline-block"
-          />
-        </Button>
       </DrawerFooter>
     </div>
   );
 };
 
 export default WalletConnectDrawerInner;
-
 

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  createEtokenDbReviewInvoice,
+  fetchEtokenDbReviewInvoice,
   fetchEtokenDbTokenCandles,
+  fetchEtokenDbTokenReviewSummary,
   fetchEtokenDbTopVolumeTokens,
   fetchEtokenDbTopVolumeTokenIds,
   fetchEtokenDbTokenSummary,
@@ -13,6 +16,7 @@ import {
   nanosatsPerAtomToXec,
   resetEtokenDbAvailabilityCache,
   satsToXec,
+  submitEtokenDbReviewInvoiceTx,
 } from "@/lib/etokendb"
 
 describe("etokendb", () => {
@@ -81,6 +85,11 @@ describe("etokendb", () => {
       lastTradeBlockHeight: 944789,
       lastTradeBlockTimestamp: 1776194157,
       lastSyncedAt: 1776194900068,
+      reviewAverageScore: null,
+      reviewScorerCount: 0,
+      reviewCountTotal: 0,
+      reviewCommentCountTotal: 0,
+      lastReviewAt: null,
     })
   })
 
@@ -389,7 +398,120 @@ describe("etokendb", () => {
         lastTradeBlockHeight: 944859,
         lastTradeBlockTimestamp: 1776231035,
         lastSyncedAt: 1776231053158,
+        reviewAverageScore: null,
+        reviewScorerCount: 0,
+        reviewCountTotal: 0,
+        reviewCommentCountTotal: 0,
+        lastReviewAt: null,
       },
     ])
+  })
+
+  it("fetches token review summary through the local proxy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            averageScore: 8.6,
+            scorerCount: 5,
+            reviewCountTotal: 7,
+            commentCountTotal: 4,
+            lastReviewAt: 1_776_231_053_158,
+          },
+        }),
+      }),
+    )
+
+    await expect(
+      fetchEtokenDbTokenReviewSummary(
+        "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+      ),
+    ).resolves.toEqual({
+      averageScore: 8.6,
+      scorerCount: 5,
+      reviewCountTotal: 7,
+      commentCountTotal: 4,
+      lastReviewAt: 1_776_231_053_158,
+    })
+  })
+
+  it("creates, fetches, and submits review invoices through the local proxy", async () => {
+    const invoicePayload = {
+      ok: true,
+      data: {
+        invoiceId: "550e8400-e29b-41d4-a716-446655440000",
+        tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+        authorAddress: "ecash:qpr8h2m24zk0xv2h7x7w4jv3n7q3y3tu4s7v5u8n2s",
+        score: 9,
+        comment: "Strong token",
+        paymentAddress: "ecash:qppaymentsample8h2m24zk0xv2h7x7w4jv3n7q3y3t",
+        expectedPaidSats: 10_000_000,
+        expectedPaidXec: "100000",
+        status: "pending",
+        expiresAt: 1_776_240_000_000,
+        paymentTxid: null,
+        publishedReviewId: null,
+      },
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => invoicePayload,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => invoicePayload,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            ok: true,
+            data: {
+              ...invoicePayload.data,
+              status: "tx_submitted",
+              paymentTxid:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            },
+          }),
+        }),
+    )
+
+    await expect(
+      createEtokenDbReviewInvoice(invoicePayload.data.tokenId, {
+        authorAddress: invoicePayload.data.authorAddress,
+        score: 9,
+        comment: "Strong token",
+      }),
+    ).resolves.toMatchObject({
+      invoiceId: invoicePayload.data.invoiceId,
+      expectedPaidXec: "100000",
+      status: "pending",
+    })
+
+    await expect(
+      fetchEtokenDbReviewInvoice(invoicePayload.data.invoiceId),
+    ).resolves.toMatchObject({
+      invoiceId: invoicePayload.data.invoiceId,
+      expectedPaidSats: 10_000_000,
+      status: "pending",
+    })
+
+    await expect(
+      submitEtokenDbReviewInvoiceTx(invoicePayload.data.invoiceId, {
+        txid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    ).resolves.toMatchObject({
+      invoiceId: invoicePayload.data.invoiceId,
+      status: "tx_submitted",
+      paymentTxid:
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    })
   })
 })

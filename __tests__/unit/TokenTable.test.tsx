@@ -1,5 +1,5 @@
 import * as React from "react"
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 type Deferred<T> = {
@@ -34,6 +34,7 @@ const {
   watchAgoraTokensMock,
   pushMock,
   toastMock,
+  reviewDialogMock,
 } = vi.hoisted(() => ({
   fetchBlockchainInfoMock: vi.fn(),
   fetchTokenDetailsMock: vi.fn(),
@@ -48,6 +49,7 @@ const {
   watchAgoraTokensMock: vi.fn(),
   pushMock: vi.fn(),
   toastMock: vi.fn(),
+  reviewDialogMock: vi.fn(),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -108,6 +110,15 @@ vi.mock("@/lib/etokendb", () => ({
   nanosatsPerAtomToXec: vi.fn(() => 1.23),
 }))
 
+vi.mock("@/components/ui/TokenReviewDialog", () => ({
+  default: (props: any) => {
+    reviewDialogMock(props)
+    return props.open ? (
+      <div data-testid="token-review-dialog">{props.token?.tokenId}</div>
+    ) : null
+  },
+}))
+
 import TokenTable from "@/components/ui/TokenTable"
 
 const TOP_VOLUME_TOKENS_CACHE_KEY = "token_table_top_volume_tokens_v1"
@@ -123,6 +134,11 @@ const makeTopVolumeToken = (overrides: Record<string, unknown> = {}) => ({
   last30DaysVolumeXECAmount: 101112,
   recent7dTradeCount: 42,
   has30DayVolume: true,
+  reviewAverageScore: null,
+  reviewScorerCount: 0,
+  reviewCountTotal: 0,
+  reviewCommentCountTotal: 0,
+  lastReviewAt: null,
   ...overrides,
 })
 
@@ -253,6 +269,23 @@ describe("TokenTable bootstrap", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Fallback Token")).not.toBeInTheDocument()
+    })
+  })
+
+  it("opens the review dialog from the rating chip", async () => {
+    fetchBlockchainInfoMock.mockResolvedValue({ tipHeight: 900000 })
+    fetchEtokenDbTopVolumeTokensMock.mockResolvedValue([makeTopVolumeToken()])
+
+    render(<TokenTable />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Token")).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Rate" }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("token-review-dialog")).toHaveTextContent("alpha-token-id")
     })
   })
 })

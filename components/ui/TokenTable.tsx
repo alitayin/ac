@@ -40,6 +40,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Star,
   X,
   Youtube,
 } from "lucide-react"
@@ -113,8 +114,8 @@ import {
 } from "@/lib/token-stats"
 import { watchAgoraTokens } from "@/lib/agora-ws"
 import { useToast } from "@/hooks/use-toast"
-import { useWallet } from "@/lib/context/WalletContext"
 import { Spinner } from "@/components/ui/spinner"
+import TokenReviewDialog from "@/components/ui/TokenReviewDialog"
 
 const FILTER_OPTION_STORAGE_KEY = "token_table_filter_option_v1"
 
@@ -305,6 +306,11 @@ const createInitialTokenRow = (
     stablecoin: false,
     apyTag: undefined,
     watchlist: false,
+    reviewAverageScore: null,
+    reviewScorerCount: 0,
+    reviewCountTotal: 0,
+    reviewCommentCountTotal: 0,
+    lastReviewAt: null,
     ...patch,
   }
 }
@@ -372,7 +378,6 @@ const getStoredFilterOption = (): FilterOption => {
 export default function Component() {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const { toast } = useToast()
-  const { isWalletConnected, userTokens } = useWallet()
 
   const [data, setData] = React.useState<TokenTableRow[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
@@ -395,6 +400,7 @@ export default function Component() {
   const [tokenUpdatedAt, setTokenUpdatedAt] = React.useState<Map<string, number>>(new Map())
   const [isAddingToWatchlist, setIsAddingToWatchlist] = React.useState(false)
   const [isLocalFallbackMode, setIsLocalFallbackMode] = React.useState(false)
+  const [activeReviewTokenId, setActiveReviewTokenId] = React.useState<string | null>(null)
   const router = useRouter()
   
   const loadingTokens = React.useRef<Set<string>>(new Set())
@@ -567,11 +573,52 @@ export default function Component() {
                   </AvatarFallback>
                 )}
               </Avatar>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span>{row.original.name}</span>
                 {isRowLoading && (
                   <span className="text-xs text-muted-foreground">(loading)</span>
                 )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setActiveReviewTokenId(row.original.tokenId)
+                      }}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                        row.original.reviewScorerCount > 0
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/15 dark:text-amber-300"
+                          : "border-border/70 bg-muted/20 text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                      )}
+                    >
+                      <Star
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          row.original.reviewScorerCount > 0 && "fill-current",
+                        )}
+                      />
+                      <span>
+                        {row.original.reviewScorerCount > 0 &&
+                        row.original.reviewAverageScore !== null
+                          ? row.original.reviewAverageScore.toFixed(1)
+                          : "Rate"}
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <span className="text-xs">
+                      {row.original.reviewScorerCount > 0
+                        ? `${row.original.reviewScorerCount} scorer${
+                            row.original.reviewScorerCount === 1 ? "" : "s"
+                          } • ${row.original.reviewCountTotal} paid review${
+                            row.original.reviewCountTotal === 1 ? "" : "s"
+                          }`
+                        : "Leave a paid rating or comment"}
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
                 {errorTokens.has(row.original.tokenId) && (
                   <AlertTriangle className="h-4 w-4 text-yellow-500" />
                 )}
@@ -964,6 +1011,11 @@ export default function Component() {
           "priceChange24h",
           "totalTransactions",
           "totalXECAmount",
+          "reviewAverageScore",
+          "reviewScorerCount",
+          "reviewCountTotal",
+          "reviewCommentCountTotal",
+          "lastReviewAt",
         ] as const
         const diff = new Set<string>()
         trackableFields.forEach((field) => {
@@ -1175,6 +1227,32 @@ export default function Component() {
             : 0
       const fallbackHas30DayVolume =
         currentToken?.has30DayVolume === true || cachedTokenSnapshot?.has30DayVolume === true
+      const fallbackReviewAverageScore =
+        currentToken?.reviewAverageScore ?? cachedTokenSnapshot?.reviewAverageScore ?? null
+      const fallbackReviewScorerCount =
+        typeof currentToken?.reviewScorerCount === "number"
+          ? currentToken.reviewScorerCount
+          : typeof cachedTokenSnapshot?.reviewScorerCount === "number"
+            ? cachedTokenSnapshot.reviewScorerCount
+            : 0
+      const fallbackReviewCountTotal =
+        typeof currentToken?.reviewCountTotal === "number"
+          ? currentToken.reviewCountTotal
+          : typeof cachedTokenSnapshot?.reviewCountTotal === "number"
+            ? cachedTokenSnapshot.reviewCountTotal
+            : 0
+      const fallbackReviewCommentCountTotal =
+        typeof currentToken?.reviewCommentCountTotal === "number"
+          ? currentToken.reviewCommentCountTotal
+          : typeof cachedTokenSnapshot?.reviewCommentCountTotal === "number"
+            ? cachedTokenSnapshot.reviewCommentCountTotal
+            : 0
+      const fallbackLastReviewAt =
+        typeof currentToken?.lastReviewAt === "number"
+          ? currentToken.lastReviewAt
+          : typeof cachedTokenSnapshot?.lastReviewAt === "number"
+            ? cachedTokenSnapshot.lastReviewAt
+            : null
       
       const cached = getCachedTokenData(tokenId)
       const cacheValid = !!cached && now - cached.computedAt < CACHE_TTL_MS
@@ -1664,6 +1742,15 @@ export default function Component() {
         totalTransactions: totalTransactions30d,
         totalXECAmount: last30DaysVolumeXECAmount,
         has30DayVolume: etokenDbSummary?.has30DayVolume ?? fallbackHas30DayVolume,
+        reviewAverageScore:
+          etokenDbSummary?.reviewAverageScore ?? fallbackReviewAverageScore,
+        reviewScorerCount:
+          etokenDbSummary?.reviewScorerCount ?? fallbackReviewScorerCount,
+        reviewCountTotal:
+          etokenDbSummary?.reviewCountTotal ?? fallbackReviewCountTotal,
+        reviewCommentCountTotal:
+          etokenDbSummary?.reviewCommentCountTotal ?? fallbackReviewCommentCountTotal,
+        lastReviewAt: etokenDbSummary?.lastReviewAt ?? fallbackLastReviewAt,
         official: tokenConfig?.official || false,
         gratitude: tokenConfig?.gratitude || false,
         community: tokenConfig?.community || false,
@@ -2071,6 +2158,12 @@ export default function Component() {
                   totalTransactions: candidate.etokenDbToken.recent7dTradeCount,
                   totalXECAmount: candidate.etokenDbToken.last30DaysVolumeXECAmount,
                   has30DayVolume: candidate.etokenDbToken.has30DayVolume,
+                  reviewAverageScore: candidate.etokenDbToken.reviewAverageScore,
+                  reviewScorerCount: candidate.etokenDbToken.reviewScorerCount,
+                  reviewCountTotal: candidate.etokenDbToken.reviewCountTotal,
+                  reviewCommentCountTotal:
+                    candidate.etokenDbToken.reviewCommentCountTotal,
+                  lastReviewAt: candidate.etokenDbToken.lastReviewAt,
                   hasInitialMarketData: true,
                   hasResolvedTokenInfo,
                 }
@@ -2449,6 +2542,36 @@ export default function Component() {
     return sortedData
   }, [sortedData])
 
+  const activeReviewToken = React.useMemo(
+    () =>
+      activeReviewTokenId
+        ? data.find((token) => token.tokenId === activeReviewTokenId) ?? null
+        : null,
+    [activeReviewTokenId, data],
+  )
+
+  const handleReviewPublished = React.useCallback(
+    (
+      tokenId: string,
+      summary: {
+        averageScore: number | null
+        scorerCount: number
+        reviewCountTotal: number
+        commentCountTotal: number
+        lastReviewAt: number | null
+      },
+    ) => {
+      applyTokenUpdate(tokenId, {
+        reviewAverageScore: summary.averageScore,
+        reviewScorerCount: summary.scorerCount,
+        reviewCountTotal: summary.reviewCountTotal,
+        reviewCommentCountTotal: summary.commentCountTotal,
+        lastReviewAt: summary.lastReviewAt,
+      })
+    },
+    [],
+  )
+
   const table = useReactTable({
     data: tableData,
     columns,
@@ -2491,7 +2614,9 @@ export default function Component() {
       
       const dataFields = ['totalTransactions', 'last24HoursXECAmount', 'last30DaysXECAmount',
                           'priceChange24h', 'latestPrice', 'totalXECAmount',
-                          'name', 'hasResolvedTokenInfo', 'hasInitialMarketData'] as const;
+                          'name', 'hasResolvedTokenInfo', 'hasInitialMarketData',
+                          'reviewAverageScore', 'reviewScorerCount', 'reviewCountTotal',
+                          'reviewCommentCountTotal', 'lastReviewAt', 'watchlist'] as const;
       const hasDataChanged = dataFields.some(field => prevData[field] !== nextData[field]);
 
       const hasDisplayModeChanged = prevProps.showUSD !== nextProps.showUSD;
@@ -2811,6 +2936,17 @@ export default function Component() {
         </CardContent>
       </Card>
       </TooltipProvider>
+
+      <TokenReviewDialog
+        open={activeReviewToken !== null}
+        token={activeReviewToken}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setActiveReviewTokenId(null)
+          }
+        }}
+        onPublished={handleReviewPublished}
+      />
 
       <Dialog
         open={lookupDialogOpen}

@@ -23,6 +23,7 @@ import {
 import OrderBook from "@/components/ui/OrderBook"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import AddressDistribution from "@/components/ui/AddressDistribution"
+import TokenCommentsPanel from "@/components/ui/TokenCommentsPanel"
 import { useWallet } from "@/lib/context/WalletContext"
 import { useToast } from "@/hooks/use-toast"
 import { TokenSelector } from "@/components/ui/token-selector"
@@ -98,7 +99,7 @@ export default function TokenPage() {
   const [avgExecutionPrice, setAvgExecutionPrice] = useState<number>(0)
   const [slippage, setSlippage] = useState<number>(0)
   const [errorMessage, setErrorMessage] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<'trading' | 'orderbook' | 'address'>('trading');
+  const [activeTab, setActiveTab] = useState<'trading' | 'orderbook' | 'address' | 'comments'>('trading');
   const [maxPrice, setMaxPrice] = useState<number>(0)
   const [selectedBuyToken, setSelectedBuyToken] = useState<{
     id: string;
@@ -876,6 +877,14 @@ export default function TokenPage() {
               >
                 Address
               </h2>
+              <h2
+                onClick={() => setActiveTab('comments')}
+                className={`text-lg font-bold cursor-pointer transition-colors ${
+                  activeTab === 'comments' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Comments
+              </h2>
             </div>
 
             <div className={activeTab === 'trading' ? 'block' : 'hidden'}>
@@ -883,10 +892,16 @@ export default function TokenPage() {
             </div>
             {activeTab === 'orderbook' ? (
               <ErrorBoundary>
-                <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
+              <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
               </ErrorBoundary>
             ) : activeTab === 'address' ? (
               <AddressDistribution tokenId={tokenData.tokenId} decimals={tokenDecimals} />
+            ) : activeTab === 'comments' ? (
+              <TokenCommentsPanel
+                tokenId={tokenData.tokenId}
+                tokenName={tokenData.name}
+                variant="main"
+              />
             ) : null}
           </div>
         </div>
@@ -989,6 +1004,16 @@ export default function TokenPage() {
               <ErrorBoundary>
                 <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
               </ErrorBoundary>
+            </div>
+          )}
+
+          {tokenData.tokenId && activeTab !== 'comments' && (
+            <div className="hidden lg:block">
+              <TokenCommentsPanel
+                tokenId={tokenData.tokenId}
+                tokenName={tokenData.name}
+                variant="sidebar"
+              />
             </div>
           )}
         </div>

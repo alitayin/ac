@@ -66,6 +66,12 @@ vi.mock("@/components/ui/AddressDistribution", () => ({
   default: () => <div data-testid="address-distribution" />,
 }))
 
+vi.mock("@/components/ui/TokenCommentsPanel", () => ({
+  default: ({ variant = "main" }: { variant?: "main" | "sidebar" }) => (
+    <div data-testid={`token-comments-panel-${variant}`} />
+  ),
+}))
+
 vi.mock("@/components/ui/ErrorBoundary", () => ({
   ErrorBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
@@ -278,6 +284,33 @@ describe("TokenPage buy panel", () => {
     const selectors = screen.getAllByRole("combobox")
     expect(selectors.some((node) => node.textContent?.includes("Price"))).toBe(true)
     expect(screen.queryByText("Real-time Price")).not.toBeInTheDocument()
+  })
+
+  it("shows the Comments tab and sidebar comments panel on the default trading view", () => {
+    renderTokenPage()
+
+    expect(screen.getByText("Comments")).toBeInTheDocument()
+    expect(screen.getByTestId("token-comments-panel-sidebar")).toBeInTheDocument()
+    expect(screen.queryByTestId("token-comments-panel-main")).not.toBeInTheDocument()
+  })
+
+  it("moves comments into the main area when the Comments tab is selected", () => {
+    renderTokenPage()
+
+    fireEvent.click(screen.getByText("Comments"))
+
+    expect(screen.getByTestId("token-comments-panel-main")).toBeInTheDocument()
+    expect(screen.queryByTestId("token-comments-panel-sidebar")).not.toBeInTheDocument()
+    expect(screen.getByTestId("order-book")).toBeInTheDocument()
+  })
+
+  it("keeps comments in the sidebar when the Order Book tab is selected", () => {
+    renderTokenPage()
+
+    fireEvent.click(screen.getByText("Order Book"))
+
+    expect(screen.getByTestId("token-comments-panel-sidebar")).toBeInTheDocument()
+    expect(screen.queryByTestId("token-comments-panel-main")).not.toBeInTheDocument()
   })
 
   it("saves a buy order after a valid sweep quote is created", async () => {

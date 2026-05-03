@@ -45,10 +45,6 @@ vi.mock('ecashaddrjs', () => ({
   encode: vi.fn(() => 'ecash:qp...test')
 }))
 
-vi.mock('cashtab-connect', () => ({
-  CashtabConnect: vi.fn()
-}))
-
 describe('WalletContext Performance', () => {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <WalletProvider>{children}</WalletProvider>
@@ -74,7 +70,6 @@ describe('WalletContext Performance', () => {
     const { result, rerender } = renderHook(() => useWallet(), { wrapper })
 
     const initialConnectWallet = result.current.connectWallet
-    const initialConnectWithCashtab = result.current.connectWithCashtab
     const initialDisconnectWallet = result.current.disconnectWallet
     const initialRefreshBalance = result.current.refreshBalance
 
@@ -85,7 +80,6 @@ describe('WalletContext Performance', () => {
     // Currently they are NOT stable - this test documents the issue
     // After adding useMemo to provider value, these should pass
     expect(typeof result.current.connectWallet).toBe('function')
-    expect(typeof result.current.connectWithCashtab).toBe('function')
     expect(typeof result.current.disconnectWallet).toBe('function')
     expect(typeof result.current.refreshBalance).toBe('function')
   })

@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-05-03
+
+### 🎉 v4.2.0 发布
+
+**主要改动：**
+- 新增 paid token reviews 流程，支持 `1-10` 分评分、可选评论、支付后自动提交 txid 并等待后端验证
+- `TokenTable` 评分能力接入 etokendb summary 字段，token 详情页新增 `Comments` 面板，并支持主区/右侧栏切换展示
+- 评论提交改为仅允许 mnemonic-backed wallet，移除登录抽屉里的 `Connect with Cashtab` 入口，避免 address-only 会话误导用户进入不可支付流程
+
+**验证：**
+- ✅ `npm test -- __tests__/unit/token-page.test.tsx __tests__/unit/wallet-connect-drawer-inner.test.tsx __tests__/unit/WalletContext.test.tsx` 通过
+- ✅ `pnpm build` 通过
+- ✅ `git diff --check` 通过
+
+---
+
 ## 2026-04-24
 
 ### 🎉 v4.1.8 发布

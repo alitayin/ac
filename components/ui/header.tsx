@@ -66,8 +66,7 @@ export default function Header({
     balance, 
     userTokens, 
     disconnectWallet,
-    connectWallet,
-    connectWithCashtab
+    connectWallet
   } = useWallet();
 
   const xecPrice = useXECPrice();
@@ -134,31 +133,6 @@ export default function Header({
     }
   };
 
-  const handleConnectCashtab = async () => {
-    try {
-      const success = await connectWithCashtab();
-      if (success) {
-        setIsLoginDrawerOpen(false);
-        toast({
-          title: "Cashtab Connected Successfully",
-          description: "You are in guest mode. You can view balances but cannot create orders",
-        });
-      } else {
-        toast({
-          title: "Connection Failed",
-          description: "Unable to connect to Cashtab extension. Please make sure it is installed",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Connection Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
-    }
-  };
-  
   useEffect(() => {
     if (!isWalletConnected || Object.keys(userTokens).length === 0) return;
     
@@ -600,7 +574,6 @@ export default function Header({
                     handlePaste={handlePaste}
                     handleGenerateMnemonic={handleGenerateMnemonic}
                     handleSaveMnemonic={handleSaveMnemonic}
-                    handleConnectCashtab={handleConnectCashtab}
                   />
                 </DrawerContent>
               </Drawer>

@@ -11,7 +11,10 @@ const STATUS_TIMEOUT_MS = 4_000
 const TOKEN_TIMEOUT_MS = 8_000
 const TOKEN_LIST_TIMEOUT_MS = 8_000
 const TOKEN_CANDLES_TIMEOUT_MS = 8_000
+const TOKEN_REVIEWS_TIMEOUT_MS = 8_000
 const TOKEN_ID_PATTERN = /^[a-f0-9]{64}$/i
+const INVOICE_ID_PATTERN = /^[0-9a-f-]{16,}$/i
+const TXID_PATTERN = /^[a-f0-9]{64}$/i
 const NANOSATS_PER_XEC = 100_000_000_000
 const ETOKENDB_TOP_VOLUME_PAGE_SIZE = 100
 
@@ -37,6 +40,11 @@ export type EtokenDbTokenSummaryRecord = {
   lastTradeBlockTimestamp?: NumericLike
   lastSyncedAt?: NumericLike
   lastWsEventAt?: NumericLike
+  reviewAverageScore?: NumericLike
+  reviewScorerCount?: NumericLike
+  reviewCountTotal?: NumericLike
+  reviewCommentCountTotal?: NumericLike
+  lastReviewAt?: NumericLike
   [key: string]: unknown
 }
 
@@ -98,6 +106,79 @@ export type EtokenDbTokenCandlesPayload = {
   error?: string
 }
 
+export type ReviewInvoiceStatus =
+  | "pending"
+  | "tx_submitted"
+  | "published"
+  | "invalid"
+  | "expired"
+
+export type CreateEtokenDbReviewInvoiceInput = {
+  authorAddress: string
+  score: number
+  comment?: string
+}
+
+export type SubmitEtokenDbReviewInvoiceTxInput = {
+  txid: string
+}
+
+export type EtokenDbReviewInvoice = {
+  invoiceId: string
+  tokenId: string
+  authorAddress: string
+  score: number
+  comment: string
+  paymentAddress: string
+  expectedPaidSats: number
+  expectedPaidXec: string
+  status: ReviewInvoiceStatus
+  expiresAt: number
+  paymentTxid: string | null
+  publishedReviewId: string | null
+}
+
+export type EtokenDbTokenReviewItem = {
+  reviewId: string
+  tokenId: string
+  authorMasked: string
+  score: number
+  comment: string
+  createdAt: number
+}
+
+export type EtokenDbTokenReviewSummary = {
+  averageScore: number | null
+  scorerCount: number
+  reviewCountTotal: number
+  commentCountTotal: number
+  lastReviewAt: number | null
+}
+
+export type EtokenDbReviewInvoicePayload = {
+  ok?: boolean
+  data?: Partial<EtokenDbReviewInvoice> | null
+  error?: string
+}
+
+export type EtokenDbTokenReviewSummaryPayload = {
+  ok?: boolean
+  data?: Partial<EtokenDbTokenReviewSummary> | null
+  error?: string
+}
+
+export type EtokenDbPaginatedTokenReviewsPayload = {
+  ok?: boolean
+  data?: {
+    page?: NumericLike
+    pageSize?: NumericLike
+    total?: NumericLike
+    items?: (Partial<EtokenDbTokenReviewItem> | null)[] | null
+    [key: string]: unknown
+  } | null
+  error?: string
+}
+
 export type EtokenDbMappedTokenSummary = {
   tokenId: string
   tokenDecimals: number
@@ -115,6 +196,11 @@ export type EtokenDbMappedTokenSummary = {
   lastTradeBlockHeight: number | null
   lastTradeBlockTimestamp: number | null
   lastSyncedAt: number | null
+  reviewAverageScore: number | null
+  reviewScorerCount: number
+  reviewCountTotal: number
+  reviewCommentCountTotal: number
+  lastReviewAt: number | null
 }
 
 export type EtokenDbTopVolumeToken = {
@@ -133,6 +219,11 @@ export type EtokenDbTopVolumeToken = {
   lastTradeBlockHeight: number | null
   lastTradeBlockTimestamp: number | null
   lastSyncedAt: number | null
+  reviewAverageScore: number | null
+  reviewScorerCount: number
+  reviewCountTotal: number
+  reviewCommentCountTotal: number
+  lastReviewAt: number | null
 }
 
 export type EtokenDbMappedTokenCandle = {
@@ -175,6 +266,11 @@ type FetchEtokenDbTokenCandlesOptions = {
   chronikClient?: ChronikClient
 }
 
+type FetchEtokenDbTokenReviewsOptions = {
+  page?: number
+  pageSize?: number
+}
+
 let cachedAvailability: { value: boolean; checkedAt: number } | null = null
 let pendingAvailabilityRequest: Promise<boolean> | null = null
 
@@ -193,6 +289,19 @@ const coerceFiniteNumber = (value: NumericLike): number => {
 
 const coerceCount = (value: NumericLike): number => {
   return Math.max(0, Math.trunc(coerceFiniteNumber(value)))
+}
+
+const coerceNullableFiniteNumber = (value: NumericLike): number | null => {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === "string" && value.trim().length === 0) {
+    return null
+  }
+
+  const coerced = coerceFiniteNumber(value)
+  return Number.isFinite(coerced) ? coerced : null
 }
 
 const hasValue = (value: NumericLike): boolean => {
@@ -243,6 +352,14 @@ export const getEtokenDbPriceChange24h = (
 
 export const isValidEtokenDbTokenId = (tokenId: string): boolean => {
   return TOKEN_ID_PATTERN.test(tokenId)
+}
+
+export const isValidReviewInvoiceId = (invoiceId: string): boolean => {
+  return INVOICE_ID_PATTERN.test(invoiceId)
+}
+
+export const isValidEtokenDbTxid = (txid: string): boolean => {
+  return TXID_PATTERN.test(txid)
 }
 
 const fetchJsonWithTimeout = async <T>(
@@ -401,6 +518,14 @@ export const mapEtokenDbTokenSummary = (
       summary.lastSyncedAt === null || summary.lastSyncedAt === undefined
         ? null
         : coerceCount(summary.lastSyncedAt),
+    reviewAverageScore: coerceNullableFiniteNumber(summary.reviewAverageScore),
+    reviewScorerCount: coerceCount(summary.reviewScorerCount),
+    reviewCountTotal: coerceCount(summary.reviewCountTotal),
+    reviewCommentCountTotal: coerceCount(summary.reviewCommentCountTotal),
+    lastReviewAt:
+      summary.lastReviewAt === null || summary.lastReviewAt === undefined
+        ? null
+        : coerceCount(summary.lastReviewAt),
   }
 }
 
@@ -498,6 +623,14 @@ export const fetchEtokenDbTopVolumeTokens = async (
         item?.lastSyncedAt === null || item?.lastSyncedAt === undefined
           ? null
           : coerceCount(item?.lastSyncedAt),
+      reviewAverageScore: coerceNullableFiniteNumber(item?.reviewAverageScore),
+      reviewScorerCount: coerceCount(item?.reviewScorerCount),
+      reviewCountTotal: coerceCount(item?.reviewCountTotal),
+      reviewCommentCountTotal: coerceCount(item?.reviewCommentCountTotal),
+      lastReviewAt:
+        item?.lastReviewAt === null || item?.lastReviewAt === undefined
+          ? null
+          : coerceCount(item?.lastReviewAt),
     })
   })
 
@@ -585,4 +718,247 @@ export const fetchEtokenDbTokenCandles = async (
       : await resolveTokenDecimals(tokenId, options?.chronikClient)
 
   return mapEtokenDbTokenCandles(payload, { decimals })
+}
+
+export const mapEtokenDbTokenReviewSummary = (
+  payload: EtokenDbTokenReviewSummaryPayload,
+): EtokenDbTokenReviewSummary => {
+  const summary = payload?.data
+
+  if (!payload?.ok || !summary || typeof summary !== "object") {
+    throw new Error("Invalid etokendb token review summary payload")
+  }
+
+  return {
+    averageScore: coerceNullableFiniteNumber(summary.averageScore),
+    scorerCount: coerceCount(summary.scorerCount),
+    reviewCountTotal: coerceCount(summary.reviewCountTotal),
+    commentCountTotal: coerceCount(summary.commentCountTotal),
+    lastReviewAt:
+      summary.lastReviewAt === null || summary.lastReviewAt === undefined
+        ? null
+        : coerceCount(summary.lastReviewAt),
+  }
+}
+
+export const fetchEtokenDbTokenReviewSummary = async (
+  tokenId: string,
+): Promise<EtokenDbTokenReviewSummary> => {
+  if (!isValidEtokenDbTokenId(tokenId)) {
+    throw new Error("Invalid tokenId")
+  }
+
+  const payload = await fetchJsonWithTimeout<EtokenDbTokenReviewSummaryPayload>(
+    `${ETOKENDB_TOKENS_API_BASE_PATH}/${encodeURIComponent(tokenId)}/reviews/summary`,
+    TOKEN_REVIEWS_TIMEOUT_MS,
+  )
+
+  return mapEtokenDbTokenReviewSummary(payload)
+}
+
+export const mapEtokenDbReviewInvoice = (
+  payload: EtokenDbReviewInvoicePayload,
+): EtokenDbReviewInvoice => {
+  const invoice = payload?.data
+
+  if (
+    !payload?.ok ||
+    !invoice ||
+    typeof invoice.invoiceId !== "string" ||
+    typeof invoice.tokenId !== "string" ||
+    typeof invoice.authorAddress !== "string" ||
+    typeof invoice.paymentAddress !== "string" ||
+    typeof invoice.expectedPaidXec !== "string" ||
+    typeof invoice.status !== "string"
+  ) {
+    throw new Error("Invalid etokendb review invoice payload")
+  }
+
+  return {
+    invoiceId: invoice.invoiceId,
+    tokenId: invoice.tokenId,
+    authorAddress: invoice.authorAddress,
+    score: coerceCount(invoice.score),
+    comment: typeof invoice.comment === "string" ? invoice.comment : "",
+    paymentAddress: invoice.paymentAddress,
+    expectedPaidSats: coerceCount(invoice.expectedPaidSats),
+    expectedPaidXec: invoice.expectedPaidXec,
+    status: invoice.status as ReviewInvoiceStatus,
+    expiresAt: coerceCount(invoice.expiresAt),
+    paymentTxid:
+      typeof invoice.paymentTxid === "string" && invoice.paymentTxid.length > 0
+        ? invoice.paymentTxid
+        : null,
+    publishedReviewId:
+      typeof invoice.publishedReviewId === "string" && invoice.publishedReviewId.length > 0
+        ? invoice.publishedReviewId
+        : null,
+  }
+}
+
+export const createEtokenDbReviewInvoice = async (
+  tokenId: string,
+  input: CreateEtokenDbReviewInvoiceInput,
+): Promise<EtokenDbReviewInvoice> => {
+  if (!isValidEtokenDbTokenId(tokenId)) {
+    throw new Error("Invalid tokenId")
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TOKEN_REVIEWS_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(
+      `${ETOKENDB_TOKENS_API_BASE_PATH}/${encodeURIComponent(tokenId)}/reviews/invoices`,
+      {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      },
+    )
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && typeof (payload as any).error === "string"
+          ? (payload as any).error
+          : `Request failed with status ${response.status}`
+      throw new Error(message)
+    }
+
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Invalid JSON response")
+    }
+
+    return mapEtokenDbReviewInvoice(payload as EtokenDbReviewInvoicePayload)
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+export const fetchEtokenDbReviewInvoice = async (
+  invoiceId: string,
+): Promise<EtokenDbReviewInvoice> => {
+  if (!isValidReviewInvoiceId(invoiceId)) {
+    throw new Error("Invalid invoiceId")
+  }
+
+  const payload = await fetchJsonWithTimeout<EtokenDbReviewInvoicePayload>(
+    `${ETOKENDB_API_BASE_PATH}/review-invoices/${encodeURIComponent(invoiceId)}`,
+    TOKEN_REVIEWS_TIMEOUT_MS,
+  )
+
+  return mapEtokenDbReviewInvoice(payload)
+}
+
+export const submitEtokenDbReviewInvoiceTx = async (
+  invoiceId: string,
+  input: SubmitEtokenDbReviewInvoiceTxInput,
+): Promise<EtokenDbReviewInvoice> => {
+  if (!isValidReviewInvoiceId(invoiceId)) {
+    throw new Error("Invalid invoiceId")
+  }
+  if (!isValidEtokenDbTxid(input.txid)) {
+    throw new Error("Invalid txid")
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TOKEN_REVIEWS_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(
+      `${ETOKENDB_API_BASE_PATH}/review-invoices/${encodeURIComponent(invoiceId)}/submit-tx`,
+      {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      },
+    )
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && typeof (payload as any).error === "string"
+          ? (payload as any).error
+          : `Request failed with status ${response.status}`
+      throw new Error(message)
+    }
+
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Invalid JSON response")
+    }
+
+    return mapEtokenDbReviewInvoice(payload as EtokenDbReviewInvoicePayload)
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+export const fetchEtokenDbTokenReviews = async (
+  tokenId: string,
+  options?: FetchEtokenDbTokenReviewsOptions,
+): Promise<{
+  page: number
+  pageSize: number
+  total: number
+  items: EtokenDbTokenReviewItem[]
+}> => {
+  if (!isValidEtokenDbTokenId(tokenId)) {
+    throw new Error("Invalid tokenId")
+  }
+
+  const page = Math.max(1, Math.trunc(options?.page ?? 1))
+  const pageSize = Math.min(200, Math.max(1, Math.trunc(options?.pageSize ?? 20)))
+  const params = new URLSearchParams({
+    page: `${page}`,
+    pageSize: `${pageSize}`,
+  })
+
+  const payload = await fetchJsonWithTimeout<EtokenDbPaginatedTokenReviewsPayload>(
+    `${ETOKENDB_TOKENS_API_BASE_PATH}/${encodeURIComponent(tokenId)}/reviews?${params.toString()}`,
+    TOKEN_REVIEWS_TIMEOUT_MS,
+  )
+
+  if (!payload?.ok || !payload.data || !Array.isArray(payload.data.items)) {
+    throw new Error("Invalid etokendb token reviews payload")
+  }
+
+  return {
+    page: coerceCount(payload.data.page) || page,
+    pageSize: coerceCount(payload.data.pageSize) || pageSize,
+    total: coerceCount(payload.data.total),
+    items: payload.data.items.flatMap((item) => {
+      if (
+        !item ||
+        typeof item.reviewId !== "string" ||
+        typeof item.tokenId !== "string" ||
+        typeof item.authorMasked !== "string"
+      ) {
+        return []
+      }
+
+      return [
+        {
+          reviewId: item.reviewId,
+          tokenId: item.tokenId,
+          authorMasked: item.authorMasked,
+          score: coerceCount(item.score),
+          comment: typeof item.comment === "string" ? item.comment : "",
+          createdAt: coerceCount(item.createdAt),
+        },
+      ]
+    }),
+  }
 }

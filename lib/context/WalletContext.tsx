@@ -3,7 +3,6 @@ import { createContext, useState, useContext, useEffect, ReactNode, useRef, useC
 import * as ecashLib from 'ecash-lib';
 import * as ecashAddrJs from 'ecashaddrjs';
 import { disconnectAddress } from '../websocket-client';
-import { CashtabConnect } from 'cashtab-connect';
 import { chronik as sharedChronik } from '../chronik';
 import { storageManager } from '../storage-manager';
 
@@ -15,7 +14,6 @@ interface WalletContextType {
   mnemonic: string;
   isGuestMode: boolean;
   connectWallet: (mnemonicPhrase: string) => Promise<boolean>;
-  connectWithCashtab: () => Promise<boolean>;
   disconnectWallet: () => void;
   refreshBalance: () => Promise<void>;
 }
@@ -231,38 +229,6 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     }
   };
 
-  const connectWithCashtab = async (): Promise<boolean> => {
-    try {
-      const cashtab = new CashtabConnect();
-
-
-      await cashtab.waitForExtension(5000);
-
-
-      const address = await cashtab.requestAddress();
-
-      if (!address) {
-        throw new Error('Failed to obtain Cashtab address');
-      }
-
-
-      storageManager.set('wallet_address', address);
-      storageManager.set('wallet_is_guest', 'true');
-      storageManager.remove('wallet_mnemonic');
-
-      setIsWalletConnected(true);
-      setEcashAddress(address);
-      setIsGuestMode(true);
-      setMnemonic('');
-
-      return true;
-    } catch (error) {
-      console.error('Cashtab connection failed:', error);
-      return false;
-    }
-  };
-
-
   const disconnectWallet = () => {
 
     if (ecashAddress) {
@@ -291,10 +257,9 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     mnemonic,
     isGuestMode,
     connectWallet,
-    connectWithCashtab,
     disconnectWallet,
     refreshBalance
-  }), [isWalletConnected, ecashAddress, balance, userTokens, mnemonic, isGuestMode, connectWallet, connectWithCashtab, disconnectWallet, refreshBalance]);
+  }), [isWalletConnected, ecashAddress, balance, userTokens, mnemonic, isGuestMode, connectWallet, disconnectWallet, refreshBalance]);
 
   return (
     <WalletContext.Provider value={contextValue}>
