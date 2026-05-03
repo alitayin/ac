@@ -99,6 +99,12 @@ import {
   nanosatsPerAtomToXec,
 } from "@/lib/etokendb"
 import {
+  getDisplayReviewScore,
+  formatDisplayReviewScore,
+  getReviewScoreToneClasses,
+  REVIEW_STAR_ICON_CLASS,
+} from "@/lib/review-score"
+import {
   clearTokenCache,
   getCachedTokenData,
   setCachedTokenData,
@@ -479,6 +485,47 @@ export default function Component() {
     setShowClearCacheConfirm(false)
   }
 
+  const renderReviewScoreButton = (token: TokenTableRow) => {
+    const scoreToneClasses = getReviewScoreToneClasses(token.reviewAverageScore)
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setActiveReviewTokenId(token.tokenId)
+            }}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+              scoreToneClasses.button,
+            )}
+          >
+            <Star
+              className={cn(
+                "h-3.5 w-3.5 fill-current",
+                REVIEW_STAR_ICON_CLASS,
+              )}
+            />
+            <span>{formatDisplayReviewScore(token.reviewAverageScore)}</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <span className="text-xs">
+            {token.reviewScorerCount > 0
+              ? `${token.reviewScorerCount} scorer${
+                  token.reviewScorerCount === 1 ? "" : "s"
+                } • ${token.reviewCountTotal} paid review${
+                  token.reviewCountTotal === 1 ? "" : "s"
+                }`
+              : "Leave a paid rating or comment"}
+          </span>
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
   const columns: ColumnDef<TokenTableRow>[] = [
     {
       id: "index",
@@ -578,47 +625,6 @@ export default function Component() {
                 {isRowLoading && (
                   <span className="text-xs text-muted-foreground">(loading)</span>
                 )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setActiveReviewTokenId(row.original.tokenId)
-                      }}
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                        row.original.reviewScorerCount > 0
-                          ? "border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/15 dark:text-amber-300"
-                          : "border-border/70 bg-muted/20 text-muted-foreground hover:border-primary/30 hover:text-foreground",
-                      )}
-                    >
-                      <Star
-                        className={cn(
-                          "h-3.5 w-3.5",
-                          row.original.reviewScorerCount > 0 && "fill-current",
-                        )}
-                      />
-                      <span>
-                        {row.original.reviewScorerCount > 0 &&
-                        row.original.reviewAverageScore !== null
-                          ? row.original.reviewAverageScore.toFixed(1)
-                          : "Rate"}
-                      </span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <span className="text-xs">
-                      {row.original.reviewScorerCount > 0
-                        ? `${row.original.reviewScorerCount} scorer${
-                            row.original.reviewScorerCount === 1 ? "" : "s"
-                          } • ${row.original.reviewCountTotal} paid review${
-                            row.original.reviewCountTotal === 1 ? "" : "s"
-                          }`
-                        : "Leave a paid rating or comment"}
-                    </span>
-                  </TooltipContent>
-                </Tooltip>
                 {errorTokens.has(row.original.tokenId) && (
                   <AlertTriangle className="h-4 w-4 text-yellow-500" />
                 )}
@@ -730,6 +736,13 @@ export default function Component() {
               </div>
             </div>
         )
+      },
+    },
+    {
+      accessorKey: "reviewAverageScore",
+      header: "Score",
+      cell: ({ row }) => {
+        return renderReviewScoreButton(row.original)
       },
     },
     {
@@ -2496,6 +2509,20 @@ export default function Component() {
     const sortFunction = (a: Token, b: Token) => {
       if (sortBy === '24h') {
         return b.last24HoursXECAmount - a.last24HoursXECAmount;
+      } else if (sortBy === 'score') {
+        const scoreDiff =
+          getDisplayReviewScore(b.reviewAverageScore) -
+          getDisplayReviewScore(a.reviewAverageScore)
+        if (scoreDiff !== 0) {
+          return scoreDiff
+        }
+
+        const scorerDiff = b.reviewScorerCount - a.reviewScorerCount
+        if (scorerDiff !== 0) {
+          return scorerDiff
+        }
+
+        return b.reviewCountTotal - a.reviewCountTotal
       } else if (sortBy === 'history') {
         return b.totalXECAmount - a.totalXECAmount;
       }
@@ -2879,6 +2906,8 @@ export default function Component() {
                       const sortType = 
                         header.id === 'last24HoursXECAmount'
                           ? '24h'
+                          : header.id === 'reviewAverageScore'
+                          ? 'score'
                           : header.id === 'last30DaysXECAmount'
                           ? '7d'
                           : header.id === 'totalXECAmount'

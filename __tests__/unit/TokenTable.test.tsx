@@ -65,6 +65,11 @@ vi.mock("@/config/tokens", () => ({
       name: "Alpha Token",
       decimals: 2,
     },
+    beta: {
+      tokenId: "beta-token-id",
+      name: "Beta Token",
+      decimals: 2,
+    },
     fallback: {
       tokenId: "fallback-token-id",
       name: "Fallback Token",
@@ -282,10 +287,56 @@ describe("TokenTable bootstrap", () => {
       expect(screen.getByText("Alpha Token")).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "Rate" }))
+    expect(screen.getByText("Score")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "1.0" }))
 
     await waitFor(() => {
       expect(screen.getByTestId("token-review-dialog")).toHaveTextContent("alpha-token-id")
     })
+  })
+
+  it("sorts by score when clicking the Score column sort control", async () => {
+    fetchBlockchainInfoMock.mockResolvedValue({ tipHeight: 900000 })
+    fetchEtokenDbTopVolumeTokensMock.mockResolvedValue([
+      makeTopVolumeToken({
+        tokenId: "alpha-token-id",
+        name: "Alpha Token",
+        last30DaysXECAmount: 100,
+        reviewAverageScore: 3.2,
+        reviewScorerCount: 4,
+        reviewCountTotal: 4,
+      }),
+      makeTopVolumeToken({
+        tokenId: "beta-token-id",
+        name: "Beta Token",
+        last30DaysXECAmount: 90,
+        reviewAverageScore: 9.1,
+        reviewScorerCount: 2,
+        reviewCountTotal: 2,
+      }),
+    ])
+
+    render(<TokenTable />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Token")).toBeInTheDocument()
+      expect(screen.getByText("Beta Token")).toBeInTheDocument()
+    })
+
+    const scoreHeader = screen.getByText("Score").closest("th")
+    expect(scoreHeader).not.toBeNull()
+
+    const scoreSortButton = scoreHeader?.querySelector("button")
+    expect(scoreSortButton).not.toBeNull()
+    fireEvent.click(scoreSortButton as HTMLButtonElement)
+
+    const betaCell = screen.getByText("Beta Token").closest("tr")
+    const alphaCell = screen.getByText("Alpha Token").closest("tr")
+
+    expect(betaCell).not.toBeNull()
+    expect(alphaCell).not.toBeNull()
+    expect(
+      betaCell!.compareDocumentPosition(alphaCell!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 })

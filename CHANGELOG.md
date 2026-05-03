@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-05-04
+
+### 🎉 v4.2.1 发布
+
+**主要改动：**
+- TokenTable 的评分改为独立 `Score` 列，位置在 `Name` 后、`Price` 前
+- 新增按评分排序能力，交互方式与现有可排序列保持一致
+- 评分显示统一为中性灰风格，未评分默认显示 `1.0`，星星颜色固定为金色
+
+**验证：**
+- ✅ `npm test -- __tests__/unit/review-score.test.ts __tests__/unit/TokenTable.test.tsx` 通过
+- ✅ `pnpm build` 通过
+- ✅ `git diff --check` 通过
+
+---
+
 ## 2026-05-03
 
 ### 🎉 v4.2.0 发布

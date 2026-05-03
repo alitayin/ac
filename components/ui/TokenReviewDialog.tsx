@@ -35,6 +35,12 @@ import {
   type EtokenDbReviewInvoice,
   type EtokenDbTokenReviewSummary,
 } from "@/lib/etokendb"
+import {
+  DEFAULT_REVIEW_SCORE,
+  formatDisplayReviewScore,
+  getReviewScoreToneClasses,
+  REVIEW_STAR_ICON_CLASS,
+} from "@/lib/review-score"
 import type { Token } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -196,7 +202,7 @@ export function TokenReviewDialog({
     refreshBalance,
   } = useWallet()
 
-  const [score, setScore] = React.useState<number | null>(null)
+  const [score, setScore] = React.useState<number | null>(DEFAULT_REVIEW_SCORE)
   const [comment, setComment] = React.useState("")
   const [invoice, setInvoice] = React.useState<EtokenDbReviewInvoice | null>(null)
   const [summary, setSummary] = React.useState<EtokenDbTokenReviewSummary | null>(null)
@@ -244,7 +250,7 @@ export function TokenReviewDialog({
     setErrorMessage("")
     setStatusMessage("")
     setInvoice(null)
-    setScore(null)
+    setScore(DEFAULT_REVIEW_SCORE)
     setComment("")
     setIsRefreshingSummary(true)
     resumeAttemptedInvoiceRef.current = null
@@ -292,10 +298,8 @@ export function TokenReviewDialog({
   const canSubmit = Boolean(
     score && !isCommentTooLong && hasSigningWallet && !isSubmitting && !isPublishedInvoice,
   )
-  const currentAverage =
-    summary?.averageScore !== null && summary?.averageScore !== undefined
-      ? summary.averageScore.toFixed(1)
-      : "Unrated"
+  const currentAverage = formatDisplayReviewScore(summary?.averageScore)
+  const currentAverageToneClasses = getReviewScoreToneClasses(summary?.averageScore)
   const submitFeeLabel = formatFeeLabel(invoice?.expectedPaidXec)
 
   const refreshSummary = React.useCallback(async () => {
@@ -660,8 +664,16 @@ export function TokenReviewDialog({
             <DialogTitle className="text-xl tracking-tight">
               Rate {token.name}
             </DialogTitle>
-            <Badge variant="outline" className="gap-1 rounded-full px-2.5 py-1">
-              <Star className="size-3.5 fill-current" />
+            <Badge
+              variant="outline"
+              className={cn(
+                "gap-1 rounded-full px-2.5 py-1",
+                currentAverageToneClasses.badge,
+              )}
+            >
+              <Star
+                className={cn("size-3.5 fill-current", REVIEW_STAR_ICON_CLASS)}
+              />
               <span>{currentAverage}</span>
             </Badge>
             {summary?.scorerCount ? (
@@ -683,7 +695,12 @@ export function TokenReviewDialog({
                 Current score
               </div>
               <div className="mt-3 flex items-end gap-3">
-                <div className="text-3xl font-semibold tracking-tight">
+                <div
+                  className={cn(
+                    "text-3xl font-semibold tracking-tight",
+                    currentAverageToneClasses.text,
+                  )}
+                >
                   {currentAverage}
                 </div>
                 <div className="pb-1 text-sm text-muted-foreground">
@@ -734,6 +751,7 @@ export function TokenReviewDialog({
                 <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
                   {SCORE_OPTIONS.map((value) => {
                     const active = score === value
+                    const scoreToneClasses = getReviewScoreToneClasses(value)
                     return (
                       <button
                         key={value}
@@ -742,7 +760,7 @@ export function TokenReviewDialog({
                         className={cn(
                           "flex h-11 items-center justify-center rounded-2xl border text-sm font-semibold transition-colors",
                           active
-                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                            ? scoreToneClasses.buttonActive
                             : "border-border/60 bg-white text-muted-foreground hover:border-primary/35 hover:text-foreground dark:bg-muted/10",
                         )}
                       >

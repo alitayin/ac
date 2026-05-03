@@ -13,6 +13,11 @@ import {
   type EtokenDbTokenReviewItem,
   type EtokenDbTokenReviewSummary,
 } from "@/lib/etokendb"
+import {
+  formatDisplayReviewScore,
+  getReviewScoreToneClasses,
+  REVIEW_STAR_ICON_CLASS,
+} from "@/lib/review-score"
 import type { Token } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -24,14 +29,6 @@ type TokenCommentsPanelProps = {
 }
 
 const REVIEW_PAGE_SIZE = 50
-
-const formatAverageScore = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) {
-    return "Unrated"
-  }
-
-  return value.toFixed(1)
-}
 
 const formatReviewDate = (timestamp: number): string => {
   if (!timestamp) {
@@ -147,7 +144,8 @@ export default function TokenCommentsPanel({
     }
   }, [summary, tokenId, tokenName])
 
-  const averageScoreLabel = formatAverageScore(summary?.averageScore)
+  const averageScoreLabel = formatDisplayReviewScore(summary?.averageScore)
+  const averageScoreToneClasses = getReviewScoreToneClasses(summary?.averageScore)
   const reviewCountTotal = summary?.reviewCountTotal ?? 0
   const commentCountTotal = summary?.commentCountTotal ?? 0
   const hiddenCommentCount = Math.max(0, commentCountTotal - comments.length)
@@ -190,7 +188,12 @@ export default function TokenCommentsPanel({
                   Average score
                 </p>
                 <div className="mt-2 flex items-end gap-3">
-                  <div className="text-3xl font-semibold tracking-tight">
+                  <div
+                    className={cn(
+                      "text-3xl font-semibold tracking-tight",
+                      averageScoreToneClasses.text,
+                    )}
+                  >
                     {averageScoreLabel}
                   </div>
                   <div className="pb-1 text-sm text-muted-foreground">
@@ -201,7 +204,12 @@ export default function TokenCommentsPanel({
               </div>
 
               <Badge variant="secondary" className="rounded-full px-2.5 py-1">
-                <Star className="mr-1 size-3.5 fill-current" />
+                <Star
+                  className={cn(
+                    "mr-1 size-3.5 fill-current",
+                    REVIEW_STAR_ICON_CLASS,
+                  )}
+                />
                 {commentCountTotal} comment{commentCountTotal === 1 ? "" : "s"}
               </Badge>
             </div>
@@ -257,11 +265,14 @@ export default function TokenCommentsPanel({
                   : "max-h-[52rem] overflow-y-auto pr-1",
               )}
             >
-              {comments.map((item) => (
-                <article
-                  key={item.reviewId}
-                  className="rounded-2xl border border-border/60 bg-background/70 p-4"
-                >
+              {comments.map((item) => {
+                const scoreToneClasses = getReviewScoreToneClasses(item.score)
+
+                return (
+                  <article
+                    key={item.reviewId}
+                    className="rounded-2xl border border-border/60 bg-background/70 p-4"
+                  >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{item.authorMasked}</p>
@@ -270,8 +281,19 @@ export default function TokenCommentsPanel({
                       </p>
                     </div>
 
-                    <Badge variant="outline" className="shrink-0 rounded-full px-2.5 py-1">
-                      <Star className="mr-1 size-3.5 fill-current" />
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "shrink-0 rounded-full px-2.5 py-1",
+                        scoreToneClasses.badge,
+                      )}
+                    >
+                      <Star
+                        className={cn(
+                          "mr-1 size-3.5 fill-current",
+                          REVIEW_STAR_ICON_CLASS,
+                        )}
+                      />
                       {item.score}/10
                     </Badge>
                   </div>
@@ -279,8 +301,9 @@ export default function TokenCommentsPanel({
                   <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-foreground/90">
                     {item.comment.trim()}
                   </p>
-                </article>
-              ))}
+                  </article>
+                )
+              })}
             </div>
           )}
 
