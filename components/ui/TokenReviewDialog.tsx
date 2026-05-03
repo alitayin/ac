@@ -654,8 +654,8 @@ export function TokenReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden border-border/70 bg-background/95 p-0 shadow-[0_28px_120px_-48px_rgba(0,0,0,0.85)] backdrop-blur sm:max-w-2xl">
-        <DialogHeader className="shrink-0 gap-3 bg-gradient-to-br from-muted/40 via-background to-background px-6 py-5 pr-14">
+      <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden border-border/70 bg-white p-0 shadow-[0_28px_120px_-48px_rgba(0,0,0,0.85)] dark:bg-background sm:max-w-2xl">
+        <DialogHeader className="shrink-0 gap-1.5 bg-white px-5 py-3.5 pr-14 dark:bg-background">
           <div className="flex flex-wrap items-center gap-2">
             <DialogTitle className="text-xl tracking-tight">
               Rate {token.name}
@@ -675,14 +675,14 @@ export function TokenReviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="flex flex-col gap-5 px-6 py-5 pb-6">
-            <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white overscroll-contain dark:bg-background">
+          <div className="flex flex-col gap-3.5 px-4 py-3.5 pb-4">
+            <div className="rounded-2xl border border-border/60 bg-white p-3.5 dark:bg-muted/10">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Sparkles className="size-4 text-primary" />
                 Current score
               </div>
-              <div className="mt-4 flex items-end gap-3">
+              <div className="mt-3 flex items-end gap-3">
                 <div className="text-3xl font-semibold tracking-tight">
                   {currentAverage}
                 </div>
@@ -691,7 +691,7 @@ export function TokenReviewDialog({
                   {(summary?.reviewCountTotal || 0) === 1 ? "" : "s"}
                 </div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span>{summary?.commentCountTotal || 0} with comments</span>
                 <span>•</span>
                 <span>{formatLastReviewAt(summary?.lastReviewAt ?? null)}</span>
@@ -717,7 +717,7 @@ export function TokenReviewDialog({
                 </AlertDescription>
               </Alert>
             ) : (
-              <Alert className="border-border/60 bg-muted/15">
+              <Alert className="border-border/60 bg-white dark:bg-muted/15">
                 <CheckCircle2 className="size-4 text-primary" />
                 <AlertTitle>Connected</AlertTitle>
                 <AlertDescription className="flex flex-wrap items-center gap-2">
@@ -728,7 +728,7 @@ export function TokenReviewDialog({
               </Alert>
             )}
 
-            <div className="space-y-3 rounded-2xl border border-border/60 bg-background/65 p-4">
+            <div className="space-y-3 rounded-2xl border border-border/60 bg-white p-3.5 dark:bg-background">
               <div className="space-y-2">
                 <Label>Select score</Label>
                 <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
@@ -743,7 +743,7 @@ export function TokenReviewDialog({
                           "flex h-11 items-center justify-center rounded-2xl border text-sm font-semibold transition-colors",
                           active
                             ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                            : "border-border/60 bg-muted/10 text-muted-foreground hover:border-primary/35 hover:text-foreground",
+                            : "border-border/60 bg-white text-muted-foreground hover:border-primary/35 hover:text-foreground dark:bg-muted/10",
                         )}
                       >
                         {value}
@@ -770,7 +770,7 @@ export function TokenReviewDialog({
                   value={comment}
                   onChange={(event) => setComment(event.target.value)}
                   placeholder="Optional paid comment"
-                  className="min-h-[128px] rounded-2xl border-border/60 bg-muted/10 text-sm shadow-none placeholder:text-muted-foreground/60"
+                  className="min-h-[108px] rounded-2xl border-border/60 bg-white text-sm shadow-none placeholder:text-muted-foreground/60 dark:bg-muted/10"
                 />
                 <p className="text-xs text-muted-foreground">
                   Comments are public and stored as paid review records after verification.
@@ -779,7 +779,7 @@ export function TokenReviewDialog({
             </div>
 
             {invoice ? (
-              <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
+              <div className="rounded-2xl border border-border/60 bg-white p-3.5 dark:bg-muted/10">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium">Invoice status</p>
@@ -800,8 +800,8 @@ export function TokenReviewDialog({
                   </Badge>
                 </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-border/60 bg-background/75 p-3">
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border/60 bg-white p-3 dark:bg-background/75">
                     <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       Amount
                     </p>
@@ -809,7 +809,7 @@ export function TokenReviewDialog({
                       {invoice.expectedPaidXec} XEC
                     </p>
                   </div>
-                  <div className="rounded-xl border border-border/60 bg-background/75 p-3">
+                  <div className="rounded-xl border border-border/60 bg-white p-3 dark:bg-background/75">
                     <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       Payment address
                     </p>
@@ -837,7 +837,7 @@ export function TokenReviewDialog({
               <Alert
                 className={cn(
                   "border-primary/20 bg-primary/5",
-                  !isSubmitting && "border-border/60 bg-muted/15",
+                  !isSubmitting && "border-border/60 bg-white dark:bg-muted/15",
                 )}
               >
                 {isSubmitting ? (
@@ -866,7 +866,7 @@ export function TokenReviewDialog({
           </div>
         </div>
 
-        <DialogFooter className="shrink-0 gap-2 bg-background/96 px-6 py-4 backdrop-blur sm:justify-between">
+        <DialogFooter className="shrink-0 gap-2 bg-white px-4 py-2.5 dark:bg-background sm:justify-between">
           <Button
             type="button"
             variant="outline"

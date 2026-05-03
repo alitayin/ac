@@ -13,6 +13,7 @@
 - `TokenTable` 评分能力接入 etokendb summary 字段，token 详情页新增 `Comments` 面板，并支持主区/右侧栏切换展示
 - 评论提交改为仅允许 mnemonic-backed wallet，移除登录抽屉里的 `Connect with Cashtab` 入口，避免 address-only 会话误导用户进入不可支付流程
 - 调整 token 详情页右侧栏顺序为 `Swap -> Comments -> Order Book -> Info`，将 `Info` 固定到底部
+- 收紧 paid review 弹窗的 light mode 样式，改为纯白面板并压缩上下留白
 
 **验证：**
 - ✅ `npm test -- __tests__/unit/token-page.test.tsx __tests__/unit/wallet-connect-drawer-inner.test.tsx __tests__/unit/WalletContext.test.tsx` 通过
