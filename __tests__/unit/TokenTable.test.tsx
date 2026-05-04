@@ -70,6 +70,11 @@ vi.mock("@/config/tokens", () => ({
       name: "Beta Token",
       decimals: 2,
     },
+    gamma: {
+      tokenId: "gamma-token-id",
+      name: "Gamma Token",
+      decimals: 2,
+    },
     fallback: {
       tokenId: "fallback-token-id",
       name: "Fallback Token",
@@ -288,7 +293,8 @@ describe("TokenTable bootstrap", () => {
     })
 
     expect(screen.getByText("Score")).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "1.0" }))
+    expect(screen.queryByText("1.0")).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Unrated" }))
 
     await waitFor(() => {
       expect(screen.getByTestId("token-review-dialog")).toHaveTextContent("alpha-token-id")
@@ -314,6 +320,14 @@ describe("TokenTable bootstrap", () => {
         reviewScorerCount: 2,
         reviewCountTotal: 2,
       }),
+      makeTopVolumeToken({
+        tokenId: "gamma-token-id",
+        name: "Gamma Token",
+        last30DaysXECAmount: 80,
+        reviewAverageScore: null,
+        reviewScorerCount: 0,
+        reviewCountTotal: 0,
+      }),
     ])
 
     render(<TokenTable />)
@@ -321,6 +335,7 @@ describe("TokenTable bootstrap", () => {
     await waitFor(() => {
       expect(screen.getByText("Alpha Token")).toBeInTheDocument()
       expect(screen.getByText("Beta Token")).toBeInTheDocument()
+      expect(screen.getByText("Gamma Token")).toBeInTheDocument()
     })
 
     const scoreHeader = screen.getByText("Score").closest("th")
@@ -332,11 +347,16 @@ describe("TokenTable bootstrap", () => {
 
     const betaCell = screen.getByText("Beta Token").closest("tr")
     const alphaCell = screen.getByText("Alpha Token").closest("tr")
+    const gammaCell = screen.getByText("Gamma Token").closest("tr")
 
     expect(betaCell).not.toBeNull()
     expect(alphaCell).not.toBeNull()
+    expect(gammaCell).not.toBeNull()
     expect(
       betaCell!.compareDocumentPosition(alphaCell!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      alphaCell!.compareDocumentPosition(gammaCell!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
   })
 })

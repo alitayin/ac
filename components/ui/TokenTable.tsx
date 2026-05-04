@@ -99,10 +99,14 @@ import {
   nanosatsPerAtomToXec,
 } from "@/lib/etokendb"
 import {
-  getDisplayReviewScore,
   formatDisplayReviewScore,
+  getDisplayReviewScore,
   getReviewScoreToneClasses,
+  getSortableReviewScore,
   REVIEW_STAR_ICON_CLASS,
+  REVIEW_UNRATED_LABEL,
+  REVIEW_UNRATED_STAR_ICON_CLASS,
+  REVIEW_UNRATED_TOOLTIP,
 } from "@/lib/review-score"
 import {
   clearTokenCache,
@@ -486,7 +490,15 @@ export default function Component() {
   }
 
   const renderReviewScoreButton = (token: TokenTableRow) => {
-    const scoreToneClasses = getReviewScoreToneClasses(token.reviewAverageScore)
+    const hasScore =
+      token.reviewScorerCount > 0 &&
+      getDisplayReviewScore(token.reviewAverageScore) !== null
+    const scoreToneClasses = getReviewScoreToneClasses(
+      hasScore ? token.reviewAverageScore : null,
+    )
+    const scoreLabel = hasScore
+      ? formatDisplayReviewScore(token.reviewAverageScore)
+      : REVIEW_UNRATED_LABEL
 
     return (
       <Tooltip>
@@ -505,10 +517,10 @@ export default function Component() {
             <Star
               className={cn(
                 "h-3.5 w-3.5 fill-current",
-                REVIEW_STAR_ICON_CLASS,
+                hasScore ? REVIEW_STAR_ICON_CLASS : REVIEW_UNRATED_STAR_ICON_CLASS,
               )}
             />
-            <span>{formatDisplayReviewScore(token.reviewAverageScore)}</span>
+            <span>{scoreLabel}</span>
           </button>
         </TooltipTrigger>
         <TooltipContent>
@@ -519,7 +531,7 @@ export default function Component() {
                 } • ${token.reviewCountTotal} paid review${
                   token.reviewCountTotal === 1 ? "" : "s"
                 }`
-              : "Leave a paid rating or comment"}
+              : REVIEW_UNRATED_TOOLTIP}
           </span>
         </TooltipContent>
       </Tooltip>
@@ -2511,8 +2523,12 @@ export default function Component() {
         return b.last24HoursXECAmount - a.last24HoursXECAmount;
       } else if (sortBy === 'score') {
         const scoreDiff =
-          getDisplayReviewScore(b.reviewAverageScore) -
-          getDisplayReviewScore(a.reviewAverageScore)
+          (b.reviewScorerCount > 0
+            ? getSortableReviewScore(b.reviewAverageScore)
+            : 0) -
+          (a.reviewScorerCount > 0
+            ? getSortableReviewScore(a.reviewAverageScore)
+            : 0)
         if (scoreDiff !== 0) {
           return scoreDiff
         }

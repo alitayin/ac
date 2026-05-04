@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-05-05
+
+### 🎉 v4.2.2 发布
+
+**主要改动：**
+- TokenTable 未评分状态显示为 `Unrated`，不再显示默认 `1.0`
+- 未评分 token 使用灰色星星和 muted chip，并在提示中标记为 `still unproven`
+- 评分排序中未评分按 `0` 处理，排在有评分 token 后面
+- 评分弹窗的当前平均分同步使用未评分状态，避免金色星星误导
+
+**验证：**
+- ✅ `npm test -- __tests__/unit/review-score.test.ts __tests__/unit/TokenTable.test.tsx` 通过
+- ✅ `pnpm build` 通过
+- ✅ `git diff --check` 通过
+
+---
+
 ## 2026-05-04
 
 ### 🎉 v4.2.1 发布

@@ -38,8 +38,11 @@ import {
 import {
   DEFAULT_REVIEW_SCORE,
   formatDisplayReviewScore,
+  getDisplayReviewScore,
   getReviewScoreToneClasses,
   REVIEW_STAR_ICON_CLASS,
+  REVIEW_UNRATED_LABEL,
+  REVIEW_UNRATED_STAR_ICON_CLASS,
 } from "@/lib/review-score"
 import type { Token } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -298,8 +301,15 @@ export function TokenReviewDialog({
   const canSubmit = Boolean(
     score && !isCommentTooLong && hasSigningWallet && !isSubmitting && !isPublishedInvoice,
   )
-  const currentAverage = formatDisplayReviewScore(summary?.averageScore)
-  const currentAverageToneClasses = getReviewScoreToneClasses(summary?.averageScore)
+  const hasCurrentAverage =
+    (summary?.scorerCount ?? 0) > 0 &&
+    getDisplayReviewScore(summary?.averageScore) !== null
+  const currentAverage = hasCurrentAverage
+    ? formatDisplayReviewScore(summary?.averageScore)
+    : REVIEW_UNRATED_LABEL
+  const currentAverageToneClasses = getReviewScoreToneClasses(
+    hasCurrentAverage ? summary?.averageScore : null,
+  )
   const submitFeeLabel = formatFeeLabel(invoice?.expectedPaidXec)
 
   const refreshSummary = React.useCallback(async () => {
@@ -672,7 +682,12 @@ export function TokenReviewDialog({
               )}
             >
               <Star
-                className={cn("size-3.5 fill-current", REVIEW_STAR_ICON_CLASS)}
+                className={cn(
+                  "size-3.5 fill-current",
+                  hasCurrentAverage
+                    ? REVIEW_STAR_ICON_CLASS
+                    : REVIEW_UNRATED_STAR_ICON_CLASS,
+                )}
               />
               <span>{currentAverage}</span>
             </Badge>
