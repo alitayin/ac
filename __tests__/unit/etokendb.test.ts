@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  createEtokenDbProjectInfoInvoice,
   createEtokenDbReviewInvoice,
+  fetchEtokenDbProjectInfoInvoice,
+  fetchEtokenDbTokenProjectInfo,
   fetchEtokenDbReviewInvoice,
   fetchEtokenDbTokenCandles,
   fetchEtokenDbTokenReviewSummary,
@@ -12,10 +15,12 @@ import {
   isEtokenDbAvailable,
   isEtokenDbAvailableWithRetry,
   mapEtokenDbTokenCandles,
+  mapEtokenDbTokenProjectInfo,
   mapEtokenDbTokenSummary,
   nanosatsPerAtomToXec,
   resetEtokenDbAvailabilityCache,
   satsToXec,
+  submitEtokenDbProjectInfoInvoiceTx,
   submitEtokenDbReviewInvoiceTx,
 } from "@/lib/etokendb"
 
@@ -435,6 +440,162 @@ describe("etokendb", () => {
       reviewCountTotal: 7,
       commentCountTotal: 4,
       lastReviewAt: 1_776_231_053_158,
+    })
+  })
+
+  it("maps null and populated project info payloads", () => {
+    expect(
+      mapEtokenDbTokenProjectInfo({
+        ok: true,
+        data: null,
+      }),
+    ).toBeNull()
+
+    expect(
+      mapEtokenDbTokenProjectInfo({
+        ok: true,
+        data: {
+          tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+          description: "Project description",
+          websiteUrl: "https://example.com/",
+          xUrl: "https://x.com/project",
+          telegramUrl: null,
+          createdAt: 1_776_230_000_000,
+          updatedAt: 1_776_231_053_158,
+          updateCount: 2,
+          lastEditorMasked: "ecash:qpr8...u8n2s",
+        },
+      }),
+    ).toEqual({
+      tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+      description: "Project description",
+      websiteUrl: "https://example.com/",
+      xUrl: "https://x.com/project",
+      telegramUrl: null,
+      createdAt: 1_776_230_000_000,
+      updatedAt: 1_776_231_053_158,
+      updateCount: 2,
+      lastEditorMasked: "ecash:qpr8...u8n2s",
+    })
+  })
+
+  it("fetches token project info through the local proxy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+            description: "Project description",
+            websiteUrl: "https://example.com/",
+            xUrl: null,
+            telegramUrl: "https://t.me/project",
+            createdAt: 1_776_230_000_000,
+            updatedAt: 1_776_231_053_158,
+            updateCount: 1,
+            lastEditorMasked: "ecash:qpr8...u8n2s",
+          },
+        }),
+      }),
+    )
+
+    await expect(
+      fetchEtokenDbTokenProjectInfo(
+        "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+      ),
+    ).resolves.toMatchObject({
+      description: "Project description",
+      websiteUrl: "https://example.com/",
+      telegramUrl: "https://t.me/project",
+      updateCount: 1,
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/etokendb/tokens/c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4/project-info",
+      expect.any(Object),
+    )
+  })
+
+  it("creates, fetches, and submits project info invoices through the local proxy", async () => {
+    const invoicePayload = {
+      ok: true,
+      data: {
+        invoiceId: "550e8400-e29b-41d4-a716-446655440001",
+        tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+        editorAddress: "ecash:qpr8h2m24zk0xv2h7x7w4jv3n7q3y3tu4s7v5u8n2s",
+        description: "Project description",
+        websiteUrl: "https://example.com/",
+        xUrl: "https://x.com/project",
+        telegramUrl: null,
+        paymentAddress: "ecash:qppaymentsample8h2m24zk0xv2h7x7w4jv3n7q3y3t",
+        expectedPaidSats: 100_000_000,
+        expectedPaidXec: "1000000",
+        feeTier: "initial",
+        status: "pending",
+        expiresAt: 1_776_240_000_000,
+        paymentTxid: null,
+      },
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => invoicePayload,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => invoicePayload,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            ok: true,
+            data: {
+              ...invoicePayload.data,
+              status: "tx_submitted",
+              paymentTxid:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            },
+          }),
+        }),
+    )
+
+    await expect(
+      createEtokenDbProjectInfoInvoice(invoicePayload.data.tokenId, {
+        editorAddress: invoicePayload.data.editorAddress,
+        description: "Project description",
+        websiteUrl: "https://example.com/",
+        xUrl: "https://x.com/project",
+      }),
+    ).resolves.toMatchObject({
+      invoiceId: invoicePayload.data.invoiceId,
+      expectedPaidXec: "1000000",
+      feeTier: "initial",
+      status: "pending",
+    })
+
+    await expect(
+      fetchEtokenDbProjectInfoInvoice(invoicePayload.data.invoiceId),
+    ).resolves.toMatchObject({
+      invoiceId: invoicePayload.data.invoiceId,
+      expectedPaidSats: 100_000_000,
+      status: "pending",
+    })
+
+    await expect(
+      submitEtokenDbProjectInfoInvoiceTx(invoicePayload.data.invoiceId, {
+        txid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    ).resolves.toMatchObject({
+      invoiceId: invoicePayload.data.invoiceId,
+      status: "tx_submitted",
+      paymentTxid:
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     })
   })
 

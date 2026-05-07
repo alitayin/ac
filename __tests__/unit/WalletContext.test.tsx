@@ -11,11 +11,19 @@ vi.mock('@/lib/chronik', () => ({
         utxos: [
           { sats: 100000, token: undefined },
           { sats: 50000, token: undefined },
+          {
+            sats: 546,
+            token: {
+              tokenId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              atoms: 123n,
+            },
+          },
         ]
       })
     })),
     ws: vi.fn(() => ({
       subscribe: vi.fn(),
+      subscribeToAddress: vi.fn(),
       unsubscribe: vi.fn(),
       close: vi.fn(),
       waitForOpen: vi.fn().mockResolvedValue(undefined),
@@ -28,22 +36,23 @@ vi.mock('@/lib/websocket-client', () => ({
 }))
 
 vi.mock('ecash-lib', () => ({
-  initWasm: vi.fn().mockResolvedValue(undefined),
-  Ecc: {
-    default: vi.fn(() => ({}))
+  mnemonicToEntropy: vi.fn(),
+  mnemonicToSeed: vi.fn(() => new Uint8Array([1, 2, 3])),
+  HdNode: {
+    fromSeed: vi.fn(() => ({
+      derivePath: vi.fn(() => ({
+        pubkey: vi.fn(() => new Uint8Array([2, ...Array(32).fill(1)])),
+      })),
+    })),
   },
-  fromSeed: vi.fn(() => ({
-    derivePath: vi.fn(() => ({
-      toPublicKey: vi.fn(() => ({
-        toAddress: vi.fn(() => 'ecash:qp...test')
-      }))
-    }))
-  }))
+  shaRmd160: vi.fn(() => new Uint8Array(20).fill(1)),
 }))
 
 vi.mock('ecashaddrjs', () => ({
-  encode: vi.fn(() => 'ecash:qp...test')
+  encodeCashAddress: vi.fn(() => 'ecash:qp...test')
 }))
+
+const TEST_PUBLIC_KEY_HEX = `02${'01'.repeat(32)}`
 
 describe('WalletContext Performance', () => {
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -53,6 +62,12 @@ describe('WalletContext Performance', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ words: ['test'] }),
+      }),
+    )
   })
 
   it('should provide initial wallet state', () => {
@@ -62,6 +77,7 @@ describe('WalletContext Performance', () => {
     expect(result.current.ecashAddress).toBe('')
     expect(result.current.balance).toBe('0')
     expect(result.current.userTokens).toEqual({})
+    expect(result.current.publicKeyHex).toBe('')
     expect(result.current.mnemonic).toBe('')
     expect(result.current.isGuestMode).toBe(false)
   })
@@ -109,8 +125,22 @@ describe('WalletContext Performance', () => {
     expect(result.current.ecashAddress).toBe('')
     expect(result.current.balance).toBe('0')
     expect(result.current.userTokens).toEqual({})
+    expect(result.current.publicKeyHex).toBe('')
     expect(localStorage.getItem('wallet_address')).toBeNull()
     expect(localStorage.getItem('wallet_mnemonic')).toBeNull()
+  })
+
+  it('derives the wallet public key from a saved mnemonic', async () => {
+    localStorage.setItem('wallet_address', 'ecash:qp...old')
+    localStorage.setItem('wallet_mnemonic', 'test mnemonic phrase')
+
+    const { result } = renderHook(() => useWallet(), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.isWalletConnected).toBe(true)
+      expect(result.current.ecashAddress).toBe('ecash:qp...test')
+      expect(result.current.publicKeyHex).toBe(TEST_PUBLIC_KEY_HEX)
+    })
   })
 
   it('should maintain context value object stability when state does not change', () => {

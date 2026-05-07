@@ -92,6 +92,7 @@ import {
   getTokenDecimalsFromDetails,
 } from "@/lib/chronik"
 import { useChronik } from "@/lib/context/ChronikContext"
+import { useWallet } from "@/lib/context/WalletContext"
 import {
   fetchEtokenDbTopVolumeTokens,
   fetchEtokenDbTokenSummary,
@@ -102,6 +103,7 @@ import {
   formatDisplayReviewScore,
   getDisplayReviewScore,
   getReviewScoreToneClasses,
+  getReviewStarFillPercentages,
   getSortableReviewScore,
   REVIEW_STAR_ICON_CLASS,
   REVIEW_UNRATED_LABEL,
@@ -211,6 +213,41 @@ const LookupMetaCard = ({ label, value, mono = false }: LookupMetaCardProps) => 
   </div>
 )
 
+const ReviewStars = ({
+  score,
+  hasScore,
+}: {
+  score: number | null | undefined
+  hasScore: boolean
+}) => {
+  const fillPercentages = getReviewStarFillPercentages(hasScore ? score : null)
+
+  return (
+    <span
+      className="inline-flex items-center gap-px"
+      aria-hidden="true"
+      data-testid="review-stars"
+    >
+      {fillPercentages.map((fillPercent, index) => (
+        <span key={index} className="relative inline-flex h-3 w-3">
+          <Star
+            className={cn(
+              "h-3 w-3 fill-current",
+              REVIEW_UNRATED_STAR_ICON_CLASS,
+            )}
+          />
+          <span
+            className="absolute inset-0 overflow-hidden"
+            style={{ width: `${fillPercent}%` }}
+          >
+            <Star className={cn("h-3 w-3 fill-current", REVIEW_STAR_ICON_CLASS)} />
+          </span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
 const getCachedTopVolumeTokens = (): Awaited<
   ReturnType<typeof fetchEtokenDbTopVolumeTokens>
 > | null => {
@@ -286,6 +323,16 @@ const getTokenNameFromDetails = (
 
   return null
 }
+
+const getTokenAuthPubkeyFromDetails = (tokenDetails: any): string | null => {
+  const authPubkey = tokenDetails?.genesisInfo?.authPubkey
+  return typeof authPubkey === "string" && authPubkey.trim().length > 0
+    ? authPubkey.trim().toLowerCase()
+    : null
+}
+
+const normalizeHex = (value?: string | null): string =>
+  typeof value === "string" ? value.trim().toLowerCase() : ""
 
 const getTokenRouteParam = (token: Pick<Token, "tokenId">): string => {
   return token.tokenId
@@ -388,6 +435,7 @@ const getStoredFilterOption = (): FilterOption => {
 export default function Component() {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const { toast } = useToast()
+  const { publicKeyHex } = useWallet()
 
   const [data, setData] = React.useState<TokenTableRow[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
@@ -411,6 +459,7 @@ export default function Component() {
   const [isAddingToWatchlist, setIsAddingToWatchlist] = React.useState(false)
   const [isLocalFallbackMode, setIsLocalFallbackMode] = React.useState(false)
   const [activeReviewTokenId, setActiveReviewTokenId] = React.useState<string | null>(null)
+  const [tokenAuthPubkeys, setTokenAuthPubkeys] = React.useState<Map<string, string>>(new Map())
   const router = useRouter()
   
   const loadingTokens = React.useRef<Set<string>>(new Set())
@@ -419,6 +468,7 @@ export default function Component() {
   const searchContainerRef = React.useRef<HTMLDivElement | null>(null)
   const filteredTokensRef = React.useRef<Set<string>>(new Set())
   const prevFilteredTokensRef = React.useRef<Set<string>>(new Set())
+  const loadingAuthPubkeyTokensRef = React.useRef<Set<string>>(new Set())
 
   const [sortBy, setSortBy] = React.useState<SortType>('7d');
 
@@ -437,6 +487,36 @@ export default function Component() {
       return loadedTokens.has(token.tokenId) || token.hasInitialMarketData === true
     },
     [loadedTokens],
+  )
+  const normalizedWalletPubkey = React.useMemo(
+    () => normalizeHex(publicKeyHex),
+    [publicKeyHex],
+  )
+
+  const recordTokenAuthPubkey = React.useCallback((tokenId: string, tokenDetails: any) => {
+    if (!tokenDetails) {
+      return
+    }
+
+    const authPubkey = getTokenAuthPubkeyFromDetails(tokenDetails)
+
+    setTokenAuthPubkeys((prev) => {
+      const nextAuthPubkey = authPubkey ?? ""
+      if (prev.get(tokenId) === nextAuthPubkey) {
+        return prev
+      }
+      const next = new Map(prev)
+      next.set(tokenId, nextAuthPubkey)
+      return next
+    })
+  }, [])
+
+  const isProjectInfoEditable = React.useCallback(
+    (tokenId: string): boolean => {
+      const authPubkey = tokenAuthPubkeys.get(tokenId)
+      return Boolean(authPubkey && normalizedWalletPubkey && authPubkey === normalizedWalletPubkey)
+    },
+    [normalizedWalletPubkey, tokenAuthPubkeys],
   )
 
   React.useEffect(() => {
@@ -476,9 +556,74 @@ export default function Component() {
     }
   }, [])
 
+  React.useEffect(() => {
+    if (!normalizedWalletPubkey || isChronikLoading || !chronikClient || data.length === 0) {
+      return
+    }
+
+    let cancelled = false
+    const tokensNeedingAuthPubkey = data
+      .map((token) => token.tokenId)
+      .filter(
+        (tokenId) =>
+          !tokenAuthPubkeys.has(tokenId) &&
+          !loadingAuthPubkeyTokensRef.current.has(tokenId),
+      )
+      .slice(0, 30)
+
+    if (tokensNeedingAuthPubkey.length === 0) {
+      return
+    }
+
+    tokensNeedingAuthPubkey.forEach((tokenId) => {
+      loadingAuthPubkeyTokensRef.current.add(tokenId)
+    })
+
+    const hydrateNext = async () => {
+      for (const tokenId of tokensNeedingAuthPubkey) {
+        if (cancelled) {
+          return
+        }
+
+        try {
+          const cached = getCachedTokenDetails(tokenId)
+          if (cached) {
+            recordTokenAuthPubkey(tokenId, cached)
+            continue
+          }
+
+          const tokenInfo = await fetchTokenDetails(tokenId, chronikClient)
+          if (!cancelled) {
+            recordTokenAuthPubkey(tokenId, tokenInfo)
+          }
+        } catch (_error) {
+          if (!cancelled) {
+            recordTokenAuthPubkey(tokenId, null)
+          }
+        } finally {
+          loadingAuthPubkeyTokensRef.current.delete(tokenId)
+        }
+      }
+    }
+
+    void hydrateNext()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    chronikClient,
+    data,
+    isChronikLoading,
+    normalizedWalletPubkey,
+    recordTokenAuthPubkey,
+    tokenAuthPubkeys,
+  ])
+
   const clearCacheAndReload = () => {
     clearTokenCache()
     clearCachedTopVolumeTokens()
+    setTokenAuthPubkeys(new Map())
     setLoadedTokens(new Set())
     setLoadedIcons(new Set())
     setFailedIcons(new Set())
@@ -514,12 +659,7 @@ export default function Component() {
               scoreToneClasses.button,
             )}
           >
-            <Star
-              className={cn(
-                "h-3.5 w-3.5 fill-current",
-                hasScore ? REVIEW_STAR_ICON_CLASS : REVIEW_UNRATED_STAR_ICON_CLASS,
-              )}
-            />
+            <ReviewStars score={token.reviewAverageScore} hasScore={hasScore} />
             <span>{scoreLabel}</span>
           </button>
         </TooltipTrigger>
@@ -694,6 +834,14 @@ export default function Component() {
                     </button>
                   </div>
                 )}
+                {isProjectInfoEditable(row.original.tokenId) ? (
+                  <Badge
+                    variant="outline"
+                    className="h-5 rounded-md px-2 text-[10px] font-medium uppercase tracking-wide"
+                  >
+                    Editable
+                  </Badge>
+                ) : null}
                 {(() => {
                   const tokenConfig = Object.values(tokens).find(t => t.tokenId === row.original.tokenId);
                   if (tokenConfig?.youtubeUrl && tokenConfig?.youtubeHoverImage) {
@@ -1926,6 +2074,7 @@ export default function Component() {
       }
 
       const tokenInfo = await fetchTokenDetails(tokenId, chronikClient)
+      recordTokenAuthPubkey(tokenId, tokenInfo)
 
       setTokenLookup({
         status: tokenInfo ? "found" : "not-found",
@@ -1992,6 +2141,7 @@ export default function Component() {
 
       try {
         const details = await fetchTokenDetails(tokenId, chronikClient)
+        recordTokenAuthPubkey(tokenId, details)
         const name = getTokenNameFromDetails(details)
         if (!name) return
 
@@ -2157,6 +2307,7 @@ export default function Component() {
           const initialTokens = bootstrapCandidates.map((candidate) => {
             const tokenConfig = configuredTokensById.get(candidate.tokenId)
             const cachedTokenInfo = getCachedTokenDetails(candidate.tokenId)
+            recordTokenAuthPubkey(candidate.tokenId, cachedTokenInfo)
             const fallbackDecimals =
               typeof tokenConfig?.decimals === "number" ? tokenConfig.decimals : 0
             const tokenDecimals = getTokenDecimalsFromDetails(cachedTokenInfo, fallbackDecimals)
@@ -2296,6 +2447,7 @@ export default function Component() {
 
               try {
                 const tokenInfo = await fetchTokenDetails(candidate.tokenId, chronikClient)
+                recordTokenAuthPubkey(candidate.tokenId, tokenInfo)
                 const tokenName =
                   getTokenNameFromDetails(tokenInfo, candidate.fallbackName) ||
                   getTokenDisplayFallbackName(candidate.tokenId, candidate.fallbackName)
@@ -2342,6 +2494,7 @@ export default function Component() {
 
             try {
               const details = await fetchTokenDetails(tokenId, chronikClient)
+              recordTokenAuthPubkey(tokenId, details)
               const name = getTokenNameFromDetails(details)
               if (!name) {
                 continue
@@ -2628,6 +2781,7 @@ export default function Component() {
       router: any;
       showUSD: boolean;
       xecPrice: number;
+      isEditable: boolean;
     }) {
       return (
         <TableRow
@@ -2663,13 +2817,14 @@ export default function Component() {
       const hasDataChanged = dataFields.some(field => prevData[field] !== nextData[field]);
 
       const hasDisplayModeChanged = prevProps.showUSD !== nextProps.showUSD;
+      const hasEditableChanged = prevProps.isEditable !== nextProps.isEditable;
 
       const hasPriceChanged = 
         prevProps.showUSD && 
         nextProps.showUSD && 
         (prevProps.xecPrice !== nextProps.xecPrice || prevData.latestPrice !== nextData.latestPrice);
 
-      return !hasDataChanged && !hasDisplayModeChanged && !hasPriceChanged;
+      return !hasDataChanged && !hasDisplayModeChanged && !hasEditableChanged && !hasPriceChanged;
     }
   )
 
@@ -2971,6 +3126,7 @@ export default function Component() {
                     router={router}
                     showUSD={showUSD}
                     xecPrice={xecPrice}
+                    isEditable={isProjectInfoEditable(row.original.tokenId)}
                   />
                 ))}
               </TableBody>

@@ -5,6 +5,7 @@ import {
   formatDisplayReviewScore,
   getDisplayReviewScore,
   getReviewScoreToneClasses,
+  getReviewStarFillPercentages,
   getSortableReviewScore,
   REVIEW_UNRATED_LABEL,
 } from "@/lib/review-score"
@@ -22,7 +23,20 @@ describe("review-score helpers", () => {
     expect(getReviewScoreToneClasses(6)).toEqual(getReviewScoreToneClasses(10))
   })
 
+  it("gives selected score buttons a primary active state", () => {
+    expect(getReviewScoreToneClasses(6).buttonActive).toContain("bg-primary")
+    expect(getReviewScoreToneClasses(6).buttonActive).toContain(
+      "text-primary-foreground",
+    )
+  })
+
   it("uses a separate muted tone when no score exists", () => {
     expect(getReviewScoreToneClasses(null)).not.toEqual(getReviewScoreToneClasses(1))
+  })
+
+  it("maps 10-point scores to proportional five-star fills", () => {
+    expect(getReviewStarFillPercentages(10)).toEqual([100, 100, 100, 100, 100])
+    expect(getReviewStarFillPercentages(5)).toEqual([100, 100, 50, 0, 0])
+    expect(getReviewStarFillPercentages(null)).toEqual([0, 0, 0, 0, 0])
   })
 })

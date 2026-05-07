@@ -12,6 +12,7 @@ const TOKEN_TIMEOUT_MS = 8_000
 const TOKEN_LIST_TIMEOUT_MS = 8_000
 const TOKEN_CANDLES_TIMEOUT_MS = 8_000
 const TOKEN_REVIEWS_TIMEOUT_MS = 8_000
+const TOKEN_PROJECT_INFO_TIMEOUT_MS = 8_000
 const TOKEN_ID_PATTERN = /^[a-f0-9]{64}$/i
 const INVOICE_ID_PATTERN = /^[0-9a-f-]{16,}$/i
 const TXID_PATTERN = /^[a-f0-9]{64}$/i
@@ -113,13 +114,29 @@ export type ReviewInvoiceStatus =
   | "invalid"
   | "expired"
 
+export type ProjectInfoInvoiceStatus = ReviewInvoiceStatus
+
+export type ProjectInfoFeeTier = "initial" | "update"
+
 export type CreateEtokenDbReviewInvoiceInput = {
   authorAddress: string
   score: number
   comment?: string
 }
 
+export type CreateEtokenDbProjectInfoInvoiceInput = {
+  editorAddress: string
+  description?: string
+  websiteUrl?: string | null
+  xUrl?: string | null
+  telegramUrl?: string | null
+}
+
 export type SubmitEtokenDbReviewInvoiceTxInput = {
+  txid: string
+}
+
+export type SubmitEtokenDbProjectInfoInvoiceTxInput = {
   txid: string
 }
 
@@ -136,6 +153,35 @@ export type EtokenDbReviewInvoice = {
   expiresAt: number
   paymentTxid: string | null
   publishedReviewId: string | null
+}
+
+export type EtokenDbTokenProjectInfo = {
+  tokenId: string
+  description: string
+  websiteUrl: string | null
+  xUrl: string | null
+  telegramUrl: string | null
+  createdAt: number
+  updatedAt: number
+  updateCount: number
+  lastEditorMasked: string
+}
+
+export type EtokenDbProjectInfoInvoice = {
+  invoiceId: string
+  tokenId: string
+  editorAddress: string
+  description: string
+  websiteUrl: string | null
+  xUrl: string | null
+  telegramUrl: string | null
+  paymentAddress: string
+  expectedPaidSats: number
+  expectedPaidXec: string
+  feeTier: ProjectInfoFeeTier
+  status: ProjectInfoInvoiceStatus
+  expiresAt: number
+  paymentTxid: string | null
 }
 
 export type EtokenDbTokenReviewItem = {
@@ -158,6 +204,18 @@ export type EtokenDbTokenReviewSummary = {
 export type EtokenDbReviewInvoicePayload = {
   ok?: boolean
   data?: Partial<EtokenDbReviewInvoice> | null
+  error?: string
+}
+
+export type EtokenDbTokenProjectInfoPayload = {
+  ok?: boolean
+  data?: Partial<EtokenDbTokenProjectInfo> | null
+  error?: string
+}
+
+export type EtokenDbProjectInfoInvoicePayload = {
+  ok?: boolean
+  data?: Partial<EtokenDbProjectInfoInvoice> | null
   error?: string
 }
 
@@ -358,6 +416,10 @@ export const isValidReviewInvoiceId = (invoiceId: string): boolean => {
   return INVOICE_ID_PATTERN.test(invoiceId)
 }
 
+export const isValidProjectInfoInvoiceId = (invoiceId: string): boolean => {
+  return INVOICE_ID_PATTERN.test(invoiceId)
+}
+
 export const isValidEtokenDbTxid = (txid: string): boolean => {
   return TXID_PATTERN.test(txid)
 }
@@ -381,10 +443,18 @@ const fetchJsonWithTimeout = async <T>(
     const payload = await response.json().catch(() => null)
 
     if (!response.ok) {
+      const payloadError =
+        payload && typeof payload === "object" ? (payload as any).error : null
       const message =
-        payload && typeof payload === "object" && typeof (payload as any).error === "string"
-          ? (payload as any).error
-          : `Request failed with status ${response.status}`
+        typeof payloadError === "string"
+          ? payloadError
+          : payloadError &&
+              typeof payloadError === "object" &&
+              typeof payloadError.message === "string"
+            ? typeof payloadError.code === "string"
+              ? `${payloadError.code}: ${payloadError.message}`
+              : payloadError.message
+            : `Request failed with status ${response.status}`
       throw new Error(message)
     }
 
@@ -754,6 +824,226 @@ export const fetchEtokenDbTokenReviewSummary = async (
   )
 
   return mapEtokenDbTokenReviewSummary(payload)
+}
+
+export const mapEtokenDbTokenProjectInfo = (
+  payload: EtokenDbTokenProjectInfoPayload,
+): EtokenDbTokenProjectInfo | null => {
+  const info = payload?.data
+
+  if (!payload?.ok) {
+    throw new Error("Invalid etokendb token project info payload")
+  }
+
+  if (info === null || info === undefined) {
+    return null
+  }
+
+  if (
+    typeof info.tokenId !== "string" ||
+    typeof info.description !== "string" ||
+    typeof info.createdAt === "undefined" ||
+    typeof info.updatedAt === "undefined"
+  ) {
+    throw new Error("Invalid etokendb token project info payload")
+  }
+
+  return {
+    tokenId: info.tokenId,
+    description: info.description,
+    websiteUrl:
+      typeof info.websiteUrl === "string" && info.websiteUrl.length > 0
+        ? info.websiteUrl
+        : null,
+    xUrl:
+      typeof info.xUrl === "string" && info.xUrl.length > 0
+        ? info.xUrl
+        : null,
+    telegramUrl:
+      typeof info.telegramUrl === "string" && info.telegramUrl.length > 0
+        ? info.telegramUrl
+        : null,
+    createdAt: coerceCount(info.createdAt),
+    updatedAt: coerceCount(info.updatedAt),
+    updateCount: coerceCount(info.updateCount),
+    lastEditorMasked:
+      typeof info.lastEditorMasked === "string" ? info.lastEditorMasked : "",
+  }
+}
+
+export const fetchEtokenDbTokenProjectInfo = async (
+  tokenId: string,
+): Promise<EtokenDbTokenProjectInfo | null> => {
+  if (!isValidEtokenDbTokenId(tokenId)) {
+    throw new Error("Invalid tokenId")
+  }
+
+  const payload = await fetchJsonWithTimeout<EtokenDbTokenProjectInfoPayload>(
+    `${ETOKENDB_TOKENS_API_BASE_PATH}/${encodeURIComponent(tokenId)}/project-info`,
+    TOKEN_PROJECT_INFO_TIMEOUT_MS,
+  )
+
+  return mapEtokenDbTokenProjectInfo(payload)
+}
+
+export const mapEtokenDbProjectInfoInvoice = (
+  payload: EtokenDbProjectInfoInvoicePayload,
+): EtokenDbProjectInfoInvoice => {
+  const invoice = payload?.data
+
+  if (
+    !payload?.ok ||
+    !invoice ||
+    typeof invoice.invoiceId !== "string" ||
+    typeof invoice.tokenId !== "string" ||
+    typeof invoice.editorAddress !== "string" ||
+    typeof invoice.description !== "string" ||
+    typeof invoice.paymentAddress !== "string" ||
+    typeof invoice.expectedPaidXec !== "string" ||
+    typeof invoice.feeTier !== "string" ||
+    typeof invoice.status !== "string"
+  ) {
+    throw new Error("Invalid etokendb project info invoice payload")
+  }
+
+  return {
+    invoiceId: invoice.invoiceId,
+    tokenId: invoice.tokenId,
+    editorAddress: invoice.editorAddress,
+    description: invoice.description,
+    websiteUrl:
+      typeof invoice.websiteUrl === "string" && invoice.websiteUrl.length > 0
+        ? invoice.websiteUrl
+        : null,
+    xUrl:
+      typeof invoice.xUrl === "string" && invoice.xUrl.length > 0
+        ? invoice.xUrl
+        : null,
+    telegramUrl:
+      typeof invoice.telegramUrl === "string" && invoice.telegramUrl.length > 0
+        ? invoice.telegramUrl
+        : null,
+    paymentAddress: invoice.paymentAddress,
+    expectedPaidSats: coerceCount(invoice.expectedPaidSats),
+    expectedPaidXec: invoice.expectedPaidXec,
+    feeTier: invoice.feeTier as ProjectInfoFeeTier,
+    status: invoice.status as ProjectInfoInvoiceStatus,
+    expiresAt: coerceCount(invoice.expiresAt),
+    paymentTxid:
+      typeof invoice.paymentTxid === "string" && invoice.paymentTxid.length > 0
+        ? invoice.paymentTxid
+        : null,
+  }
+}
+
+export const createEtokenDbProjectInfoInvoice = async (
+  tokenId: string,
+  input: CreateEtokenDbProjectInfoInvoiceInput,
+): Promise<EtokenDbProjectInfoInvoice> => {
+  if (!isValidEtokenDbTokenId(tokenId)) {
+    throw new Error("Invalid tokenId")
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TOKEN_PROJECT_INFO_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(
+      `${ETOKENDB_TOKENS_API_BASE_PATH}/${encodeURIComponent(tokenId)}/project-info/invoices`,
+      {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      },
+    )
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && typeof (payload as any).error === "string"
+          ? (payload as any).error
+          : `Request failed with status ${response.status}`
+      throw new Error(message)
+    }
+
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Invalid JSON response")
+    }
+
+    return mapEtokenDbProjectInfoInvoice(payload as EtokenDbProjectInfoInvoicePayload)
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+export const fetchEtokenDbProjectInfoInvoice = async (
+  invoiceId: string,
+): Promise<EtokenDbProjectInfoInvoice> => {
+  if (!isValidProjectInfoInvoiceId(invoiceId)) {
+    throw new Error("Invalid invoiceId")
+  }
+
+  const payload = await fetchJsonWithTimeout<EtokenDbProjectInfoInvoicePayload>(
+    `${ETOKENDB_API_BASE_PATH}/project-info-invoices/${encodeURIComponent(invoiceId)}`,
+    TOKEN_PROJECT_INFO_TIMEOUT_MS,
+  )
+
+  return mapEtokenDbProjectInfoInvoice(payload)
+}
+
+export const submitEtokenDbProjectInfoInvoiceTx = async (
+  invoiceId: string,
+  input: SubmitEtokenDbProjectInfoInvoiceTxInput,
+): Promise<EtokenDbProjectInfoInvoice> => {
+  if (!isValidProjectInfoInvoiceId(invoiceId)) {
+    throw new Error("Invalid invoiceId")
+  }
+  if (!isValidEtokenDbTxid(input.txid)) {
+    throw new Error("Invalid txid")
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TOKEN_PROJECT_INFO_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(
+      `${ETOKENDB_API_BASE_PATH}/project-info-invoices/${encodeURIComponent(invoiceId)}/submit-tx`,
+      {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      },
+    )
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && typeof (payload as any).error === "string"
+          ? (payload as any).error
+          : `Request failed with status ${response.status}`
+      throw new Error(message)
+    }
+
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Invalid JSON response")
+    }
+
+    return mapEtokenDbProjectInfoInvoice(payload as EtokenDbProjectInfoInvoicePayload)
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 export const mapEtokenDbReviewInvoice = (

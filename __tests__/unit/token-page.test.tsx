@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { ReactNode } from "react"
 
 const {
-  mockExecuteOrders,
   mockFetchAgoraOrderBook,
   mockGetTokenSupply,
   mockIsEtokenDbAvailable,
@@ -15,7 +14,6 @@ const {
   mockWatchAgoraTokens,
   mockEstimateNetworkFeeXecFromAddress,
 } = vi.hoisted(() => ({
-  mockExecuteOrders: vi.fn(),
   mockFetchAgoraOrderBook: vi.fn(),
   mockGetTokenSupply: vi.fn(),
   mockIsEtokenDbAvailable: vi.fn(),
@@ -72,24 +70,28 @@ vi.mock("@/components/ui/TokenCommentsPanel", () => ({
   ),
 }))
 
+vi.mock("@/components/ui/TokenProjectInfoCard", () => ({
+  default: ({
+    tokenId,
+    tokenName,
+    authPubkey,
+  }: {
+    tokenId: string
+    tokenName: string
+    authPubkey?: string | null
+  }) => (
+    <div data-testid="token-project-info-card">
+      {tokenName}:{tokenId}:{authPubkey ?? ""}
+    </div>
+  ),
+}))
+
 vi.mock("@/components/ui/ErrorBoundary", () => ({
   ErrorBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
 
-vi.mock("@/components/ui/token-selector", () => ({
-  TokenSelector: ({ selectedToken }: { selectedToken: { name: string } }) => (
-    <button type="button">{selectedToken.name}</button>
-  ),
-}))
-
 vi.mock("@/lib/context/WalletContext", () => ({
   useWallet: mockUseWallet,
-}))
-
-vi.mock("@/lib/context/AutoExecutionContext", () => ({
-  useAutoExecution: () => ({
-    executeOrders: mockExecuteOrders,
-  }),
 }))
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -133,6 +135,7 @@ vi.mock("@/lib/networkFee", () => ({
 }))
 
 import TokenPage from "@/app/[name]/page"
+import { fetchTokenDetails } from "@/lib/chronik"
 
 const TOKEN_ID =
   "ac31bb0bccf33de1683efce4da64f1cb6d8e8d6e098bc01c51d5864deb0e783f"
@@ -147,14 +150,12 @@ const ORDER_BOOK = {
   },
 }
 
-const renderTokenPage = () => render(<TokenPage />)
+const AUTH_PUBKEY =
+  "0334b744e6338ad438c92900c0ed1869c3fd2c0f35a4a9b97a88447b6e2b145f10"
 
-const getSpendInputs = () =>
-  screen
-    .getAllByPlaceholderText("0")
-    .filter((input): input is HTMLInputElement => {
-      return input instanceof HTMLInputElement && !input.readOnly
-    })
+const mockFetchTokenDetails = vi.mocked(fetchTokenDetails)
+
+const renderTokenPage = () => render(<TokenPage />)
 
 const waitForOrderBook = async () => {
   await waitFor(() => {
@@ -162,7 +163,7 @@ const waitForOrderBook = async () => {
   })
 }
 
-describe("TokenPage buy panel", () => {
+describe("TokenPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -174,7 +175,16 @@ describe("TokenPage buy panel", () => {
       isGuestMode: false,
       balance: "1000",
       userTokens: {},
+      publicKeyHex: "",
     })
+    mockFetchTokenDetails.mockResolvedValue({
+      genesisInfo: {
+        tokenName: "StarCrystal",
+        tokenTicker: "SC",
+        decimals: 0,
+        authPubkey: AUTH_PUBKEY,
+      },
+    } as any)
     mockEstimateNetworkFeeXecFromAddress.mockResolvedValue({
       fee: 19,
       utxoCount: 1,
@@ -191,11 +201,11 @@ describe("TokenPage buy panel", () => {
       source: "chronik",
       nextChainTipHeight: 900000,
       stats: {
-        latestPrice: 1,
-        priceChange24h: 0,
-        last24HoursXECAmount: 0,
-        last30DaysXECAmount: 0,
-        totalTransactions: 0,
+        latestPrice: 2,
+        priceChange24h: 12.34,
+        last24HoursXECAmount: 1234,
+        last30DaysXECAmount: 5678,
+        totalTransactions: 42,
         totalXECAmount: 0,
         tokenId: TOKEN_ID,
         tokenName: "StarCrystal",
@@ -203,79 +213,30 @@ describe("TokenPage buy panel", () => {
     })
     mockWatchAgoraTokens.mockReturnValue(() => {})
     mockQueueOrdersSync.mockResolvedValue(true)
-    mockExecuteOrders.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
     cleanup()
   })
 
-  it("shows the shared estimated fee total without the old UTXO-count fee display", async () => {
+  it("renders project info cards instead of token-page swap panels", async () => {
     renderTokenPage()
 
     await waitFor(() => {
-      expect(mockEstimateNetworkFeeXecFromAddress).toHaveBeenCalledWith(
-        "ecash:test-address",
-      )
+      expect(screen.getAllByTestId("token-project-info-card")).toHaveLength(2)
     })
-
-    expect(screen.getAllByText("Estimated fees")).toHaveLength(2)
-    expect(screen.getAllByText("19.00 XEC")).toHaveLength(2)
-    expect(screen.queryByText("Network fee")).not.toBeInTheDocument()
-    expect(screen.queryByText("Total fees")).not.toBeInTheDocument()
-    expect(screen.queryByText("25.00 XEC")).not.toBeInTheDocument()
-  })
-
-  it("calculates sweep receive amount, average price, slippage, and fee summary from the order book", async () => {
-    renderTokenPage()
-    await waitForOrderBook()
-
-    fireEvent.change(getSpendInputs()[0], { target: { value: "200" } })
 
     await waitFor(() => {
-      expect(screen.getAllByDisplayValue("137.770000").length).toBeGreaterThan(0)
+      expect(mockFetchTokenDetails).toHaveBeenCalledWith(TOKEN_ID)
     })
-    expect(screen.getAllByText("Average Price: 1.2742 XEC").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("Market + 27.42%").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("24.46 XEC").length).toBeGreaterThan(0)
-  })
-
-  it("shows the minimum fee error when the spend amount cannot cover buy fees", async () => {
-    renderTokenPage()
-    await waitForOrderBook()
-
-    fireEvent.change(getSpendInputs()[0], { target: { value: "5" } })
-
-    await waitFor(() => {
-      expect(
-        screen.getAllByText(
-          "Amount must be greater than 24.46 XEC to cover the estimated swap and network fees",
-        ).length,
-      ).toBeGreaterThan(0)
-    })
-  })
-
-  it("uses the same minimum fee threshold for the Max balance prompt", async () => {
-    mockUseWallet.mockReturnValue({
-      isWalletConnected: true,
-      ecashAddress: "ecash:test-address",
-      isGuestMode: false,
-      balance: "5",
-      userTokens: {},
-    })
-
-    renderTokenPage()
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Max" })[0])
-
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Insufficient balance",
-        description:
-          "You need at least 17.46 XEC to cover the estimated swap and network fees",
-        variant: "destructive",
-      }),
-    )
+    expect(screen.getAllByTestId("token-project-info-card")[0]).toHaveTextContent(AUTH_PUBKEY)
+    expect(screen.getAllByText("Stats")).toHaveLength(2)
+    expect(screen.getAllByText("10.24M XEC")).toHaveLength(2)
+    expect(screen.getAllByText("2.0000")).toHaveLength(2)
+    expect(screen.getAllByText("+12.34%")).toHaveLength(2)
+    expect(screen.getAllByText("42")).toHaveLength(2)
+    expect(screen.queryByText("Swap🔥")).not.toBeInTheDocument()
+    expect(screen.queryByText("Estimated fees")).not.toBeInTheDocument()
   })
 
   it("shows the updated chart selector label for the price chart", async () => {
@@ -294,19 +255,19 @@ describe("TokenPage buy panel", () => {
     expect(screen.queryByTestId("token-comments-panel-main")).not.toBeInTheDocument()
   })
 
-  it("renders the desktop right rail in comments, order book, info order", () => {
+  it("renders the desktop right rail in project info, comments, order book order", () => {
     renderTokenPage()
 
+    const projectInfo = screen.getAllByTestId("token-project-info-card")[1]
     const sidebarComments = screen.getByTestId("token-comments-panel-sidebar")
     const orderBook = screen.getByTestId("order-book")
-    const infoHeading = screen.getByText("Info")
 
     expect(
-      sidebarComments.compareDocumentPosition(orderBook) &
+      projectInfo.compareDocumentPosition(sidebarComments) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
     expect(
-      orderBook.compareDocumentPosition(infoHeading) &
+      sidebarComments.compareDocumentPosition(orderBook) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
   })
@@ -330,40 +291,10 @@ describe("TokenPage buy panel", () => {
     expect(screen.queryByTestId("token-comments-panel-main")).not.toBeInTheDocument()
   })
 
-  it("saves a buy order after a valid sweep quote is created", async () => {
+  it("still fetches the token order book for trading views", async () => {
     renderTokenPage()
     await waitForOrderBook()
 
-    fireEvent.change(getSpendInputs()[0], { target: { value: "200" } })
-    await waitFor(() => {
-      expect(screen.getAllByDisplayValue("137.770000").length).toBeGreaterThan(0)
-    })
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Swap🔥" })[0])
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: "✅ Order created successfully",
-        }),
-      )
-    })
-
-    const storedOrders = JSON.parse(localStorage.getItem("swap_orders") || "{}")
-    const [orderKey] = Object.keys(storedOrders)
-
-    expect(orderKey).toMatch(new RegExp(`^${TOKEN_ID}\\|ecash:test-address\\|2\\|`))
-    expect(storedOrders[orderKey]).toMatchObject({
-      maxPrice: 2,
-      orderType: "online",
-      status: "pending",
-      transactions: [],
-    })
-    expect(storedOrders[orderKey].remainingAmount).toBeCloseTo(137.77, 6)
-    expect(mockExecuteOrders).toHaveBeenCalledTimes(1)
-    expect(mockQueueOrdersSync).toHaveBeenCalledWith(
-      storedOrders,
-      "ecash:test-address",
-    )
+    expect(screen.getByTestId("order-book")).toBeInTheDocument()
   })
 })

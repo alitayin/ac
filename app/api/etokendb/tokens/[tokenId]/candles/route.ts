@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server"
 
 import { ETOKENDB_UPSTREAM_BASE_URL, isValidEtokenDbTokenId } from "@/lib/etokendb"
+import { ETOKENDB_PROXY_HEADERS, proxyEtokenDbError } from "../../../proxy-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 export const runtime = "nodejs"
 
 const REQUEST_TIMEOUT_MS = 8_000
-const RESPONSE_HEADERS = {
-  "Cache-Control": "no-store, max-age=0",
-}
-
 export async function GET(
   request: Request,
   context: { params: { tokenId: string } },
@@ -25,7 +22,7 @@ export async function GET(
       },
       {
         status: 400,
-        headers: RESPONSE_HEADERS,
+        headers: ETOKENDB_PROXY_HEADERS,
       },
     )
   }
@@ -54,23 +51,15 @@ export async function GET(
     const payload = await response.json().catch(() => null)
 
     if (!response.ok) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            payload && typeof payload === "object" && typeof (payload as any).error === "string"
-              ? (payload as any).error
-              : `etokendb token candles returned ${response.status}`,
-        },
-        {
-          status: 502,
-          headers: RESPONSE_HEADERS,
-        },
+      return proxyEtokenDbError(
+        payload,
+        response.status,
+        `etokendb token candles returned ${response.status}`,
       )
     }
 
     return NextResponse.json(payload, {
-      headers: RESPONSE_HEADERS,
+      headers: ETOKENDB_PROXY_HEADERS,
     })
   } catch (error) {
     console.error(`Failed to proxy etokendb token candles ${tokenId}:`, error)
@@ -83,7 +72,7 @@ export async function GET(
       },
       {
         status: 502,
-        headers: RESPONSE_HEADERS,
+        headers: ETOKENDB_PROXY_HEADERS,
       },
     )
   } finally {

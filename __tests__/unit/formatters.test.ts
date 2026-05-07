@@ -42,6 +42,11 @@ describe('formatters', () => {
       expect(formatNumber(0.9, true)).toBe('1')
     })
 
+    it('should format large count values without decimals when noDecimals is true', () => {
+      expect(formatNumber(38_543, true)).toBe('38,543')
+      expect(formatNumber(1_234_567, true)).toBe('1,234,567')
+    })
+
     it('should handle zero', () => {
       expect(formatNumber(0)).toBe('0.00')
       expect(formatNumber(0, true)).toBe('0')

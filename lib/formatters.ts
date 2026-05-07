@@ -4,10 +4,16 @@ export const formatNumber = (num: number | null | undefined, noDecimals: boolean
   const absNum = Math.abs(num);
   const sign = num < 0 ? '-' : '';
 
+  if (noDecimals) {
+    return Math.round(num).toLocaleString('en-US', {
+      maximumFractionDigits: 0,
+    });
+  }
+
   if (absNum >= 1e9) return sign + (absNum / 1e9).toFixed(3) + 'B';
   if (absNum >= 1e6) return sign + (absNum / 1e6).toFixed(2) + 'M';
   if (absNum >= 1e3) return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return noDecimals ? Math.round(num).toString() : num.toFixed(2);
+  return num.toFixed(2);
 };
 
 export const formatPrice = (price: number | null | undefined): string => {

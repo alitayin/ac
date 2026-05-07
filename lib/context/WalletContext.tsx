@@ -11,6 +11,7 @@ interface WalletContextType {
   ecashAddress: string;
   balance: string;
   userTokens: {[key: string]: string};
+  publicKeyHex: string;
   mnemonic: string;
   isGuestMode: boolean;
   connectWallet: (mnemonicPhrase: string) => Promise<boolean>;
@@ -24,11 +25,31 @@ interface WalletProviderProps {
   children: ReactNode;
 }
 
+const bytesToHex = (bytes: Uint8Array): string =>
+  Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+
+const deriveWalletIdentity = (mnemonicPhrase: string) => {
+  const seed = ecashLib.mnemonicToSeed(mnemonicPhrase);
+  const hdRoot = ecashLib.HdNode.fromSeed(seed);
+  const childNode = hdRoot.derivePath("m/44'/1899'/0'/0/0");
+  const pubkey = childNode.pubkey();
+  const pubkeyHash = ecashLib.shaRmd160(pubkey);
+  const address = ecashAddrJs.encodeCashAddress('ecash', 'p2pkh', pubkeyHash);
+
+  return {
+    address,
+    publicKeyHex: bytesToHex(pubkey),
+  };
+};
+
 export const WalletProvider = ({ children }: WalletProviderProps) => {
   const [isWalletConnected, setIsWalletConnected] = useState<boolean>(false);
   const [ecashAddress, setEcashAddress] = useState<string>('');
   const [balance, setBalance] = useState<string>('0');
   const [userTokens, setUserTokens] = useState<{[key: string]: string}>({});
+  const [publicKeyHex, setPublicKeyHex] = useState<string>('');
   const [mnemonic, setMnemonic] = useState<string>('');
   const wordListRef = useRef<string[]>([]);
   const [isGuestMode, setIsGuestMode] = useState<boolean>(false);
@@ -147,6 +168,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         setEcashAddress(savedAddress);
         setIsGuestMode(true);
         setMnemonic('');
+        setPublicKeyHex('');
       }
       return;
     }
@@ -158,9 +180,11 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
           wordListRef.current = data.words;
           try {
             ecashLib.mnemonicToEntropy(savedMnemonic.trim(), wordListRef.current);
+            const identity = deriveWalletIdentity(savedMnemonic);
             setIsWalletConnected(true);
             setMnemonic(savedMnemonic);
-            setEcashAddress(savedAddress);
+            setEcashAddress(identity.address || savedAddress);
+            setPublicKeyHex(identity.publicKeyHex);
             setIsGuestMode(false);
           } catch (error) {
             storageManager.remove('wallet_mnemonic');
@@ -169,6 +193,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
             setIsWalletConnected(false);
             setMnemonic('');
             setEcashAddress('');
+            setPublicKeyHex('');
             setIsGuestMode(false);
           }
         })
@@ -203,23 +228,17 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
 
       ecashLib.mnemonicToEntropy(mnemonicPhrase.trim(), wordListRef.current);
 
-      const seed = ecashLib.mnemonicToSeed(mnemonicPhrase);
-      const hdRoot = ecashLib.HdNode.fromSeed(seed);
-
-      const childNode = hdRoot.derivePath("m/44'/1899'/0'/0/0");
-
-      const pubkey = childNode.pubkey();
-      const pubkeyHash = ecashLib.shaRmd160(pubkey);
-      const address = ecashAddrJs.encodeCashAddress('ecash', 'p2pkh', pubkeyHash);
+      const identity = deriveWalletIdentity(mnemonicPhrase);
 
       storageManager.remove('wallet_is_guest');
 
       storageManager.set('wallet_mnemonic', mnemonicPhrase);
-      storageManager.set('wallet_address', address);
+      storageManager.set('wallet_address', identity.address);
 
       setIsWalletConnected(true);
       setMnemonic(mnemonicPhrase);
-      setEcashAddress(address);
+      setEcashAddress(identity.address);
+      setPublicKeyHex(identity.publicKeyHex);
       setIsGuestMode(false);
 
       return true;
@@ -246,6 +265,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     setEcashAddress('');
     setBalance('0');
     setUserTokens({});
+    setPublicKeyHex('');
     setIsGuestMode(false);
   };
 
@@ -254,12 +274,13 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     ecashAddress,
     balance,
     userTokens,
+    publicKeyHex,
     mnemonic,
     isGuestMode,
     connectWallet,
     disconnectWallet,
     refreshBalance
-  }), [isWalletConnected, ecashAddress, balance, userTokens, mnemonic, isGuestMode, connectWallet, disconnectWallet, refreshBalance]);
+  }), [isWalletConnected, ecashAddress, balance, userTokens, publicKeyHex, mnemonic, isGuestMode, connectWallet, disconnectWallet, refreshBalance]);
 
   return (
     <WalletContext.Provider value={contextValue}>

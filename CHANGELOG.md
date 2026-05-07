@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-05-08
+
+### 🎉 v4.3.4 发布
+
+**主要改动：**
+- Token detail Stats now uses a compact standalone card beside Project Info
+- Project Info editing remains available for token creators
+
+**验证：**
+- ✅ `pnpm vitest run __tests__/unit/token-page.test.tsx __tests__/unit/TokenProjectInfoCard.test.tsx` 通过
+- ✅ `pnpm build` 通过
+
+---
+
+## 2026-05-08
+
+### 🎉 v4.3.3 发布
+
+**主要改动：**
+- Token 详情页右栏发布 Project Info 卡片，替代原 swap 卡片并合并基础 token 信息
+- Project Info 支持 token creator 编辑，展示基础链接、creator 地址、创建时间和区块
+- 编辑 Project Info 时自动为 Website / X / Telegram 补全 `https://`，避免后端 URL 校验拒绝
+- TokenTable 的 Score 星星改为按 10 分制比例动态填充，10 分显示全亮星星，5 分显示半数填充
+
+**验证：**
+- ✅ `pnpm vitest run __tests__/unit/token-page.test.tsx __tests__/unit/TokenProjectInfoCard.test.tsx` 通过
+- ✅ `pnpm vitest run __tests__/unit/review-score.test.ts __tests__/unit/TokenTable.test.tsx` 通过
+
+---
+
 ## 2026-05-05
 
 ### 🎉 v4.2.2 发布

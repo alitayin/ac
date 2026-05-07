@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { ETOKENDB_UPSTREAM_BASE_URL, isValidEtokenDbTokenId } from "@/lib/etokendb"
-import { ETOKENDB_PROXY_HEADERS, proxyEtokenDbError } from "../../proxy-utils"
+import { ETOKENDB_PROXY_HEADERS, proxyEtokenDbError } from "../../../proxy-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -32,7 +32,7 @@ export async function GET(
 
   try {
     const response = await fetch(
-      `${ETOKENDB_UPSTREAM_BASE_URL}/tokens/${encodeURIComponent(tokenId)}`,
+      `${ETOKENDB_UPSTREAM_BASE_URL}/tokens/${encodeURIComponent(tokenId)}/project-info`,
       {
         cache: "no-store",
         signal: controller.signal,
@@ -48,7 +48,7 @@ export async function GET(
       return proxyEtokenDbError(
         payload,
         response.status,
-        `etokendb token returned ${response.status}`,
+        `etokendb token project info returned ${response.status}`,
       )
     }
 
@@ -56,12 +56,15 @@ export async function GET(
       headers: ETOKENDB_PROXY_HEADERS,
     })
   } catch (error) {
-    console.error(`Failed to proxy etokendb token ${tokenId}:`, error)
+    console.error(`Failed to proxy etokendb token project info ${tokenId}:`, error)
 
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Failed to fetch etokendb token",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch etokendb token project info",
       },
       {
         status: 502,

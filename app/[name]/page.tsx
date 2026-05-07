@@ -9,9 +9,7 @@ import PriceChart from "@/components/ui/PriceChart";
 import Piechart from "@/components/ui/Piechart";
 import TokenTx from "@/components/ui/TokenTx";
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { tokens } from "@/config/tokens";
-import { BarChart3, Globe, Share2, Lock, Coins } from "lucide-react"
 import { useEffect, useState, useRef } from "react"
 import {
   Select,
@@ -24,11 +22,9 @@ import OrderBook from "@/components/ui/OrderBook"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import AddressDistribution from "@/components/ui/AddressDistribution"
 import TokenCommentsPanel from "@/components/ui/TokenCommentsPanel"
+import TokenProjectInfoCard from "@/components/ui/TokenProjectInfoCard"
 import { useWallet } from "@/lib/context/WalletContext"
 import { useToast } from "@/hooks/use-toast"
-import { TokenSelector } from "@/components/ui/token-selector"
-import { SwapPanel } from "@/components/ui/SwapPanel"
-import { useAutoExecution } from "@/lib/context/AutoExecutionContext"
 
 import {
   AlertDialog,
@@ -41,9 +37,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { formatNumber } from "@/lib/formatters"
 import { getTokenSupply } from "@/lib/tokenSupply"
-import { TOKENS } from "@/config/tokenconfig";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
-import { TOKEN_IDS, PRICE_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraOrderBook } from "@/lib/agora-orders"
 import { isEtokenDbAvailable } from "@/lib/etokendb"
 import {
@@ -53,9 +47,7 @@ import {
 import {
   calculateAgoraFeeSummary,
   estimateAgoraTokenCostFromBudget,
-  getMinimumAgoraBuyFeesXec,
 } from "@/lib/agora-swap-fee"
-import { calculateAgoraSweepBuy } from "@/lib/agora-sweep-buy"
 import {
   getCachedTokenSummary,
   SUMMARY_CACHE_TTL_MS,
@@ -66,9 +58,9 @@ import { queueOrdersSync } from "@/lib/Auto.js"
 import {
   createSwapOrderKey,
   dispatchOrdersUpdated,
-  saveSwapOrder,
   writeSwapOrders,
 } from "@/lib/swap-order-utils"
+import { cn } from "@/lib/utils"
 
 const MIN_ORDER_TOTAL_XEC = 100;
 
@@ -84,28 +76,65 @@ interface TokenData {
   }
 }
 
+type TokenPageStatTone = "positive" | "negative" | "neutral"
+
+type TokenPageStat = {
+  label: string
+  value: string
+  detail?: string | null
+  detailTone?: TokenPageStatTone
+}
+
+function TokenStatsCard({ stats }: { stats: TokenPageStat[] }) {
+  return (
+    <Card className="rounded-3xl">
+      <CardHeader className="p-4 pb-3">
+        <CardTitle className="text-base">Stats</CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        <div className="grid grid-cols-2 gap-2">
+          {stats.map((stat) => (
+            <div
+              key={stat.label}
+              className="min-w-0 rounded-2xl border border-border/60 bg-muted/10 px-3 py-2.5"
+            >
+              <p className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                {stat.label}
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold text-foreground">
+                {stat.value}
+              </p>
+              {stat.detail ? (
+                <p
+                  className={cn(
+                    "mt-1 truncate text-xs",
+                    stat.detailTone === "positive" && "text-primary",
+                    stat.detailTone === "negative" && "text-destructive",
+                    (!stat.detailTone || stat.detailTone === "neutral") &&
+                      "text-muted-foreground",
+                  )}
+                >
+                  {stat.detail}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function TokenPage() {
   const params = useParams()
   const { toast } = useToast()
-  const { isWalletConnected, ecashAddress, isGuestMode, balance, userTokens } = useWallet()
-  const { executeOrders } = useAutoExecution()
+  const { isWalletConnected, ecashAddress, balance } = useWallet()
   const [stats, setStats] = useState<any>(null)
   const [chainTipHeight, setChainTipHeight] = useState<number | null>(null)
   const [selectedChart, setSelectedChart] = useState("realtimeprice")
-  const [spendAmount, setSpendAmount] = useState<string>('')
-  const [receiveAmount, setReceiveAmount] = useState<string>('')
   const [supply, setSupply] = useState<string>('0')
   const [orderBook, setOrderBook] = useState<any>(null)
-  const [avgExecutionPrice, setAvgExecutionPrice] = useState<number>(0)
-  const [slippage, setSlippage] = useState<number>(0)
-  const [errorMessage, setErrorMessage] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'trading' | 'orderbook' | 'address' | 'comments'>('trading');
-  const [maxPrice, setMaxPrice] = useState<number>(0)
-  const [selectedBuyToken, setSelectedBuyToken] = useState<{
-    id: string;
-    name: string;
-  } | null>(null)
-  const [buyTokenOrderBook, setBuyTokenOrderBook] = useState<any>(null)
   const [showOrderCheckDialog, setShowOrderCheckDialog] = useState<boolean>(false)
   const [orderCheckInfo, setOrderCheckInfo] = useState<{
     insufficientCount: number;
@@ -118,15 +147,6 @@ export default function TokenPage() {
   const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC)
   
   const isLoadingStats = useRef<boolean>(false)
-  const estimatedBuyTokenCost =
-    maxPrice > 0 && parseFloat(receiveAmount || "0") > 0
-      ? parseFloat(receiveAmount || "0") * maxPrice
-      : 0
-  const estimatedBuyFeeSummary = calculateAgoraFeeSummary(
-    estimatedBuyTokenCost,
-    networkFee,
-  )
-  const minimumBuyFees = getMinimumAgoraBuyFeesXec(networkFee)
 
   const calculateNetworkFeeFromUtxos = async (): Promise<number> => {
     try {
@@ -221,11 +241,28 @@ export default function TokenPage() {
   const configuredTokenDecimals =
     typeof (matchedToken as any)?.decimals === "number" ? (matchedToken as any).decimals : undefined
   const resolvedChronikTokenDecimals =
-    isCustomToken && chronikTokenInfo
+    chronikTokenInfo
       ? getTokenDecimalsFromDetails(chronikTokenInfo, 0)
       : undefined
   const tokenDecimals = resolvedChronikTokenDecimals ?? configuredTokenDecimals ?? 0
   const knownTokenDecimals = resolvedChronikTokenDecimals ?? configuredTokenDecimals
+  const authPubkey = chronikTokenInfo?.genesisInfo?.authPubkey ?? null
+  const createdBlockHeight =
+    typeof chronikTokenInfo?.block?.height === "number"
+      ? chronikTokenInfo.block.height
+      : null
+  const createdTimestamp =
+    typeof chronikTokenInfo?.block?.timestamp === "number"
+      ? chronikTokenInfo.block.timestamp
+      : typeof chronikTokenInfo?.timeFirstSeen === "number" &&
+          chronikTokenInfo.timeFirstSeen > 0
+        ? chronikTokenInfo.timeFirstSeen
+        : null
+  const websiteUrl =
+    typeof chronikTokenInfo?.genesisInfo?.url === "string" &&
+    chronikTokenInfo.genesisInfo.url.trim()
+      ? chronikTokenInfo.genesisInfo.url
+      : stats?.url
 
   let tokenData: TokenData;
 
@@ -255,31 +292,23 @@ export default function TokenPage() {
     };
   }
 
-  const isSwapActivated = true;
-
   useEffect(() => {
     const fetchChronikTokenInfo = async () => {
-      if (isCustomToken && isValidTokenId) {
-        try {
-          const tokenDetails = await fetchTokenDetails(routeParam);
-          setChronikTokenInfo(tokenDetails);
-        } catch (error) {
-          setChronikTokenInfo(null);
-        }
+      if (!hasValidRoute || !tokenData.tokenId) {
+        setChronikTokenInfo(null);
+        return;
+      }
+
+      try {
+        const tokenDetails = await fetchTokenDetails(tokenData.tokenId);
+        setChronikTokenInfo(tokenDetails);
+      } catch (error) {
+        setChronikTokenInfo(null);
       }
     };
 
     fetchChronikTokenInfo();
-  }, [isCustomToken, isValidTokenId, routeParam]);
-
-  useEffect(() => {
-    if (hasValidRoute && tokenData && tokenData.tokenId) {
-      setSelectedBuyToken({
-        id: tokenData.tokenId,
-        name: tokenData.name
-      });
-    }
-  }, [hasValidRoute, tokenData.tokenId, tokenData.name]);
+  }, [hasValidRoute, tokenData.tokenId]);
 
   const fetchOrderBook = async () => {
     try {
@@ -291,21 +320,6 @@ export default function TokenPage() {
       }
     } catch (error) {
       setOrderBook(null)
-    }
-  }
-
-  const fetchBuyTokenData = async () => {
-    if (!selectedBuyToken) return;
-    
-    try {
-      const data = await fetchAgoraOrderBook(selectedBuyToken.id)
-      if (data.success && data.data) {
-        setBuyTokenOrderBook(data.data)
-      } else {
-        setBuyTokenOrderBook(null)
-      }
-    } catch (error) {
-      setBuyTokenOrderBook(null)
     }
   }
 
@@ -399,21 +413,6 @@ export default function TokenPage() {
     return () => unsubscribe()
   }, [hasValidRoute, tokenData.tokenId, tokenData.name])
 
-  useEffect(() => {
-    if (selectedBuyToken) {
-      fetchBuyTokenData()
-      const interval = setInterval(fetchBuyTokenData, 30000)
-      
-      return () => clearInterval(interval)
-    }
-  }, [selectedBuyToken?.id])
-
-  useEffect(() => {
-    if (spendAmount && buyTokenOrderBook) {
-      calculateReceiveAmount(spendAmount)
-    }
-  }, [buyTokenOrderBook, networkFee])
-
   const marketCap = stats && supply && !isNaN(stats.latestPrice) && !isNaN(Number(supply)) 
     ? (stats.latestPrice * Number(supply)) 
     : 0
@@ -424,72 +423,40 @@ export default function TokenPage() {
   const rawChange = typeof stats?.priceChange24h === 'number' ? stats.priceChange24h : 0
   const isDrop = rawChange < 0
   const displayChange = isDrop ? Math.min(Math.abs(rawChange), 10) : rawChange
-
-  const calculateReceiveAmount = (inputAmount: string) => {
-    if (!buyTokenOrderBook?.orders || !inputAmount || isNaN(Number(inputAmount))) {
-      setReceiveAmount('0')
-      setAvgExecutionPrice(0)
-      setSlippage(0)
-      setErrorMessage('')
-      setMaxPrice(0)
-      return
-    }
-
-    let xecAmount = Number(inputAmount)
-
-    const currentBalance = parseFloat(balance || '0')
-    if (isWalletConnected && !isNaN(currentBalance) && currentBalance > 0) {
-      if (xecAmount > currentBalance) {
-        xecAmount = currentBalance
-        setSpendAmount(currentBalance.toString())
-      }
-    }
-
-    const sweepResult = calculateAgoraSweepBuy({
-      spendAmountXec: xecAmount,
-      networkFeeXec: networkFee,
-      orderBook: buyTokenOrderBook,
-    })
-
-    if (!sweepResult.ok) {
-      setReceiveAmount('0')
-      setAvgExecutionPrice(0)
-      setSlippage(0)
-      setMaxPrice(0)
-      if (sweepResult.reason === "INSUFFICIENT_BUDGET") {
-        setErrorMessage(`Amount must be greater than ${minimumBuyFees.toFixed(2)} XEC to cover the estimated swap and network fees`)
-      } else if (sweepResult.reason === "EXCEEDS_AVAILABLE_AMOUNT") {
-        setErrorMessage(`Exceeds available amount: ${formatNumber(sweepResult.totalValueXec)} XEC`)
-      } else {
-        setErrorMessage('No matching sell orders available')
-      }
-      return
-    }
-
-    setErrorMessage('')
-    setReceiveAmount(sweepResult.receiveAmount.toFixed(6))
-    setAvgExecutionPrice(sweepResult.avgExecutionPrice)
-    setSlippage(sweepResult.slippagePercent)
-    setMaxPrice(sweepResult.maxPrice)
-
-    if (!sweepResult.receiveAmount) {
-      setReceiveAmount('0')
-      setAvgExecutionPrice(0)
-      setSlippage(0)
-      setMaxPrice(0)
-    }
-  }
-
-  const handleWebsiteClick = () => {
-    if (!stats?.url) return;
-    
-    let url = stats.url;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'https://' + url;
-    }
-    
-    window.open(url, '_blank');
-  }
+  const supplyNote =
+    tokenData.tokenId === 'd1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb'
+      ? "74M SS frozed(belongs to GNC)"
+      : null
+  const tokenPageStats = [
+    {
+      label: "MCAP",
+      value: `${formatNumber(marketCap)} XEC`,
+    },
+    {
+      label: "Price",
+      value: displayLatestPrice ? displayLatestPrice.toFixed(4) : "0.0000",
+      detail: `${rawChange >= 0 ? "+" : ""}${displayChange.toFixed(2)}%`,
+      detailTone: rawChange >= 0 ? "positive" as const : "negative" as const,
+    },
+    {
+      label: "1D VOL",
+      value: `${formatNumber(stats?.last24HoursXECAmount || 0)} XEC`,
+    },
+    {
+      label: "Supply",
+      value: formatNumber(Number(supply)),
+      detail: supplyNote,
+      detailTone: "neutral" as const,
+    },
+    {
+      label: "Sales 30D",
+      value: formatNumber(stats?.totalTransactions || 0, true),
+    },
+    {
+      label: "30D VOL",
+      value: `${formatNumber(stats?.last30DaysXECAmount || 0)} XEC`,
+    },
+  ]
 
   const handleAdjustInsufficientOrders = async () => {
     const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
@@ -606,95 +573,6 @@ export default function TokenPage() {
     setShowOrderCheckDialog(false);
   };
 
-  const createSwapOrder = async () => {
-    if (!selectedBuyToken) {
-      toast({
-        title: "No token selected",
-        description: "Please select a token to purchase",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!isWalletConnected || !ecashAddress) {
-      toast({
-        title: "Please connect wallet",
-        description: "You need to connect your wallet to create orders. Please visit /swap page to connect",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (isGuestMode) {
-      toast({
-        title: "Guest Mode Restriction",
-        description: "Cannot create orders in guest mode. Please connect wallet with recovery phrase",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!receiveAmount || parseFloat(receiveAmount) <= 0 || !maxPrice || maxPrice <= 0) {
-      toast({
-        title: "Invalid input",
-        description: "Please enter a valid amount to purchase",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const currentFee =
-      typeof networkFee === "number" && networkFee > 0
-        ? networkFee
-        : DEFAULT_BASE_NETWORK_FEE_XEC;
-    const totalCost = parseFloat(receiveAmount) * maxPrice;
-    const totalRequired = calculateAgoraFeeSummary(totalCost, currentFee).totalCostXec;
-    if (totalRequired < MIN_ORDER_TOTAL_XEC) {
-      toast({
-        title: "Order amount too small",
-        description: `Orders require a minimum total value of ${MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC (including swap and network fees). Current total: ${totalRequired.toFixed(2)} XEC`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const orderKey = createSwapOrderKey(selectedBuyToken.id, ecashAddress, maxPrice);
-    
-    const orderData = {
-      remainingAmount: parseFloat(receiveAmount),
-      maxPrice: maxPrice,
-      status: "pending",
-      orderType: "online",
-      transactions: [],
-      createdAt: new Date().toISOString()
-    };
-
-    const existingOrders = saveSwapOrder(orderKey, orderData, "created");
-
-    executeOrders().catch(() => {});
-
-    void queueOrdersSync(existingOrders, ecashAddress).then((synced) => {
-      if (synced) {
-        return;
-      }
-
-      console.error('❌ Failed to push orders to server');
-      toast({
-        title: "Warning",
-        description: "Order saved locally but failed to sync with server. It will sync later.",
-        variant: "destructive",
-      });
-    })
-    
-    toast({
-      title: "✅ Order created successfully",
-      description: "Your order has been created. Agora will check current sell orders immediately.",
-    });
-
-    setSpendAmount('');
-    setReceiveAmount('');
-  }
-
   if (!hasValidRoute) {
     return (
       <>
@@ -722,47 +600,19 @@ export default function TokenPage() {
         <div className="flex flex-col lg:flex-row gap-10 mt-10">
         <div className="w-full lg:hidden">
           <div className="p-4">
-            <SwapPanel
-              spendAmount={spendAmount}
-              setSpendAmount={setSpendAmount}
-              receiveAmount={receiveAmount}
-              balance={balance}
-              isWalletConnected={isWalletConnected}
-              calculateReceiveAmount={calculateReceiveAmount}
-              selectedBuyToken={selectedBuyToken}
-              setSelectedBuyToken={setSelectedBuyToken}
-              userTokens={userTokens}
-              setReceiveAmount={setReceiveAmount}
-              setAvgExecutionPrice={setAvgExecutionPrice}
-              setSlippage={setSlippage}
-              setErrorMessage={setErrorMessage}
-              setMaxPrice={setMaxPrice}
-              errorMessage={errorMessage}
-              avgExecutionPrice={avgExecutionPrice}
-              slippage={slippage}
-              isSwapActivated={isSwapActivated}
+            <TokenProjectInfoCard
               tokenId={tokenData.tokenId}
-              createSwapOrder={createSwapOrder}
-              totalFees={estimatedBuyFeeSummary.totalFeesXec}
-              showCashtabButton={false}
-              onMaxClick={() => {
-                if (isWalletConnected) {
-                  const maxBalance = parseFloat(balance);
-                  if (maxBalance > minimumBuyFees) {
-                    setSpendAmount(balance);
-                    calculateReceiveAmount(balance);
-                  } else {
-                    toast({
-                      title: "Insufficient balance",
-                      description: `You need at least ${minimumBuyFees.toFixed(2)} XEC to cover the estimated swap and network fees`,
-                      variant: "destructive"
-                    });
-                  }
-                } else {
-                  toast({ title: "Wallet not connected", description: "Please connect your wallet first", variant: "destructive" });
-                }
-              }}
+              tokenName={tokenData.name}
+              authPubkey={authPubkey}
+              tokenTicker={tokenData.symbol}
+              createdBlockHeight={createdBlockHeight}
+              createdTimestamp={createdTimestamp}
+              fallbackWebsiteUrl={websiteUrl}
+              fallbackTelegramUrl={!isCustomToken ? tokenData.telegramUrl : null}
             />
+          </div>
+          <div className="p-4 pt-0">
+            <TokenStatsCard stats={tokenPageStats} />
           </div>
         </div>
 
@@ -812,45 +662,6 @@ export default function TokenPage() {
           
 
 
-          <div className=" p-4">
-            <h2 className="text-lg font-bold mb-6">Stats</h2>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-x-6 gap-y-2 lg:gap-y-8">
-              <div>
-                <div className="text-gray-600 text-sm">MCAP(XEC)</div>
-                <div className="text-sm font-semibold">{formatNumber(marketCap)}</div>
-              </div>
-              <div>
-                <div className="text-gray-600 text-sm">Price</div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">
-                    {displayLatestPrice ? displayLatestPrice.toFixed(4) : '0.0000'}
-                  </span>
-                  <span className={`text-sm ${rawChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                    {rawChange >= 0 ? '+' : ''}{displayChange.toFixed(2)}%
-                  </span>
-                </div>
-              </div>
-              <div>
-                <div className="text-gray-600 text-sm">1D VOL</div>
-                <div className="text-sm font-semibold">{formatNumber(stats?.last24HoursXECAmount || 0)}</div>
-              </div>
-              <div>
-                <div className="text-gray-600 text-sm">Supply</div>
-                <div className="text-sm font-semibold">{formatNumber(Number(supply))}</div>
-                {tokenData.tokenId === 'd1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb' && (
-                  <div className="text-xs text-gray-500 mt-1">74M SS frozed(belongs to GNC)</div>
-                )}
-              </div>
-              <div>
-                <div className="text-gray-600 text-sm">Sales in 30D</div>
-                <div className="text-sm font-semibold">{formatNumber(stats?.totalTransactions || 0)}</div>
-              </div>
-              <div>
-                <div className="text-gray-600 text-sm">30D VOL</div>
-                <div className="text-sm font-semibold">{formatNumber(stats?.last30DaysXECAmount || 0)}</div>
-              </div>
-            </div>
-          </div>
           <div className="p-4">
             <div className="flex gap-6 mb-6">
               <h2 
@@ -908,48 +719,24 @@ export default function TokenPage() {
 
 
         <div className="w-full lg:basis-1/3 grid gap-4 auto-rows-min">
-          <div className="p-4 hidden lg:block">
-            <SwapPanel
-              spendAmount={spendAmount}
-              setSpendAmount={setSpendAmount}
-              receiveAmount={receiveAmount}
-              balance={balance}
-              isWalletConnected={isWalletConnected}
-              calculateReceiveAmount={calculateReceiveAmount}
-              selectedBuyToken={selectedBuyToken}
-              setSelectedBuyToken={setSelectedBuyToken}
-              userTokens={userTokens}
-              setReceiveAmount={setReceiveAmount}
-              setAvgExecutionPrice={setAvgExecutionPrice}
-              setSlippage={setSlippage}
-              setErrorMessage={setErrorMessage}
-              setMaxPrice={setMaxPrice}
-              errorMessage={errorMessage}
-              avgExecutionPrice={avgExecutionPrice}
-              slippage={slippage}
-              isSwapActivated={isSwapActivated}
+          <div className="hidden lg:block h-16" aria-hidden="true" />
+          <div className="hidden lg:block">
+            <TokenProjectInfoCard
               tokenId={tokenData.tokenId}
-              createSwapOrder={createSwapOrder}
-              totalFees={estimatedBuyFeeSummary.totalFeesXec}
-              showCashtabButton={false}
-              onMaxClick={() => {
-                if (isWalletConnected) {
-                  const maxBalance = parseFloat(balance);
-                  if (maxBalance > minimumBuyFees) {
-                    setSpendAmount(balance);
-                    calculateReceiveAmount(balance);
-                  } else {
-                    toast({
-                      title: "Insufficient balance",
-                      description: `You need at least ${minimumBuyFees.toFixed(2)} XEC to cover the estimated swap and network fees`,
-                      variant: "destructive"
-                    });
-                  }
-                } else {
-                  toast({ title: "Wallet not connected", description: "Please connect your wallet first", variant: "destructive" });
-                }
-              }}
+              tokenName={tokenData.name}
+              authPubkey={authPubkey}
+              tokenTicker={tokenData.symbol}
+              createdBlockHeight={createdBlockHeight}
+              createdTimestamp={createdTimestamp}
+              fallbackWebsiteUrl={websiteUrl}
+              fallbackTelegramUrl={!isCustomToken ? tokenData.telegramUrl : null}
+              className="lg:max-h-[410px] lg:overflow-hidden"
+              contentClassName="lg:max-h-[300px] lg:overflow-y-auto"
             />
+          </div>
+
+          <div className="hidden lg:block">
+            <TokenStatsCard stats={tokenPageStats} />
           </div>
 
           {tokenData.tokenId && activeTab !== 'comments' && (
@@ -970,52 +757,6 @@ export default function TokenPage() {
             </div>
           )}
 
-          <div className="p-4">
-            <h2 className="text-lg font-bold mb-6">Info</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <Badge 
-                variant="secondary" 
-                className="h-10 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:bg-secondary/80"
-                onClick={() => {
-                  navigator.clipboard.writeText(tokenData.tokenId);
-                }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                </svg>
-                {tokenData.tokenId.substring(0, 6)}...{tokenData.tokenId.substring(tokenData.tokenId.length - 4)}
-              </Badge>
-
-              <Badge 
-                variant="secondary" 
-                className="h-10 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:bg-secondary/80"
-                onClick={() => window.open(`https://explorer.e.cash/tx/${tokenData.tokenId}`, '_blank')}
-              >
-                <Coins className="h-4 w-4" />
-                Token ID	
-              </Badge>
-
-              {!isCustomToken && tokenData.telegramUrl && (
-                <Badge 
-                  variant="secondary" 
-                  className="h-10 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:bg-secondary/80"
-                  onClick={() => window.open(tokenData.telegramUrl, '_blank')}
-                >
-                  <Globe className="h-4 w-4" />
-                  Telegram
-                </Badge>
-              )}
-
-              <Badge 
-                variant="secondary" 
-                className="h-10 rounded-lg flex items-center justify-center gap-2 cursor-pointer hover:bg-secondary/80"
-                onClick={handleWebsiteClick}
-              >
-                <Globe className="h-4 w-4" />
-                Website
-              </Badge>
-            </div>
-          </div>
         </div>
       </div>
      

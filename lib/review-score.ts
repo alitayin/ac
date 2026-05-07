@@ -4,6 +4,7 @@ export const REVIEW_UNRATED_LABEL = "Unrated"
 export const REVIEW_UNRATED_TOOLTIP =
   "No paid ratings yet. This token is still unproven."
 export const REVIEW_UNRATED_STAR_ICON_CLASS = "text-muted-foreground/60"
+export const REVIEW_STAR_COUNT = 5
 
 export const getDisplayReviewScore = (
   score: number | null | undefined,
@@ -26,6 +27,24 @@ export const getSortableReviewScore = (
   score: number | null | undefined,
 ): number => {
   return getDisplayReviewScore(score) ?? 0
+}
+
+export const getReviewStarFillPercentages = (
+  score: number | null | undefined,
+  starCount: number = REVIEW_STAR_COUNT,
+): number[] => {
+  const displayScore = getDisplayReviewScore(score)
+  const safeStarCount = Math.max(0, Math.floor(starCount))
+
+  if (displayScore === null || safeStarCount === 0) {
+    return Array.from({ length: safeStarCount }, () => 0)
+  }
+
+  const filledStars = (displayScore / 10) * safeStarCount
+  return Array.from({ length: safeStarCount }, (_, index) => {
+    const fill = Math.max(0, Math.min(1, filledStars - index))
+    return Math.round(fill * 100)
+  })
 }
 
 export const getReviewScoreToneClasses = (
@@ -53,7 +72,7 @@ export const getReviewScoreToneClasses = (
     button:
       "border-zinc-300 bg-zinc-100 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-zinc-100",
     buttonActive:
-      "border-zinc-400 bg-zinc-200 text-zinc-900 shadow-sm hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100",
+      "border-primary bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/25 hover:bg-primary/90",
     text: "text-zinc-600 dark:text-zinc-300",
   }
 }

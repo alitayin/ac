@@ -163,6 +163,7 @@ describe("TokenTable bootstrap", () => {
     useWalletMock.mockReturnValue({
       isWalletConnected: false,
       userTokens: {},
+      publicKeyHex: "",
     })
     useXECPriceMock.mockReturnValue(0.05)
     watchAgoraTokensMock.mockReturnValue(() => {})
@@ -301,6 +302,61 @@ describe("TokenTable bootstrap", () => {
     })
   })
 
+  it("shows an Editable badge when the connected wallet matches token authPubkey", async () => {
+    const authPubkey =
+      "0334b744e6338ad438c92900c0ed1869c3fd2c0f35a4a9b97a88447b6e2b145f10"
+
+    useWalletMock.mockReturnValue({
+      isWalletConnected: true,
+      userTokens: {},
+      publicKeyHex: authPubkey.toUpperCase(),
+    })
+    fetchBlockchainInfoMock.mockResolvedValue({ tipHeight: 900000 })
+    fetchEtokenDbTopVolumeTokensMock.mockResolvedValue([makeTopVolumeToken()])
+    getCachedTokenDetailsMock.mockReturnValue({
+      genesisInfo: {
+        tokenName: "Alpha Token",
+        decimals: 2,
+        authPubkey,
+      },
+    })
+
+    render(<TokenTable />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Token")).toBeInTheDocument()
+    })
+
+    expect(screen.getByText("Editable")).toBeInTheDocument()
+  })
+
+  it("does not show an Editable badge for a non-owner wallet", async () => {
+    useWalletMock.mockReturnValue({
+      isWalletConnected: true,
+      userTokens: {},
+      publicKeyHex:
+        "02ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    })
+    fetchBlockchainInfoMock.mockResolvedValue({ tipHeight: 900000 })
+    fetchEtokenDbTopVolumeTokensMock.mockResolvedValue([makeTopVolumeToken()])
+    getCachedTokenDetailsMock.mockReturnValue({
+      genesisInfo: {
+        tokenName: "Alpha Token",
+        decimals: 2,
+        authPubkey:
+          "0334b744e6338ad438c92900c0ed1869c3fd2c0f35a4a9b97a88447b6e2b145f10",
+      },
+    })
+
+    render(<TokenTable />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Token")).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText("Editable")).not.toBeInTheDocument()
+  })
+
   it("sorts by score when clicking the Score column sort control", async () => {
     fetchBlockchainInfoMock.mockResolvedValue({ tipHeight: 900000 })
     fetchEtokenDbTopVolumeTokensMock.mockResolvedValue([
@@ -358,5 +414,70 @@ describe("TokenTable bootstrap", () => {
     expect(
       alphaCell!.compareDocumentPosition(gammaCell!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
+  })
+
+  it("renders score stars proportionally from the 10-point review score", async () => {
+    fetchBlockchainInfoMock.mockResolvedValue({ tipHeight: 900000 })
+    fetchEtokenDbTopVolumeTokensMock.mockResolvedValue([
+      makeTopVolumeToken({
+        tokenId: "alpha-token-id",
+        name: "Alpha Token",
+        reviewAverageScore: 10,
+        reviewScorerCount: 1,
+        reviewCountTotal: 1,
+      }),
+      makeTopVolumeToken({
+        tokenId: "beta-token-id",
+        name: "Beta Token",
+        reviewAverageScore: 5,
+        reviewScorerCount: 1,
+        reviewCountTotal: 1,
+      }),
+      makeTopVolumeToken({
+        tokenId: "gamma-token-id",
+        name: "Gamma Token",
+        reviewAverageScore: null,
+        reviewScorerCount: 0,
+        reviewCountTotal: 0,
+      }),
+    ])
+
+    render(<TokenTable />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Token")).toBeInTheDocument()
+      expect(screen.getByText("Beta Token")).toBeInTheDocument()
+      expect(screen.getByText("Gamma Token")).toBeInTheDocument()
+    })
+
+    const getStarWidths = (tokenName: string) =>
+      Array.from(
+        screen
+          .getByText(tokenName)
+          .closest("tr")
+          ?.querySelectorAll('[data-testid="review-stars"] span[style]') ?? [],
+      ).map((node) => (node as HTMLElement).style.width)
+
+    expect(getStarWidths("Alpha Token")).toEqual([
+      "100%",
+      "100%",
+      "100%",
+      "100%",
+      "100%",
+    ])
+    expect(getStarWidths("Beta Token")).toEqual([
+      "100%",
+      "100%",
+      "50%",
+      "0%",
+      "0%",
+    ])
+    expect(getStarWidths("Gamma Token")).toEqual([
+      "0%",
+      "0%",
+      "0%",
+      "0%",
+      "0%",
+    ])
   })
 })

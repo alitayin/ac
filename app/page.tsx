@@ -11,12 +11,14 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 
 const TokenTable = dynamic(() => import("@/components/ui/TokenTable"), {
   loading: () => <SectionLoading label="Loading token table..." />,
+  ssr: false,
 })
 
 const RealTimeEtokenFlow = dynamic(
   () => import("@/components/ui/RealTimeEtokenFlow"),
   {
     loading: () => <SectionLoading label="Loading eToken flow..." />,
+    ssr: false,
   },
 )
 

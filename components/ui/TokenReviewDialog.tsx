@@ -771,6 +771,7 @@ export function TokenReviewDialog({
                       <button
                         key={value}
                         type="button"
+                        aria-pressed={active}
                         onClick={() => setScore(value)}
                         className={cn(
                           "flex h-11 items-center justify-center rounded-2xl border text-sm font-semibold transition-colors",
