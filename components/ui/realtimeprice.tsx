@@ -32,6 +32,7 @@ import {
 } from "@/lib/token-chart-data"
 import { TokenComponentProps } from "@/lib/types"
 import { useTokenChartData } from "@/lib/use-token-chart-data"
+import { cn } from "@/lib/utils"
 
 const chartConfig = {
   closePriceXec: {
@@ -44,7 +45,7 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-export default function Component({ tokenId }: TokenComponentProps) {
+export default function Component({ tokenId, className }: TokenComponentProps) {
   const [hoverData, setHoverData] = useState<TokenChartPoint | null>(null)
   const [timeRange, setTimeRange] = useState<TokenChartRange>("7d")
   const { data: chartData, interval, isLoading, source } = useTokenChartData(tokenId, timeRange)
@@ -57,7 +58,7 @@ export default function Component({ tokenId }: TokenComponentProps) {
   const xAxisInterval = interval === "hour" ? 23 : 4
 
   return (
-    <Card>
+    <Card className={cn(className)}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

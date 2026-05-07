@@ -27,6 +27,7 @@ import type {
   PieChartData 
 } from "@/lib/types"
 import { fetchTokenUtxos, getTokenAmountFromToken } from "@/lib/chronik"
+import { cn } from "@/lib/utils"
 
 async function fetchHoldersFromChronik(tokenId: string): Promise<HoldersData> {
   if (!tokenId) {
@@ -78,7 +79,7 @@ async function fetchHoldersFromChronik(tokenId: string): Promise<HoldersData> {
   return data
 }
 
-export default function Component({ tokenId }: TokenComponentProps) {
+export default function Component({ tokenId, className }: TokenComponentProps) {
   const [chartData, setChartData] = useState<PieChartData[]>([])
   const [chartConfig, setChartConfig] = useState<ChartConfig>({} as ChartConfig)
   const [totalHolders, setTotalHolders] = useState<number>(0)
@@ -142,7 +143,7 @@ export default function Component({ tokenId }: TokenComponentProps) {
   }, [tokenId])
 
   return (
-    <Card className="flex flex-col min-h-[450px]">
+    <Card className={cn("flex flex-col min-h-[450px]", className)}>
       <CardHeader className="items-center pb-0">
         <CardTitle>Holders Distribution</CardTitle>
         <CardDescription>Top Holders ({totalHolders})</CardDescription>

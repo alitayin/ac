@@ -30,6 +30,7 @@ import {
 } from "@/lib/token-chart-data"
 import { TokenListComponentProps } from "@/lib/types"
 import { useTokenChartData } from "@/lib/use-token-chart-data"
+import { cn } from "@/lib/utils"
 
 const chartConfig = {
   views: { label: "Trading Volume" },
@@ -51,7 +52,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   )
 }
 
-export default function Component({ tokenIds }: TokenListComponentProps) {
+export default function Component({ tokenIds, className }: TokenListComponentProps) {
   const [timeRange, setTimeRange] = useState<TokenChartRange>("7d")
   const tokenId = tokenIds[0] || ""
   const { data, interval, isLoading, source } = useTokenChartData(tokenId, timeRange)
@@ -61,7 +62,7 @@ export default function Component({ tokenIds }: TokenListComponentProps) {
   }))
 
   return (
-    <Card className="h-full border-none">
+    <Card className={cn("h-full border-none", className)}>
       <CardHeader className="flex items-center gap-2 space-y-0 py-5 sm:flex-row">
         <div className="grid flex-1 gap-1 text-center sm:text-left">
           <div className="flex items-center gap-2">

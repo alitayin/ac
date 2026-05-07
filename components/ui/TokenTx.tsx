@@ -30,13 +30,14 @@ import { Transaction, TokenComponentProps } from "@/lib/types"
 import { TOKEN_IDS, PRICE_CONSTANTS, UPDATE_INTERVALS, UI_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
 import { watchAgoraTokens } from "@/lib/agora-ws"
+import { cn } from "@/lib/utils"
 
 const getMaxAmount = (data: Transaction[]): number => {
   if (data.length === 0) return 0
   return Math.max(...data.map(t => t.amount))
 }
 
-export default function Component({ tokenId }: TokenComponentProps) {
+export default function Component({ tokenId, className }: TokenComponentProps) {
   const [data, setData] = React.useState<Transaction[]>([])
   const [lastUpdate, setLastUpdate] = React.useState<string>("")
   const [showUSD, setShowUSD] = React.useState(false)
@@ -204,7 +205,7 @@ export default function Component({ tokenId }: TokenComponentProps) {
   })
 
   return (
-    <Card className="">
+    <Card className={cn(className)}>
       <CardHeader className="p-2">
       </CardHeader>
       <CardContent>

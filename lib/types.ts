@@ -70,10 +70,12 @@ export type SortType = '24h' | '7d' | 'history' | 'score';
 // Component Props Types
 export interface TokenComponentProps {
   tokenId: string;
+  className?: string;
 }
 
 export interface TokenListComponentProps {
   tokenIds: string[];
+  className?: string;
 }
 
 // Holder Data Types

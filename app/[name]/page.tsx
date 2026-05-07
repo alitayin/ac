@@ -87,7 +87,7 @@ type TokenPageStat = {
 
 function TokenStatsCard({ stats }: { stats: TokenPageStat[] }) {
   return (
-    <Card className="rounded-3xl">
+    <Card className="rounded-3xl shadow-none">
       <CardHeader className="p-4 pb-3">
         <CardTitle className="text-base">Stats</CardTitle>
       </CardHeader>
@@ -578,7 +578,7 @@ export default function TokenPage() {
       <>
         <Header />
         <div className="container mx-auto max-w-7xl p-4">
-          <Card>
+          <Card className="shadow-none">
             <CardHeader>
               <CardTitle>Token Not Found</CardTitle>
             </CardHeader>
@@ -609,6 +609,7 @@ export default function TokenPage() {
               createdTimestamp={createdTimestamp}
               fallbackWebsiteUrl={websiteUrl}
               fallbackTelegramUrl={!isCustomToken ? tokenData.telegramUrl : null}
+              className="shadow-none"
             />
           </div>
           <div className="p-4 pt-0">
@@ -629,7 +630,7 @@ export default function TokenPage() {
               <div>
                 <h3 className="font-semibold text-lg">
                   {tokenData.name}
-                  <span className="ml-2 text-gray-500">({tokenData.symbol})</span>
+                  <span className="ml-2 text-muted-foreground">({tokenData.symbol})</span>
                 </h3>
               </div>
             </div>
@@ -637,10 +638,10 @@ export default function TokenPage() {
 
           <div className="p-4">
             <div className="flex flex-col">
-              {selectedChart === "realtimeprice" ? <RealtimePrice tokenId={tokenData.tokenId} /> :
-               selectedChart === "piechart" ? <Piechart tokenId={tokenData.tokenId} /> :
-               selectedChart === "volumechart" ? <ErrorBoundary><VolumeChart tokenIds={[tokenData.tokenId]} /></ErrorBoundary> :
-               selectedChart === "pricechart" ? <ErrorBoundary><PriceChart tokenIds={[tokenData.tokenId]} /></ErrorBoundary> : null}
+              {selectedChart === "realtimeprice" ? <RealtimePrice tokenId={tokenData.tokenId} className="shadow-none" /> :
+               selectedChart === "piechart" ? <Piechart tokenId={tokenData.tokenId} className="shadow-none" /> :
+               selectedChart === "volumechart" ? <ErrorBoundary><VolumeChart tokenIds={[tokenData.tokenId]} className="shadow-none" /></ErrorBoundary> :
+               selectedChart === "pricechart" ? <ErrorBoundary><PriceChart tokenIds={[tokenData.tokenId]} className="shadow-none" /></ErrorBoundary> : null}
               <div className="self-end mt-4">
                 <Select
                   value={selectedChart}
@@ -699,11 +700,11 @@ export default function TokenPage() {
             </div>
 
             <div className={activeTab === 'trading' ? 'block' : 'hidden'}>
-              <TokenTx tokenId={tokenData.tokenId}/>
+              <TokenTx tokenId={tokenData.tokenId} className="shadow-none"/>
             </div>
             {activeTab === 'orderbook' ? (
               <ErrorBoundary>
-              <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
+              <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} className="shadow-none" />
               </ErrorBoundary>
             ) : activeTab === 'address' ? (
               <AddressDistribution tokenId={tokenData.tokenId} decimals={tokenDecimals} />
@@ -712,6 +713,7 @@ export default function TokenPage() {
                 tokenId={tokenData.tokenId}
                 tokenName={tokenData.name}
                 variant="main"
+                className="shadow-none"
               />
             ) : null}
           </div>
@@ -730,7 +732,7 @@ export default function TokenPage() {
               createdTimestamp={createdTimestamp}
               fallbackWebsiteUrl={websiteUrl}
               fallbackTelegramUrl={!isCustomToken ? tokenData.telegramUrl : null}
-              className="lg:max-h-[410px] lg:overflow-hidden"
+              className="shadow-none lg:max-h-[410px] lg:overflow-hidden"
               contentClassName="lg:max-h-[300px] lg:overflow-y-auto"
             />
           </div>
@@ -745,6 +747,7 @@ export default function TokenPage() {
                 tokenId={tokenData.tokenId}
                 tokenName={tokenData.name}
                 variant="sidebar"
+                className="shadow-none"
               />
             </div>
           )}
@@ -752,7 +755,7 @@ export default function TokenPage() {
           {activeTab !== 'orderbook' && (
             <div className="hidden lg:block">
               <ErrorBoundary>
-                <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} />
+                <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} className="shadow-none" />
               </ErrorBoundary>
             </div>
           )}

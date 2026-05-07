@@ -2832,7 +2832,7 @@ export default function Component() {
 
   if (isLoading || isChronikLoading || !chronikClient) {
     return (
-      <Card className="relative overflow-hidden">
+      <Card className="relative overflow-hidden shadow-none">
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <CardTitle className="flex items-baseline gap-2">
@@ -2915,7 +2915,7 @@ export default function Component() {
     <>
       <style>{styles}</style>
       <TooltipProvider delayDuration={0} skipDelayDuration={0}>
-      <Card className="relative overflow-hidden">
+      <Card className="relative overflow-hidden shadow-none">
         <CardHeader className="gap-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-1">
@@ -3005,7 +3005,7 @@ export default function Component() {
                 {searchExpanded ? (
                   <div
                     ref={searchContainerRef}
-                    className="flex w-full items-center gap-2 rounded-2xl border border-border/60 bg-background/70 px-3 py-2 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-background/55 dark:border-white/[0.08] dark:bg-white/[0.03] sm:w-auto sm:min-w-[19rem]"
+                    className="flex w-full items-center gap-2 rounded-2xl border border-border/60 bg-background/70 px-3 py-2 backdrop-blur-xl supports-[backdrop-filter]:bg-background/55 dark:border-white/[0.08] dark:bg-white/[0.03] sm:w-auto sm:min-w-[19rem]"
                   >
                     <Search className="size-4 shrink-0 text-muted-foreground/70" />
                     <Input

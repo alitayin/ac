@@ -6,6 +6,20 @@
 
 ## 2026-05-08
 
+### 🎉 v4.3.5 发布
+
+**主要改动：**
+- Removed card shadows from token detail charts, trading, and homepage TokenTable
+- Kept card borders and rounded corners for a flatter interface
+
+**验证：**
+- ✅ `pnpm vitest run __tests__/unit/token-page.test.tsx __tests__/unit/TokenProjectInfoCard.test.tsx __tests__/unit/token-charts.test.tsx __tests__/unit/TokenTable.test.tsx` 通过
+- ✅ `pnpm build` 通过
+
+---
+
+## 2026-05-08
+
 ### 🎉 v4.3.4 发布
 
 **主要改动：**
