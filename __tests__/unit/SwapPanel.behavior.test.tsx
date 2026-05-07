@@ -242,6 +242,23 @@ describe("SwapPanel current behavior", () => {
     expect(fetchAgoraOrderBookMock).toHaveBeenCalledWith("token-1");
   });
 
+  it("uses the initial query token instead of the first wallet token", async () => {
+    const queryTokenId =
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    render(
+      <SwapPanel initialTokenId={queryTokenId} initialTokenName="Query Token" />,
+    );
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(screen.getByTestId("selected-token")).toHaveTextContent("Query Token");
+    expect(fetchAgoraOrderBookMock).toHaveBeenCalledWith(queryTokenId);
+    expect(fetchAgoraOrderBookMock).not.toHaveBeenCalledWith("token-1");
+  });
+
   it("reuses the cached order book inside the TTL and refetches after it expires", async () => {
     render(<SwapPanel />);
 

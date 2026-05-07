@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import quick from "ecash-quicksend"
 import {
   CheckCircle2,
@@ -60,6 +61,7 @@ type TokenProjectInfoCardProps = {
   createdTimestamp?: number | null
   fallbackWebsiteUrl?: string | null
   fallbackTelegramUrl?: string | null
+  buyHref?: string | null
   className?: string
   contentClassName?: string
 }
@@ -320,6 +322,7 @@ export function TokenProjectInfoCard({
   createdTimestamp,
   fallbackWebsiteUrl,
   fallbackTelegramUrl,
+  buyHref,
   className,
   contentClassName,
 }: TokenProjectInfoCardProps) {
@@ -919,21 +922,28 @@ export function TokenProjectInfoCard({
                   : "No project details published yet"}
               </CardDescription>
             </div>
-            {canEdit ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleOpenEditor}
-              >
-                <Edit3 data-icon="inline-start" />
-                {hasProjectInfoRecord ? "Edit" : "Initialize"}
-              </Button>
-            ) : isGenesisAuthPubkeyWallet && !hasSigningWallet ? (
-              <Badge variant="outline" className="shrink-0 rounded-md">
-                Wallet locked
-              </Badge>
-            ) : null}
+            <div className="flex shrink-0 items-center gap-2">
+              {buyHref ? (
+                <Button asChild size="sm" className="rounded-md">
+                  <Link href={buyHref}>Buy</Link>
+                </Button>
+              ) : null}
+              {canEdit ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleOpenEditor}
+                >
+                  <Edit3 data-icon="inline-start" />
+                  {hasProjectInfoRecord ? "Edit" : "Initialize"}
+                </Button>
+              ) : isGenesisAuthPubkeyWallet && !hasSigningWallet ? (
+                <Badge variant="outline" className="shrink-0 rounded-md">
+                  Wallet locked
+                </Badge>
+              ) : null}
+            </div>
           </div>
         </CardHeader>
         <CardContent className={cn("flex flex-col gap-4 p-4 pt-0", contentClassName)}>
@@ -991,7 +1001,7 @@ export function TokenProjectInfoCard({
               </>
             ) : (
               <p className="text-sm leading-6 text-muted-foreground">
-                The token creator has not added project information yet.
+                The token creator has not added project information yet. (Project information is submitted and edited by the token holder.)
               </p>
             )}
           </div>
@@ -1119,6 +1129,9 @@ export function TokenProjectInfoCard({
                 ? "Update the public project details for this token."
                 : "Publish the first public project details for this token."}
             </DialogDescription>
+            <p className="max-w-xl text-xs leading-5 text-muted-foreground">
+              We may remove content we consider inappropriate at any time, without providing a reason or refund.
+            </p>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto bg-white overscroll-contain dark:bg-background">

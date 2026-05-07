@@ -71,7 +71,14 @@ export default function Footer() {
 
         {/* Copyright */}
         <div className="flex flex-col items-center gap-1 text-xs font-normal tracking-tight text-muted-foreground">
-          <span>© eCash Ecosystem Hub</span>
+          <a
+            href="https://ecashecosystem.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline-offset-4 hover:text-foreground hover:underline"
+          >
+            © eCash Ecosystem Hub
+          </a>
         </div>
 
       </div>

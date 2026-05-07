@@ -74,6 +74,11 @@ const EMPTY_SELECTED_TOKEN = {
 };
 type BuyMode = "limit" | "sweep";
 
+type SwapPanelProps = {
+  initialTokenId?: string;
+  initialTokenName?: string;
+};
+
 function shortenTokenId(tokenId: string): string {
   return `${tokenId.slice(0, 6)}...${tokenId.slice(-4)}`;
 }
@@ -92,7 +97,10 @@ function getTokenNameFromDetail(detail: any, tokenId: string): string {
   return shortenTokenId(tokenId);
 }
 
-export function SwapPanel() {
+export function SwapPanel({
+  initialTokenId = "",
+  initialTokenName = "",
+}: SwapPanelProps = {}) {
   const { toast } = useToast();
   const {
     isWalletConnected,
@@ -138,6 +146,8 @@ export function SwapPanel() {
   const [sellPrice, setSellPrice] = useState<string>('');
   const [isCreatingListing, setIsCreatingListing] = useState<boolean>(false);
   const { executeOrders } = useAutoExecution();
+  const initialQueryTokenAppliedRef = useRef(false);
+  const hasInitialQueryToken = /^[a-f0-9]{64}$/i.test(initialTokenId.trim());
 
   // Order book cache with 10 second TTL
   const orderBookCacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
@@ -750,6 +760,22 @@ export function SwapPanel() {
   };
 
   useEffect(() => {
+    if (initialQueryTokenAppliedRef.current) {
+      return;
+    }
+
+    const queryTokenId = initialTokenId.trim();
+    if (!hasInitialQueryToken) {
+      initialQueryTokenAppliedRef.current = true;
+      return;
+    }
+
+    initialQueryTokenAppliedRef.current = true;
+    const queryTokenName = initialTokenName.trim();
+    handleTokenSelect(queryTokenId, queryTokenName || shortenTokenId(queryTokenId));
+  }, [hasInitialQueryToken, initialTokenId, initialTokenName]);
+
+  useEffect(() => {
     if (!selectedToken.id) {
       setTokenPrice(0);
       setTokenPriceInput('0.00');
@@ -1094,6 +1120,10 @@ export function SwapPanel() {
     let cancelled = false;
 
     const syncSelectedToken = async () => {
+      if (hasInitialQueryToken) {
+        return;
+      }
+
       if (selectedToken.id) {
         return;
       }
@@ -1138,7 +1168,7 @@ export function SwapPanel() {
     return () => {
       cancelled = true;
     };
-  }, [isWalletConnected, selectedToken.id, userTokens]);
+  }, [hasInitialQueryToken, isWalletConnected, selectedToken.id, userTokens]);
 
 
   const handleCreateListing = async () => {

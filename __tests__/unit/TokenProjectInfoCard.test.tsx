@@ -109,6 +109,46 @@ describe("TokenProjectInfoCard", () => {
     expect(await screen.findByText("Fee: 100 XEC")).toBeInTheDocument()
   })
 
+  it("shows project info source and moderation disclaimers", async () => {
+    render(
+      <TokenProjectInfoCard
+        tokenId={TEST_TOKEN_ID}
+        tokenName="Test Token"
+        authPubkey={AUTH_PUBKEY}
+      />,
+    )
+
+    expect(
+      await screen.findByText(
+        "The token creator has not added project information yet. (Project information is submitted and edited by the token holder.)",
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Initialize" }))
+
+    expect(
+      await screen.findByText(
+        "We may remove content we consider inappropriate at any time, without providing a reason or refund.",
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it("renders the buy link in the project info header", async () => {
+    render(
+      <TokenProjectInfoCard
+        tokenId={TEST_TOKEN_ID}
+        tokenName="Test Token"
+        authPubkey={AUTH_PUBKEY}
+        buyHref={`/swap?tokenId=${TEST_TOKEN_ID}&tokenName=Test%20Token`}
+      />,
+    )
+
+    expect(await screen.findByRole("link", { name: "Buy" })).toHaveAttribute(
+      "href",
+      `/swap?tokenId=${TEST_TOKEN_ID}&tokenName=Test%20Token`,
+    )
+  })
+
   it("adds https to project info URLs before creating an invoice", async () => {
     createInvoiceMock.mockResolvedValue({
       invoiceId: "invoice-1",

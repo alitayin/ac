@@ -8,7 +8,6 @@ import VolumeChart from "@/components/ui/VolumeChart";
 import PriceChart from "@/components/ui/PriceChart";
 import Piechart from "@/components/ui/Piechart";
 import TokenTx from "@/components/ui/TokenTx";
-import { Button } from "@/components/ui/button"
 import { tokens } from "@/config/tokens";
 import { useEffect, useState, useRef } from "react"
 import {
@@ -23,46 +22,18 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import AddressDistribution from "@/components/ui/AddressDistribution"
 import TokenCommentsPanel from "@/components/ui/TokenCommentsPanel"
 import TokenProjectInfoCard from "@/components/ui/TokenProjectInfoCard"
-import { useWallet } from "@/lib/context/WalletContext"
-import { useToast } from "@/hooks/use-toast"
-
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { formatNumber } from "@/lib/formatters"
 import { getTokenSupply } from "@/lib/tokenSupply"
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
 import { fetchAgoraOrderBook } from "@/lib/agora-orders"
 import { isEtokenDbAvailable } from "@/lib/etokendb"
 import {
-  DEFAULT_BASE_NETWORK_FEE_XEC,
-  estimateNetworkFeeXecFromAddress,
-} from "@/lib/networkFee"
-import {
-  calculateAgoraFeeSummary,
-  estimateAgoraTokenCostFromBudget,
-} from "@/lib/agora-swap-fee"
-import {
   getCachedTokenSummary,
   SUMMARY_CACHE_TTL_MS,
 } from "@/lib/token-stats"
 import { watchAgoraTokens } from "@/lib/agora-ws"
 import { loadTokenPageStats } from "@/lib/token-page-stats"
-import { queueOrdersSync } from "@/lib/Auto.js"
-import {
-  createSwapOrderKey,
-  dispatchOrdersUpdated,
-  writeSwapOrders,
-} from "@/lib/swap-order-utils"
 import { cn } from "@/lib/utils"
-
-const MIN_ORDER_TOTAL_XEC = 100;
 
 interface TokenData {
   tokenId: string;
@@ -127,84 +98,15 @@ function TokenStatsCard({ stats }: { stats: TokenPageStat[] }) {
 
 export default function TokenPage() {
   const params = useParams()
-  const { toast } = useToast()
-  const { isWalletConnected, ecashAddress, balance } = useWallet()
   const [stats, setStats] = useState<any>(null)
   const [chainTipHeight, setChainTipHeight] = useState<number | null>(null)
   const [selectedChart, setSelectedChart] = useState("realtimeprice")
   const [supply, setSupply] = useState<string>('0')
   const [orderBook, setOrderBook] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<'trading' | 'orderbook' | 'address' | 'comments'>('trading');
-  const [showOrderCheckDialog, setShowOrderCheckDialog] = useState<boolean>(false)
-  const [orderCheckInfo, setOrderCheckInfo] = useState<{
-    insufficientCount: number;
-    insufficientOrders: string[];
-  }>({
-    insufficientCount: 0,
-    insufficientOrders: []
-  })
   const [chronikTokenInfo, setChronikTokenInfo] = useState<any>(null)
-  const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC)
   
   const isLoadingStats = useRef<boolean>(false)
-
-  const calculateNetworkFeeFromUtxos = async (): Promise<number> => {
-    try {
-      if (!isWalletConnected || !ecashAddress) {
-        setNetworkFee(DEFAULT_BASE_NETWORK_FEE_XEC)
-        return DEFAULT_BASE_NETWORK_FEE_XEC
-      }
-
-      const { fee } = await estimateNetworkFeeXecFromAddress(ecashAddress)
-      setNetworkFee(fee)
-      return fee
-    } catch (error) {
-      console.error(
-        "Failed to calculate network fee from UTXOs, fallback to base fee:",
-        error
-      )
-      setNetworkFee(DEFAULT_BASE_NETWORK_FEE_XEC)
-      return DEFAULT_BASE_NETWORK_FEE_XEC
-    }
-  }
-
-  useEffect(() => {
-    const checkLocalOrders = () => {
-      if (!ecashAddress) return;
-      
-      const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-      let insufficientCount = 0;
-      const insufficientOrderKeys: string[] = [];
-
-      Object.entries(existingOrders).forEach(([key, order]: [string, any]) => {
-        const parts = key.split('|');
-        const address = parts[1];
-        if (address !== ecashAddress) return;
-
-        const budget = order.remainingAmount * order.maxPrice;
-        const totalRequired = calculateAgoraFeeSummary(budget, networkFee).totalCostXec;
-        if (totalRequired < MIN_ORDER_TOTAL_XEC && order.maxPrice <= 1 && order.status !== 'completed' && order.remainingAmount !== 0) {
-          insufficientCount++;
-          insufficientOrderKeys.push(key);
-        }
-      });
-
-      if (insufficientCount > 0) {
-        setOrderCheckInfo({
-          insufficientCount,
-          insufficientOrders: insufficientOrderKeys
-        });
-        setShowOrderCheckDialog(true);
-      }
-    };
-
-    const timer = setTimeout(checkLocalOrders, 1000);
-    return () => clearTimeout(timer);
-  }, [ecashAddress, networkFee]);
-
-  useEffect(() => {
-    void calculateNetworkFeeFromUtxos();
-  }, [isWalletConnected, ecashAddress]);
 
   const rawName = params.name.toString();
   let decodedName: string;
@@ -427,6 +329,7 @@ export default function TokenPage() {
     tokenData.tokenId === 'd1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb'
       ? "74M SS frozed(belongs to GNC)"
       : null
+  const swapHref = `/swap?tokenId=${encodeURIComponent(tokenData.tokenId)}&tokenName=${encodeURIComponent(tokenData.name)}`
   const tokenPageStats = [
     {
       label: "MCAP",
@@ -457,121 +360,6 @@ export default function TokenPage() {
       value: `${formatNumber(stats?.last30DaysXECAmount || 0)} XEC`,
     },
   ]
-
-  const handleAdjustInsufficientOrders = async () => {
-    const existingOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
-    const currentBalance = parseFloat(balance);
-    let adjustedCount = 0;
-
-    if (orderCheckInfo.insufficientOrders.length > 0) {
-      const actualSpendAmount = estimateAgoraTokenCostFromBudget(
-        MIN_ORDER_TOTAL_XEC,
-        networkFee,
-      );
-      const actualTotalRequired = calculateAgoraFeeSummary(
-        actualSpendAmount,
-        networkFee,
-      ).totalCostXec;
-
-      if (currentBalance < actualTotalRequired) {
-        toast({
-          title: "Cannot adjust orders",
-          description: `Insufficient balance. Required: ${actualTotalRequired.toFixed(2)} XEC, Available: ${currentBalance.toFixed(2)} XEC`,
-          variant: "destructive",
-        });
-        setShowOrderCheckDialog(false);
-        return;
-      }
-
-      for (const orderKey of orderCheckInfo.insufficientOrders) {
-        const parts = orderKey.split('|');
-        const tokenId = parts[0];
-        const address = parts[1];
-        const priceStr = parts[2];
-
-        try {
-          const data = await fetchAgoraOrderBook(tokenId);
-          
-          if (!data.success || !data.data?.orders || data.data.orders.length === 0) {
-            continue;
-          }
-
-          const orderBook = data.data;
-          const sortedOrders = [...orderBook.orders].sort((a: any, b: any) => a.price - b.price);
-          
-          let remainingXec = actualSpendAmount;
-          let totalTokens = 0;
-          let highestPrice = 0;
-
-          for (const order of sortedOrders) {
-            const orderCost = order.price * order.amount;
-            if (remainingXec >= orderCost) {
-              totalTokens += order.amount;
-              remainingXec -= orderCost;
-              highestPrice = order.price;
-            } else {
-              const partialAmount = remainingXec / order.price;
-              totalTokens += partialAmount;
-              highestPrice = order.price;
-              break;
-            }
-            
-            if (remainingXec <= 0) break;
-          }
-
-          if (totalTokens > 0 && highestPrice > 0) {
-            const existingPrice = Number(priceStr);
-            const existingSuffix = parts[3];
-            const shouldReuseExistingKey =
-              typeof existingSuffix === "string" &&
-              existingSuffix.length > 0 &&
-              existingPrice === highestPrice;
-            const newOrderKey = shouldReuseExistingKey
-              ? orderKey
-              : createSwapOrderKey(tokenId, address, highestPrice);
-
-            if (newOrderKey !== orderKey) {
-              delete existingOrders[orderKey];
-            }
-            
-            existingOrders[newOrderKey] = {
-              remainingAmount: totalTokens,
-              maxPrice: highestPrice,
-              status: "pending",
-              orderType: "online",
-              transactions: existingOrders[orderKey]?.transactions || [],
-              createdAt: existingOrders[orderKey]?.createdAt || new Date().toISOString()
-            };
-            
-            adjustedCount++;
-          }
-        } catch (error) {
-        }
-      }
-    }
-
-    writeSwapOrders(existingOrders);
-    dispatchOrdersUpdated("processed");
-
-    if (ecashAddress) {
-      void queueOrdersSync(existingOrders, ecashAddress).then((synced) => {
-        if (synced) {
-          return;
-        }
-
-        console.error('❌ Failed to push adjusted orders to server');
-      });
-    }
-
-    if (adjustedCount > 0) {
-      toast({
-        title: "✅ Orders updated",
-        description: `${adjustedCount} order(s) adjusted`,
-      });
-    }
-
-    setShowOrderCheckDialog(false);
-  };
 
   if (!hasValidRoute) {
     return (
@@ -610,6 +398,7 @@ export default function TokenPage() {
               fallbackWebsiteUrl={websiteUrl}
               fallbackTelegramUrl={!isCustomToken ? tokenData.telegramUrl : null}
               className="shadow-none"
+              buyHref={swapHref}
             />
           </div>
           <div className="p-4 pt-0">
@@ -732,8 +521,9 @@ export default function TokenPage() {
               createdTimestamp={createdTimestamp}
               fallbackWebsiteUrl={websiteUrl}
               fallbackTelegramUrl={!isCustomToken ? tokenData.telegramUrl : null}
-              className="shadow-none lg:max-h-[410px] lg:overflow-hidden"
-              contentClassName="lg:max-h-[300px] lg:overflow-y-auto"
+              className="shadow-none lg:max-h-[470px] lg:overflow-hidden"
+              contentClassName="lg:max-h-[360px] lg:overflow-y-auto"
+              buyHref={swapHref}
             />
           </div>
 
@@ -764,40 +554,6 @@ export default function TokenPage() {
       </div>
      
     </div>
-
-      <AlertDialog open={showOrderCheckDialog} onOpenChange={setShowOrderCheckDialog}>
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg">Order Status Check 📋</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3 text-base">
-              <p className="leading-relaxed text-foreground">
-                ✅ You have <span className="font-semibold text-orange-600">{orderCheckInfo.insufficientCount}</span> order(s) with insufficient total value (less than {MIN_ORDER_TOTAL_XEC.toLocaleString()} XEC including swap and network fees).
-              </p>
-              <p className="leading-relaxed text-muted-foreground">
-                These orders will be automatically adjusted to the minimum valid total.
-              </p>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
-            <AlertDialogCancel
-              onClick={() => {
-                setShowOrderCheckDialog(false);
-              }}
-              className="flex-1 sm:flex-initial"
-            >
-              Cancel
-            </AlertDialogCancel>
-            <Button
-              variant="default"
-              onClick={handleAdjustInsufficientOrders}
-              className="flex-1 sm:flex-initial"
-            >
-              Confirm
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   )
 }

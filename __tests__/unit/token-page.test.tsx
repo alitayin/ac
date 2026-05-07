@@ -75,13 +75,16 @@ vi.mock("@/components/ui/TokenProjectInfoCard", () => ({
     tokenId,
     tokenName,
     authPubkey,
+    buyHref,
   }: {
     tokenId: string
     tokenName: string
     authPubkey?: string | null
+    buyHref?: string | null
   }) => (
     <div data-testid="token-project-info-card">
       {tokenName}:{tokenId}:{authPubkey ?? ""}
+      {buyHref ? <a href={buyHref}>Buy</a> : null}
     </div>
   ),
 }))
@@ -230,6 +233,14 @@ describe("TokenPage", () => {
       expect(mockFetchTokenDetails).toHaveBeenCalledWith(TOKEN_ID)
     })
     expect(screen.getAllByTestId("token-project-info-card")[0]).toHaveTextContent(AUTH_PUBKEY)
+    const buyLinks = screen.getAllByRole("link", { name: "Buy" })
+    expect(buyLinks).toHaveLength(2)
+    buyLinks.forEach((link) => {
+      expect(link).toHaveAttribute(
+        "href",
+        `/swap?tokenId=${TOKEN_ID}&tokenName=StarCrystal`,
+      )
+    })
     expect(screen.getAllByText("Stats")).toHaveLength(2)
     expect(screen.getAllByText("10.24M XEC")).toHaveLength(2)
     expect(screen.getAllByText("2.0000")).toHaveLength(2)

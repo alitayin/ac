@@ -6,6 +6,21 @@
 
 ## 2026-05-08
 
+### 🎉 v4.3.6 发布
+
+**主要改动：**
+- Added Buy entry in Project Info header with `/swap` token prefill
+- Added Project Info disclaimers and removed legacy token-page swap logic
+- Increased Project Info height so Basics display fully
+
+**验证：**
+- ✅ `pnpm vitest run __tests__/unit/TokenProjectInfoCard.test.tsx __tests__/unit/token-page.test.tsx __tests__/unit/SwapPanel.behavior.test.tsx` 通过
+- ✅ `pnpm build` 通过
+
+---
+
+## 2026-05-08
+
 ### 🎉 v4.3.5 发布
 
 **主要改动：**
