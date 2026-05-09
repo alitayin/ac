@@ -52,6 +52,8 @@ export interface PromoteFeeConfig {
   address: string;
   tokenAirdropSats: bigint;
   messageBroadcastSats: bigint;
+  creatorTokenSats: bigint;
   tokenAirdropLabel: string;
   messageBroadcastLabel: string;
+  creatorTokenLabel: string;
 }

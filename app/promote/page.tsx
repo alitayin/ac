@@ -91,6 +91,7 @@ type TokenMeta = {
   label: string;
   decimals: number;
   protocol: TokenProtocol;
+  authPubkey: string | null;
 };
 
 type ConfiguredToken = {
@@ -214,6 +215,25 @@ const getTokenDisplayLabel = (
   return getFallbackTokenLabel(tokenId);
 };
 
+const normalizeHex = (value?: string | null): string =>
+  typeof value === "string" ? value.trim().toLowerCase() : "";
+
+const getTokenAuthPubkey = (tokenDetails: unknown): string | null => {
+  const authPubkey =
+    tokenDetails &&
+    typeof tokenDetails === "object" &&
+    "genesisInfo" in tokenDetails &&
+    tokenDetails.genesisInfo &&
+    typeof tokenDetails.genesisInfo === "object" &&
+    "authPubkey" in tokenDetails.genesisInfo
+      ? tokenDetails.genesisInfo.authPubkey
+      : null;
+
+  return typeof authPubkey === "string" && authPubkey.trim().length > 0
+    ? normalizeHex(authPubkey)
+    : null;
+};
+
 export default function PromotePage() {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik();
   const {
@@ -223,6 +243,7 @@ export default function PromotePage() {
     userTokens,
     mnemonic,
     isGuestMode,
+    publicKeyHex,
     refreshBalance,
   } = useWallet();
   const { toast } = useToast();
@@ -408,6 +429,7 @@ export default function PromotePage() {
         setTargetTokenMeta({
           label,
           decimals,
+          authPubkey: getTokenAuthPubkey(tokenDetails),
           protocol:
             tokenDetails?.tokenType?.protocol === "SLP"
               ? "SLP"
@@ -461,6 +483,7 @@ export default function PromotePage() {
         setAirdropTokenMeta({
           label,
           decimals,
+          authPubkey: getTokenAuthPubkey(details),
           protocol,
         });
       } catch {
@@ -472,6 +495,7 @@ export default function PromotePage() {
               configuredTokenMap.get(airdropTokenId),
             ),
             decimals: configuredTokenMap.get(airdropTokenId)?.decimals ?? 0,
+            authPubkey: null,
             protocol: "UNKNOWN",
           });
         }
@@ -770,18 +794,36 @@ export default function PromotePage() {
   );
   const tokenPromoteFeeRecipientCount = distributionPlan.length;
   const messagePromoteFeeRecipientCount = recipients.length;
+  const isCreatorTokenPromotion = useMemo(() => {
+    const walletPubkey = normalizeHex(publicKeyHex);
+    const targetAuthPubkey = normalizeHex(targetTokenMeta?.authPubkey);
+
+    return Boolean(walletPubkey && targetAuthPubkey && walletPubkey === targetAuthPubkey);
+  }, [publicKeyHex, targetTokenMeta?.authPubkey]);
+  const promoteFeeOptions = useMemo(
+    () => ({ isCreatorToken: isCreatorTokenPromotion }),
+    [isCreatorTokenPromotion],
+  );
 
   const tokenPromoteFeeSats = useMemo(
-    () => calculatePromoteFeeSats("token-airdrop", tokenPromoteFeeRecipientCount),
-    [tokenPromoteFeeRecipientCount],
+    () =>
+      calculatePromoteFeeSats(
+        "token-airdrop",
+        tokenPromoteFeeRecipientCount,
+        PROMOTE_FEE_CONFIG,
+        promoteFeeOptions,
+      ),
+    [promoteFeeOptions, tokenPromoteFeeRecipientCount],
   );
   const messagePromoteFeeSats = useMemo(
     () =>
       calculatePromoteFeeSats(
         "platform-message",
         messagePromoteFeeRecipientCount,
+        PROMOTE_FEE_CONFIG,
+        promoteFeeOptions,
       ),
-    [messagePromoteFeeRecipientCount],
+    [messagePromoteFeeRecipientCount, promoteFeeOptions],
   );
   const totalMessageSpendSats = messageEstimatedRequiredSats + messagePromoteFeeSats;
   const totalTokenSpendSats = tokenEstimatedRequiredSats + tokenPromoteFeeSats;
@@ -964,7 +1006,12 @@ export default function PromotePage() {
 
   const sendPromoteFee = useCallback(
     async (mode: PromoteMode, recipientCount: number) => {
-      const feeRecipients = getPromoteFeeRecipients(mode, recipientCount);
+      const feeRecipients = getPromoteFeeRecipients(
+        mode,
+        recipientCount,
+        PROMOTE_FEE_CONFIG,
+        promoteFeeOptions,
+      );
 
       if (!mnemonic || feeRecipients.length === 0) {
         return "";
@@ -977,7 +1024,7 @@ export default function PromotePage() {
 
       return feeResult.txid;
     },
-    [mnemonic],
+    [mnemonic, promoteFeeOptions],
   );
 
   const handleSendTokenAirdrop = useCallback(async () => {
@@ -1877,7 +1924,11 @@ export default function PromotePage() {
 
                     <div className="text-center text-xs text-muted-foreground">
                       {PROMOTE_FEE_CONFIG.enabled
-                        ? `Platform fee: ${getPromoteFeeLabel(mode)}`
+                        ? `Platform fee: ${getPromoteFeeLabel(
+                            mode,
+                            PROMOTE_FEE_CONFIG,
+                            promoteFeeOptions,
+                          )}`
                         : "No platform fee is active right now."}
                     </div>
                   </div>
