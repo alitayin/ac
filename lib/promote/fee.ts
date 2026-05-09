@@ -10,10 +10,10 @@ export const PROMOTE_FEE_CONFIG: PromoteFeeConfig = {
   address: "ecash:qpaw7v7sfvlsm4px33saggr63jgsalsx4q49m7n6v4",
   tokenAirdropSats: 10_000n,
   messageBroadcastSats: 10_000n,
-  creatorTokenSats: 1_000n,
+  creatorTokenSats: 0n,
   tokenAirdropLabel: "100 XEC per token recipient",
   messageBroadcastLabel: "100 XEC per message recipient",
-  creatorTokenLabel: "10 XEC per recipient for your own token",
+  creatorTokenLabel: "0 XEC per recipient for your own token",
 };
 
 export type PromoteFeeOptions = {
