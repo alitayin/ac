@@ -182,6 +182,23 @@ describe("TokenTable bootstrap", () => {
     isEtokenDbAvailableMock.mockResolvedValue(false)
   })
 
+  it("renders configured rows as clickable links while Chronik is still initializing", async () => {
+    useChronikMock.mockReturnValue({
+      chronik: null,
+      isLoading: true,
+    })
+    fetchEtokenDbTopVolumeTokensMock.mockReturnValue(new Promise(() => {}))
+
+    render(<TokenTable />)
+
+    expect(screen.getByText("Alpha Token")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText("Alpha Token").closest("tr") as HTMLTableRowElement)
+
+    expect(pushMock).toHaveBeenCalledWith("/alpha-token-id")
+    expect(fetchEtokenDbTopVolumeTokensMock).not.toHaveBeenCalled()
+  })
+
   it("renders cached rows before the fresh top-volume request resolves", async () => {
     const topVolumeDeferred = createDeferred<Array<Record<string, unknown>>>()
 

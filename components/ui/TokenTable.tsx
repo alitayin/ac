@@ -338,6 +338,21 @@ const getTokenRouteParam = (token: Pick<Token, "tokenId">): string => {
   return token.tokenId
 }
 
+const CUSTOM_TOKENS_KEY = 'custom_watchlist_tokens'
+
+const getCustomTokens = (): string[] => {
+  if (typeof window === "undefined") {
+    return []
+  }
+
+  try {
+    const stored = localStorage.getItem(CUSTOM_TOKENS_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch (_error) {
+    return []
+  }
+}
+
 const createInitialTokenRow = (
   tokenId: string,
   name: string,
@@ -403,6 +418,39 @@ const getConfiguredTokenPatch = (
   }
 }
 
+const createFallbackTokenRows = (): TokenTableRow[] => {
+  const customTokenIds = getCustomTokens()
+  const rowsByTokenId = new Map<string, TokenTableRow>()
+
+  Object.values(tokens).forEach((tokenConfig) => {
+    rowsByTokenId.set(
+      tokenConfig.tokenId,
+      createInitialTokenRow(tokenConfig.tokenId, tokenConfig.name, {
+        ...getConfiguredTokenPatch(
+          tokenConfig.tokenId,
+          customTokenIds.includes(tokenConfig.tokenId),
+        ),
+        hasResolvedTokenInfo: typeof tokenConfig.decimals === "number",
+      }),
+    )
+  })
+
+  customTokenIds.forEach((tokenId) => {
+    if (rowsByTokenId.has(tokenId)) {
+      return
+    }
+
+    rowsByTokenId.set(
+      tokenId,
+      createInitialTokenRow(tokenId, getTokenDisplayFallbackName(tokenId), {
+        watchlist: true,
+      }),
+    )
+  })
+
+  return Array.from(rowsByTokenId.values())
+}
+
 const hasCurrentSummaryCacheShape = (
   summary: { data?: Partial<Token> | null } | null,
 ): summary is { data: Partial<Token> } => {
@@ -437,7 +485,7 @@ export default function Component() {
   const { toast } = useToast()
   const { publicKeyHex } = useWallet()
 
-  const [data, setData] = React.useState<TokenTableRow[]>([])
+  const [data, setData] = React.useState<TokenTableRow[]>(createFallbackTokenRows)
   const [isLoading, setIsLoading] = React.useState(true)
   const [showUSD, setShowUSD] = React.useState(false)
   const [loadedTokens, setLoadedTokens] = React.useState<Set<string>>(new Set())
@@ -628,7 +676,7 @@ export default function Component() {
     setLoadedIcons(new Set())
     setFailedIcons(new Set())
     setHighlightFields(new Map())
-    setData([])
+    setData(createFallbackTokenRows())
     setIsLoading(true)
     setRefreshNonce((n) => n + 1)
     setShowClearCacheConfirm(false)
@@ -1996,17 +2044,6 @@ export default function Component() {
     loadTokenStatsRef.current = loadTokenStats
   }, [loadTokenStats])
 
-  const CUSTOM_TOKENS_KEY = 'custom_watchlist_tokens'
-
-  const getCustomTokens = (): string[] => {
-    try {
-      const stored = localStorage.getItem(CUSTOM_TOKENS_KEY)
-      return stored ? JSON.parse(stored) : []
-    } catch (_error) {
-      return []
-    }
-  }
-
   const customTokenOrder = React.useMemo(() => {
     const customTokens = getCustomTokens()
     return new Map(customTokens.map((tokenId, index) => [tokenId, index]))
@@ -2561,6 +2598,10 @@ export default function Component() {
   }, [refreshNonce, chronikClient, isChronikLoading])
 
   React.useEffect(() => {
+    if (isChronikLoading || !chronikClient) {
+      return
+    }
+
     const tokenIds = data.map((t) => t.tokenId)
     const unsubscribe = watchAgoraTokens(tokenIds, (tokenId) => {
       if (cancelledRef.current) return
@@ -2601,7 +2642,7 @@ export default function Component() {
     return () => {
       unsubscribe()
     }
-  }, [data])
+  }, [chronikClient, data, isChronikLoading])
 
   React.useEffect(() => {
     if (filterOption === 'all') {
@@ -2830,7 +2871,9 @@ export default function Component() {
 
   MemoizedTableRow.displayName = 'MemoizedTableRow'
 
-  if (isLoading || isChronikLoading || !chronikClient) {
+  const shouldShowInitialSkeleton = tableData.length === 0 && (isLoading || isChronikLoading || !chronikClient)
+
+  if (shouldShowInitialSkeleton) {
     return (
       <Card className="relative overflow-hidden shadow-none">
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
