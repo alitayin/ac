@@ -130,12 +130,17 @@ describe("promote utils", () => {
       calculatePromoteFeeSats("token-airdrop", 3, undefined, {
         isCreatorToken: true,
       }),
-    ).toBe(0n);
+    ).toBe(3_000n);
     expect(
       getPromoteFeeRecipients("platform-message", 3, undefined, {
         isCreatorToken: true,
       }),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        address: "ecash:qpaw7v7sfvlsm4px33saggr63jgsalsx4q49m7n6v4",
+        amount: 3_000n,
+      },
+    ]);
 
     const enabledConfig = {
       enabled: true,
