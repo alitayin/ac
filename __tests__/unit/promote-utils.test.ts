@@ -126,6 +126,21 @@ describe("promote utils", () => {
     expect(calculatePromoteFeeSats("platform-message", 1)).toBe(10_000n);
     expect(calculatePromoteFeeSats("token-airdrop", 3)).toBe(30_000n);
     expect(calculatePromoteFeeSats("platform-message", 0)).toBe(0n);
+    expect(
+      calculatePromoteFeeSats("token-airdrop", 3, undefined, {
+        isCreatorToken: true,
+      }),
+    ).toBe(3_000n);
+    expect(
+      getPromoteFeeRecipients("platform-message", 3, undefined, {
+        isCreatorToken: true,
+      }),
+    ).toEqual([
+      {
+        address: "ecash:qpaw7v7sfvlsm4px33saggr63jgsalsx4q49m7n6v4",
+        amount: 3_000n,
+      },
+    ]);
 
     const enabledConfig = {
       enabled: true,
