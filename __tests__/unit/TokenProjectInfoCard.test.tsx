@@ -203,4 +203,66 @@ describe("TokenProjectInfoCard", () => {
       )
     })
   })
+
+  it("filters unsafe project info URLs from rendering and invoice creation", async () => {
+    fetchProjectInfoMock.mockResolvedValue({
+      tokenId: TEST_TOKEN_ID,
+      description: "ac test",
+      websiteUrl: "javascript:alert(1)",
+      xUrl: "data:text/html,hello",
+      telegramUrl: "https://t.me/agoraui",
+      createdAt: 1,
+      updatedAt: 1,
+      updateCount: 0,
+      lastEditorMasked: "ecash:...",
+    })
+    createInvoiceMock.mockResolvedValue({
+      invoiceId: "invoice-1",
+      tokenId: TEST_TOKEN_ID,
+      status: "published",
+      description: "ac test",
+      websiteUrl: null,
+      xUrl: null,
+      telegramUrl: "https://t.me/agoraui",
+      paymentAddress: "ecash:payment",
+      expectedPaidSats: 10000,
+      expectedPaidXec: "100",
+      paymentTxid: null,
+    })
+
+    render(
+      <TokenProjectInfoCard
+        tokenId={TEST_TOKEN_ID}
+        tokenName="Test Token"
+        authPubkey={AUTH_PUBKEY}
+      />,
+    )
+
+    expect(await screen.findByRole("link", { name: "Telegram" })).toHaveAttribute(
+      "href",
+      "https://t.me/agoraui",
+    )
+    expect(screen.queryByRole("link", { name: "Website" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "X" })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }))
+    fireEvent.change(screen.getByLabelText("Website"), {
+      target: { value: "javascript:alert(1)" },
+    })
+    fireEvent.change(screen.getByLabelText("X"), {
+      target: { value: "data:text/html,hello" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Publish Update" }))
+
+    await waitFor(() => {
+      expect(createInvoiceMock).toHaveBeenCalledWith(
+        TEST_TOKEN_ID,
+        expect.objectContaining({
+          websiteUrl: null,
+          xUrl: null,
+          telegramUrl: "https://t.me/agoraui",
+        }),
+      )
+    })
+  })
 })

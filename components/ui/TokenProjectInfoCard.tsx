@@ -50,6 +50,7 @@ import {
   type EtokenDbProjectInfoInvoice,
   type EtokenDbTokenProjectInfo,
 } from "@/lib/etokendb"
+import { normalizeSafeExternalUrl } from "@/lib/safe-url"
 import { cn } from "@/lib/utils"
 
 type TokenProjectInfoCardProps = {
@@ -146,12 +147,7 @@ const formatCreatedAt = (timestamp?: number | null): string | null => {
 }
 
 const normalizeExternalUrl = (value?: string | null): string | null => {
-  const trimmed = typeof value === "string" ? value.trim() : ""
-  if (!trimmed) {
-    return null
-  }
-
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  return normalizeSafeExternalUrl(value)
 }
 
 const getGenesisAuthorityAddress = (authPubkey?: string | null): string | null => {
@@ -410,14 +406,18 @@ export function TokenProjectInfoCard({
 
   const infoLinks = React.useMemo<InfoLink[]>(() => {
     const links: InfoLink[] = []
-    if (info?.websiteUrl) {
-      links.push({ label: "Website", href: info.websiteUrl, icon: Globe })
+    const websiteHref = normalizeExternalUrl(info?.websiteUrl)
+    const xHref = normalizeExternalUrl(info?.xUrl)
+    const telegramHref = normalizeExternalUrl(info?.telegramUrl)
+
+    if (websiteHref) {
+      links.push({ label: "Website", href: websiteHref, icon: Globe })
     }
-    if (info?.xUrl) {
-      links.push({ label: "X", href: info.xUrl, icon: ExternalLink })
+    if (xHref) {
+      links.push({ label: "X", href: xHref, icon: ExternalLink })
     }
-    if (info?.telegramUrl) {
-      links.push({ label: "Telegram", href: info.telegramUrl, icon: Send })
+    if (telegramHref) {
+      links.push({ label: "Telegram", href: telegramHref, icon: Send })
     }
     return links
   }, [info])

@@ -99,6 +99,7 @@ import {
   isEtokenDbAvailable,
   nanosatsPerAtomToXec,
 } from "@/lib/etokendb"
+import { getSafeExternalUrl } from "@/lib/safe-url"
 import {
   formatDisplayReviewScore,
   getDisplayReviewScore,
@@ -2921,6 +2922,7 @@ export default function Component() {
     tokenLookup.tokenInfo?.genesisInfo?.tokenName?.trim() || "Unknown token"
   const lookupTokenTicker = tokenLookup.tokenInfo?.genesisInfo?.tokenTicker?.trim()
   const lookupTokenUrl = tokenLookup.tokenInfo?.genesisInfo?.url?.trim()
+  const safeLookupTokenUrl = getSafeExternalUrl(lookupTokenUrl)
   const lookupActionTokenId = tokenLookup.tokenInfo?.tokenId || tokenLookup.tokenId
   const listedLookupToken =
     tokenLookup.status === "listed"
@@ -3307,12 +3309,12 @@ export default function Component() {
                 <LookupMetaCard label="Ticker" value={lookupTokenTicker || "N/A"} />
               </div>
 
-              {lookupTokenUrl && (
+              {safeLookupTokenUrl && (
                 <LookupMetaCard
                   label="Project URL"
                   value={
                     <a
-                      href={lookupTokenUrl}
+                      href={safeLookupTokenUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block break-all font-mono text-xs text-primary underline-offset-4 hover:underline sm:text-sm"

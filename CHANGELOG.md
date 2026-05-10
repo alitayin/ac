@@ -6,6 +6,19 @@
 
 ## 2026-05-10
 
+### 🎉 v4.3.9 发布
+
+**主要改动：**
+- Fixed Agora token WebSocket subscriptions so token watches are deduped and unsubscribed when the last watcher leaves
+- Added safe external URL filtering for Project Info links, token lookup URLs, and wallet token metadata URLs
+- Synced the displayed app version with the package version
+
+**验证：**
+- ✅ `npm test -- __tests__/unit/agora-ws.test.ts __tests__/unit/safe-url.test.ts __tests__/unit/TokenProjectInfoCard.test.tsx __tests__/unit/TokenTable.test.tsx __tests__/unit/header-analytics.test.tsx` 通过
+- ✅ `git diff --check` 通过
+
+---
+
 ### 🎉 v4.3.8 发布
 
 **主要改动：**

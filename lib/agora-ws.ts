@@ -5,6 +5,8 @@ import { deleteSummaryCache, refreshSummaryCacheTimestamps } from "./token-stats
 type TokenInvalidateHandler = (tokenId: string) => void
 
 const watchedTokenIds = new Set<string>()
+const handlerTokenIds = new Map<TokenInvalidateHandler, Set<string>>()
+const manualWatchedTokenIds = new Set<string>()
 const handlers = new Set<TokenInvalidateHandler>()
 const processingTxids = new Set<string>()
 let wsClient: ReturnType<typeof chronik.ws> | null = null
@@ -15,6 +17,35 @@ const WS_MESSAGE_THRESHOLD = 5
 const WS_MESSAGE_TIMEOUT_MS = 3 * 60 * 1000 // 5 minutes
 let wsMessageCount = 0
 let lastWsMessageTime: number | null = null
+
+const syncWatchedTokenIds = () => {
+  const nextWatchedTokenIds = new Set<string>(manualWatchedTokenIds)
+
+  handlerTokenIds.forEach((tokenIds) => {
+    tokenIds.forEach((tokenId) => nextWatchedTokenIds.add(tokenId))
+  })
+
+  if (wsClient) {
+    watchedTokenIds.forEach((tokenId) => {
+      if (!nextWatchedTokenIds.has(tokenId)) {
+        try {
+          wsClient?.unsubscribeFromTokenId(tokenId)
+        } catch (_err) {}
+      }
+    })
+
+    nextWatchedTokenIds.forEach((tokenId) => {
+      if (!watchedTokenIds.has(tokenId)) {
+        try {
+          wsClient?.subscribeToTokenId(tokenId)
+        } catch (_err) {}
+      }
+    })
+  }
+
+  watchedTokenIds.clear()
+  nextWatchedTokenIds.forEach((tokenId) => watchedTokenIds.add(tokenId))
+}
 
 const subscribeAll = () => {
   if (!wsClient) return
@@ -132,25 +163,34 @@ export const watchAgoraTokens = (
   tokenIds: string[],
   onInvalidate: TokenInvalidateHandler,
 ) => {
-  tokenIds
-    .filter((id) => typeof id === "string" && id.length > 0)
-    .forEach((id) => watchedTokenIds.add(id))
-
+  handlerTokenIds.set(
+    onInvalidate,
+    new Set(tokenIds.filter((id) => typeof id === "string" && id.length > 0)),
+  )
   handlers.add(onInvalidate)
   ensureWebSocket()
-  subscribeAll()
+  syncWatchedTokenIds()
 
   return () => {
     handlers.delete(onInvalidate)
+    handlerTokenIds.delete(onInvalidate)
+    syncWatchedTokenIds()
   }
 }
 
 export const addTokenWatch = (tokenId: string) => {
   if (!tokenId) return
-  watchedTokenIds.add(tokenId)
+  manualWatchedTokenIds.add(tokenId)
   ensureWebSocket()
-  try {
-    wsClient?.subscribeToTokenId(tokenId)
-  } catch (_err) {}
+  syncWatchedTokenIds()
 }
 
+export const removeTokenWatch = (tokenId: string) => {
+  if (!tokenId) return
+  manualWatchedTokenIds.delete(tokenId)
+  syncWatchedTokenIds()
+}
+
+export const getWatchedAgoraTokens = (): string[] => {
+  return Array.from(watchedTokenIds)
+}

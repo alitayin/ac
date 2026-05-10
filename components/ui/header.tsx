@@ -45,6 +45,7 @@ import appVersion from "@/version.json";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
 import TelegramAgoraBotDialog from "@/components/ui/TelegramAgoraBotDialog";
 import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerInner";
+import { getSafeExternalUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
@@ -493,7 +494,7 @@ export default function Header({
                                 tokenDetail,
                                 tokenInfo?.decimals || 0,
                               );
-                              const tokenUrl = tokenDetail?.genesisInfo?.url || '';
+                              const tokenUrl = getSafeExternalUrl(tokenDetail?.genesisInfo?.url);
                               
                               return (
                                 <Card 
