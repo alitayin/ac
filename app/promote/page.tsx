@@ -849,9 +849,6 @@ export default function PromotePage() {
     if (isHolderAudience && holderLoadError) {
       return holderLoadError;
     }
-    if (isManualAudience && manualParse.invalidEntries.length > 0) {
-      return "Fix invalid manual addresses before sending.";
-    }
     if (recipients.length === 0 && unsupportedRecipients.length > 0) {
       return "All selected recipients use unsupported P2SH scripts. Promote currently sends only to P2PKH addresses.";
     }
@@ -895,10 +892,8 @@ export default function PromotePage() {
     holderLoadError,
     isHolderAudience,
     isGuestMode,
-    isManualAudience,
     isWalletConnected,
     loadedTargetTokenId,
-    manualParse.invalidEntries.length,
     mnemonic,
     recipients.length,
     selectedWalletTokenBalance,
@@ -922,9 +917,6 @@ export default function PromotePage() {
     }
     if (isHolderAudience && holderLoadError) {
       return holderLoadError;
-    }
-    if (isManualAudience && manualParse.invalidEntries.length > 0) {
-      return "Fix invalid manual addresses before sending.";
     }
     if (recipients.length === 0 && unsupportedRecipients.length > 0) {
       return "All selected recipients use unsupported P2SH scripts. Promote currently sends only to P2PKH addresses.";
@@ -953,10 +945,8 @@ export default function PromotePage() {
     holderLoadError,
     isHolderAudience,
     isGuestMode,
-    isManualAudience,
     isWalletConnected,
     loadedTargetTokenId,
-    manualParse.invalidEntries.length,
     messageInput,
     messagePlan.batches.length,
     messagePlan.blockedReason,
@@ -1466,14 +1456,14 @@ export default function PromotePage() {
 
                         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                           <span>{manualParse.addresses.length.toLocaleString()} valid</span>
-                          <span>{manualParse.invalidEntries.length.toLocaleString()} invalid</span>
+                          <span>{manualParse.invalidEntries.length.toLocaleString()} ignored</span>
                           <span>{manualParse.duplicateCount.toLocaleString()} duplicates</span>
                         </div>
 
                         {manualParse.invalidEntries.length > 0 ? (
-                          <Alert variant="destructive">
+                          <Alert>
                             <AlertCircle className="h-4 w-4" />
-                            <AlertTitle>Invalid addresses</AlertTitle>
+                            <AlertTitle>Invalid addresses ignored</AlertTitle>
                             <AlertDescription>
                               {manualParse.invalidEntries.slice(0, 3).join(", ")}
                               {manualParse.invalidEntries.length > 3 ? " ..." : ""}
