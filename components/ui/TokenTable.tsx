@@ -531,12 +531,26 @@ export default function Component() {
   const approvedLargeTokensRef = React.useRef<Set<string>>(new Set())
   const [failedDataTokens, setFailedDataTokens] = React.useState<Set<string>>(new Set())
   const retryCountRef = React.useRef<Map<string, number>>(new Map())
+  const dataRef = React.useRef<TokenTableRow[]>(data)
+  const chainTipHeightRef = React.useRef<number | null>(chainTipHeight)
   const hasRowMarketData = React.useCallback(
     (token: TokenTableRow) => {
       return loadedTokens.has(token.tokenId) || token.hasInitialMarketData === true
     },
     [loadedTokens],
   )
+
+  React.useEffect(() => {
+    dataRef.current = data
+  }, [data])
+
+  React.useEffect(() => {
+    chainTipHeightRef.current = chainTipHeight
+  }, [chainTipHeight])
+
+  React.useEffect(() => {
+    approvedLargeTokensRef.current = approvedLargeTokens
+  }, [approvedLargeTokens])
   const normalizedWalletPubkey = React.useMemo(
     () => normalizeHex(publicKeyHex),
     [publicKeyHex],
@@ -597,11 +611,12 @@ export default function Component() {
   }, [filterOption])
 
   React.useEffect(() => {
+    const wsTimeouts = wsReloadTimeouts.current
     return () => {
-      wsReloadTimeouts.current.forEach((timeoutId) => {
+      wsTimeouts.forEach((timeoutId) => {
         clearTimeout(timeoutId)
       })
-      wsReloadTimeouts.current.clear()
+      wsTimeouts.clear()
     }
   }, [])
 
@@ -1216,7 +1231,7 @@ export default function Component() {
     },
   ]
 
-  const applyTokenUpdate = (tokenId: string, patch: Partial<Token>) => {
+  const applyTokenUpdate = React.useCallback((tokenId: string, patch: Partial<Token>) => {
     let updatedFields: Set<string> | undefined
     const nowTs = Date.now()
     setData((prevData) => {
@@ -1278,7 +1293,7 @@ export default function Component() {
         })
       }, UI_CONSTANTS.HIGHLIGHT_DURATION)
     }
-  }
+  }, [])
 
   const retryTokenData = async (tokenId: string, name: string) => {
     retryCountRef.current.delete(`${tokenId}:24h`)
@@ -1339,7 +1354,7 @@ export default function Component() {
     await loadTokenStatsRef.current?.(tokenId, name, { ignoreFilter: true })
   }
 
-  const loadTokenStats = async (
+  const loadTokenStats = React.useCallback(async (
     tokenId: string,
     name: string,
     options?: { ignoreFilter?: boolean },
@@ -1420,7 +1435,7 @@ export default function Component() {
         }
       }
 
-      const currentToken = data.find((token) => token.tokenId === tokenId)
+      const currentToken = dataRef.current.find((token) => token.tokenId === tokenId)
       const cachedTokenSnapshot = hasCurrentSummaryCacheShape(summaryCached)
         ? summaryCached.data
         : null
@@ -1479,12 +1494,13 @@ export default function Component() {
       const cached = getCachedTokenData(tokenId)
       const cacheValid = !!cached && now - cached.computedAt < CACHE_TTL_MS
 
-      let effectiveTipHeight = chainTipHeight
+      let effectiveTipHeight = chainTipHeightRef.current
       if (typeof effectiveTipHeight !== "number") {
         try {
           const info = await fetchBlockchainInfo(activeChronik)
           if (typeof info?.tipHeight === "number") {
             effectiveTipHeight = info.tipHeight
+            chainTipHeightRef.current = info.tipHeight
             setChainTipHeight(info.tipHeight)
           }
         } catch (_err) {}
@@ -1684,7 +1700,7 @@ export default function Component() {
         priceChange24h: chronikPriceChange24h,
         last24HoursXECAmount: chronik24hVolume,
         latestBlockHeight,
-      } = compute24hStats(tx24h, effectiveTipHeight ?? chainTipHeight, null)
+      } = compute24hStats(tx24h, effectiveTipHeight ?? chainTipHeightRef.current, null)
 
       const rawLatestPrice =
         shouldUseEtokenDbLatestPrice
@@ -1736,7 +1752,7 @@ export default function Component() {
               return next
             })
 
-            if (!approvedLargeTokens.has(tokenId) && !approvedLargeTokensRef.current.has(tokenId)) {
+            if (!approvedLargeTokensRef.current.has(tokenId)) {
               console.log(`[Large Dataset] Token ${name} not approved, skipping 7D data fetch`)
               const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
               const customTokens = getCustomTokens()
@@ -1782,7 +1798,7 @@ export default function Component() {
           try {
             let tx7dCount = 0
             let rawPagesRead = 0
-            const isUserApproved = approvedLargeTokens.has(tokenId) || approvedLargeTokensRef.current.has(tokenId)
+            const isUserApproved = approvedLargeTokensRef.current.has(tokenId)
             console.log(`[7D Load Start] Token: ${name}, isUserApproved: ${isUserApproved}`)
 
             const tx7d = await fetchAgoraTransactionsFromChronik(
@@ -2038,7 +2054,7 @@ export default function Component() {
       
       loadingTokens.current.delete(tokenId)
     }
-  }
+  }, [applyTokenUpdate, chronikClient])
 
   const loadTokenStatsRef = React.useRef(loadTokenStats)
   React.useEffect(() => {
@@ -2046,6 +2062,7 @@ export default function Component() {
   }, [loadTokenStats])
 
   const customTokenOrder = React.useMemo(() => {
+    void refreshNonce
     const customTokens = getCustomTokens()
     return new Map(customTokens.map((tokenId, index) => [tokenId, index]))
   }, [refreshNonce])
@@ -2220,12 +2237,14 @@ export default function Component() {
     return () => {
       window.removeEventListener("token-watchlist-added", handleWatchlistAdd as EventListener)
     }
-  }, [chronikClient, isChronikLoading])
+  }, [chronikClient, isChronikLoading, recordTokenAuthPubkey])
 
   React.useEffect(() => {
     if (isChronikLoading || !chronikClient) return
 
     let isCancelled = false
+    const loadingTimeoutsForEffect = loadingTimeouts.current
+    const loadingTokensForEffect = loadingTokens.current
 
     cancelledRef.current = false
     setIsLocalFallbackMode(false)
@@ -2574,7 +2593,7 @@ export default function Component() {
           while (index < tokensNeedingLoad.length && !isCancelled) {
             const currentIndex = index++
             const token = tokensNeedingLoad[currentIndex]
-            await loadTokenStats(token.tokenId, token.name)
+            await loadTokenStatsRef.current?.(token.tokenId, token.name)
           }
         }
 
@@ -2590,13 +2609,13 @@ export default function Component() {
       isCancelled = true
       cancelledRef.current = true
       
-      loadingTimeouts.current.forEach((timeoutId) => {
+      loadingTimeoutsForEffect.forEach((timeoutId) => {
         clearTimeout(timeoutId)
       })
-      loadingTimeouts.current.clear()
-      loadingTokens.current.clear()
+      loadingTimeoutsForEffect.clear()
+      loadingTokensForEffect.clear()
     }
-  }, [refreshNonce, chronikClient, isChronikLoading])
+  }, [applyTokenUpdate, chronikClient, isChronikLoading, recordTokenAuthPubkey, refreshNonce])
 
   React.useEffect(() => {
     if (isChronikLoading || !chronikClient) {
@@ -2807,7 +2826,7 @@ export default function Component() {
         lastReviewAt: summary.lastReviewAt,
       })
     },
-    [],
+    [applyTokenUpdate],
   )
 
   const table = useReactTable({

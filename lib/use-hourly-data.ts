@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { getLastNDays } from "./time-utils"
 import { fetchHourlyData } from "./hourly-cache"
 
@@ -47,15 +47,18 @@ function aggregateHourlyToDays(dataArrays: any[][], days: number): DailyHourlyDa
 export function useHourlyData(tokenIds: string[], timeRange: string) {
   const [data, setData] = useState<DailyHourlyData[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const tokenIdsKey = useMemo(() => tokenIds.join(","), [tokenIds])
 
   useEffect(() => {
+    const activeTokenIds = tokenIdsKey ? tokenIdsKey.split(",") : []
+
     const fetchData = async () => {
       setIsLoading(true)
       try {
         const days = timeRange === "90d" ? 90 : timeRange === "7d" ? 7 : timeRange === "72h" ? 3 : 30
         const hours = days * 24
         const hourlyArrays = await Promise.all(
-          tokenIds.map((id) => fetchHourlyData(id, hours).catch(() => []))
+          activeTokenIds.map((id) => fetchHourlyData(id, hours).catch(() => []))
         )
         setData(aggregateHourlyToDays(hourlyArrays, days))
       } catch {
@@ -65,7 +68,7 @@ export function useHourlyData(tokenIds: string[], timeRange: string) {
       }
     }
     fetchData()
-  }, [tokenIds.join(","), timeRange])
+  }, [timeRange, tokenIdsKey])
 
   return { data, isLoading }
 }

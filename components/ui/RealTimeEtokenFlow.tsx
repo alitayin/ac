@@ -161,7 +161,7 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
       console.error(`[RealTimeFlow] Error processing tx ${txid}:`, error)
       return
     }
-  }, [chronikClient, fetchTokenMeta])
+  }, [chronikClient, fetchTokenMeta, onCountChange])
 
   const processQueue = React.useCallback(async () => {
     if (processingRef.current) return
@@ -355,4 +355,3 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
     </Card>
   )
 }
-

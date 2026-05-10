@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -85,6 +85,50 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [availableTokens, setAvailableTokens] = useState<Array<{id: string, name: string}>>([]);
   const [tokenDecimalsMap, setTokenDecimalsMap] = useState<Record<string, number>>({});
+
+  // Check whether orders are sufficiently funded
+  const checkOrdersFunding = useCallback((ordersList: Record<string, Order>) => {
+    // Group orders by tokenId
+    const ordersByToken: Record<string, Array<Order & { key: string }>> = {};
+
+    Object.entries(ordersList).forEach(([key, order]) => {
+      if (!order.tokenId) return;
+
+      // Only check orders that are not completed or failed
+      if (order.status === 'completed' || order.status === 'fail') return;
+
+      if (!ordersByToken[order.tokenId]) {
+        ordersByToken[order.tokenId] = [];
+      }
+
+      ordersByToken[order.tokenId].push({...order, key});
+    });
+
+    const insufficientOrders = new Set<string>();
+
+    // Check each token group separately
+    Object.values(ordersByToken).forEach(tokenOrders => {
+      // Sort by price descending
+      tokenOrders.sort((a, b) => b.maxPrice - a.maxPrice);
+
+      let remainingBalance = balance;
+
+      // Evaluate each order
+      tokenOrders.forEach(order => {
+        const orderCost = order.remainingAmount * order.maxPrice;
+
+        if (remainingBalance < orderCost) {
+          // Insufficient balance, mark the order
+          insufficientOrders.add(order.key);
+        } else {
+          // Balance sufficient, deduct order cost
+          remainingBalance -= orderCost;
+        }
+      });
+    });
+
+    setInsufficientFundsOrders(insufficientOrders);
+  }, [balance]);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,51 +310,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
     return () => {
       cancelled = true;
     };
-  }, [ecashAddress, refreshTrigger, balance]);
-
-  // Check whether orders are sufficiently funded
-  const checkOrdersFunding = (ordersList: Record<string, Order>) => {
-    // Group orders by tokenId
-    const ordersByToken: Record<string, Array<Order & { key: string }>> = {};
-    
-    Object.entries(ordersList).forEach(([key, order]) => {
-      if (!order.tokenId) return;
-      
-      // Only check orders that are not completed or failed
-      if (order.status === 'completed' || order.status === 'fail') return;
-      
-      if (!ordersByToken[order.tokenId]) {
-        ordersByToken[order.tokenId] = [];
-      }
-      
-      ordersByToken[order.tokenId].push({...order, key});
-    });
-    
-    const insufficientOrders = new Set<string>();
-    
-    // Check each token group separately
-    Object.values(ordersByToken).forEach(tokenOrders => {
-      // Sort by price descending
-      tokenOrders.sort((a, b) => b.maxPrice - a.maxPrice);
-      
-      let remainingBalance = balance;
-      
-      // Evaluate each order
-      tokenOrders.forEach(order => {
-        const orderCost = order.remainingAmount * order.maxPrice;
-        
-        if (remainingBalance < orderCost) {
-          // Insufficient balance, mark the order
-          insufficientOrders.add(order.key);
-        } else {
-          // Balance sufficient, deduct order cost
-          remainingBalance -= orderCost;
-        }
-      });
-    });
-    
-    setInsufficientFundsOrders(insufficientOrders);
-  };
+  }, [checkOrdersFunding, ecashAddress, refreshTrigger]);
 
   const refreshOrders = () => {
     setRefreshTrigger(prev => prev + 1);

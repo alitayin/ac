@@ -58,7 +58,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
   const wsReconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
 
-  const fetchBalance = async (address: string) => {
+  const fetchBalance = useCallback(async (address: string) => {
     try {
       const response = await sharedChronik.address(address).utxos();
       
@@ -103,17 +103,18 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       setBalance('0');
       setUserTokens({});
     }
-  };
+  }, []);
 
 
   const refreshBalance = useCallback(async () => {
     if (ecashAddress) {
       await fetchBalance(ecashAddress);
     }
-  }, [ecashAddress]);
+  }, [ecashAddress, fetchBalance]);
 
 
-  const ensureAddressWebSocket = () => {
+  const ensureAddressWebSocketRef = useRef<() => void>(() => {});
+  const ensureAddressWebSocket = useCallback(() => {
     if (typeof window === 'undefined') return;
     if (wsRef.current) return;
 
@@ -132,7 +133,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
         wsRef.current = null;
         subscribedAddressRef.current = '';
         if (wsReconnectTimerRef.current) clearTimeout(wsReconnectTimerRef.current);
-        wsReconnectTimerRef.current = setTimeout(() => ensureAddressWebSocket(), 1000);
+        wsReconnectTimerRef.current = setTimeout(() => ensureAddressWebSocketRef.current(), 1000);
       },
     });
 
@@ -140,9 +141,13 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       wsRef.current = null;
       subscribedAddressRef.current = '';
     });
-  };
+  }, [fetchBalance]);
 
-  const subscribeToAddress = (address: string) => {
+  useEffect(() => {
+    ensureAddressWebSocketRef.current = ensureAddressWebSocket;
+  }, [ensureAddressWebSocket]);
+
+  const subscribeToAddress = useCallback((address: string) => {
     if (!address) return;
     ensureAddressWebSocket();
     if (!wsRef.current) return;
@@ -154,7 +159,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     } catch (error) {
       console.error('Failed to subscribe to address:', error);
     }
-  };
+  }, [ensureAddressWebSocket]);
 
 
   useEffect(() => {
@@ -208,7 +213,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
 
   useEffect(() => {
     if (isWalletConnected && ecashAddress) {
-      fetchBalance(ecashAddress);
+      void fetchBalance(ecashAddress);
       subscribeToAddress(ecashAddress);
     }
 
@@ -218,9 +223,9 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       wsRef.current?.close?.();
       wsRef.current = null;
     };
-  }, [isWalletConnected, ecashAddress]);
+  }, [ecashAddress, fetchBalance, isWalletConnected, subscribeToAddress]);
 
-  const connectWallet = async (mnemonicPhrase: string): Promise<boolean> => {
+  const connectWallet = useCallback(async (mnemonicPhrase: string): Promise<boolean> => {
     try {
       if (!wordListRef.current.length) {
         throw new Error('Word list not loaded');
@@ -246,9 +251,9 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
       console.error('Error generating address:', error);
       return false;
     }
-  };
+  }, []);
 
-  const disconnectWallet = () => {
+  const disconnectWallet = useCallback(() => {
 
     if (ecashAddress) {
       disconnectAddress(ecashAddress);
@@ -267,7 +272,7 @@ export const WalletProvider = ({ children }: WalletProviderProps) => {
     setUserTokens({});
     setPublicKeyHex('');
     setIsGuestMode(false);
-  };
+  }, [ecashAddress]);
 
   const contextValue = useMemo(() => ({
     isWalletConnected,

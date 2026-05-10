@@ -123,17 +123,21 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
   };
 
   // Prepare ask side data with cumulative depth info
-  const asksWithCumulative = orderBook?.orders
-    ? [...orderBook.orders]
-        .sort((a: Order, b: Order) => a.price - b.price)
-        .reduce((acc, order) => {
-          const previous = acc[acc.length - 1];
-          const cumulativeAmount = (previous?.cumulativeAmount ?? 0) + order.amount;
-          const cumulativeCost = (previous?.cumulativeCost ?? 0) + order.amount * order.price;
-          acc.push({ ...order, cumulativeAmount, cumulativeCost });
-          return acc;
-        }, [] as Array<Order & { cumulativeAmount: number; cumulativeCost: number }>)
-    : [];
+  const asksWithCumulative = useMemo(
+    () =>
+      orderBook?.orders
+        ? [...orderBook.orders]
+            .sort((a: Order, b: Order) => a.price - b.price)
+            .reduce((acc, order) => {
+              const previous = acc[acc.length - 1];
+              const cumulativeAmount = (previous?.cumulativeAmount ?? 0) + order.amount;
+              const cumulativeCost = (previous?.cumulativeCost ?? 0) + order.amount * order.price;
+              acc.push({ ...order, cumulativeAmount, cumulativeCost });
+              return acc;
+            }, [] as Array<Order & { cumulativeAmount: number; cumulativeCost: number }>)
+        : [],
+    [orderBook?.orders],
+  );
 
   const askMaxAmount = useMemo(
     () => asksWithCumulative.length ? Math.max(...asksWithCumulative.map((o) => o.amount)) : 0,
@@ -492,4 +496,4 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
       </CardContent>
     </Card>
   )
-} 
+}

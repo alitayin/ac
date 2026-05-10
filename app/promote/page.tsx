@@ -574,8 +574,14 @@ export default function PromotePage() {
     };
   }, [chronikClient, ecashAddress, isWalletConnected]);
 
-  const activeHolderRows = isHolderAudience ? holderRows : [];
-  const activeManualAddresses = isManualAudience ? manualParse.addresses : [];
+  const activeHolderRows = useMemo(
+    () => (isHolderAudience ? holderRows : []),
+    [holderRows, isHolderAudience],
+  );
+  const activeManualAddresses = useMemo(
+    () => (isManualAudience ? manualParse.addresses : []),
+    [isManualAudience, manualParse.addresses],
+  );
 
   const allRecipients = useMemo(
     () => mergeRecipients(activeHolderRows, activeManualAddresses),

@@ -243,6 +243,7 @@ export function TokenReviewDialog({
     token?.reviewCountTotal,
     token?.reviewScorerCount,
     token?.tokenId,
+    token,
   ])
 
   React.useEffect(() => {
@@ -284,7 +285,7 @@ export function TokenReviewDialog({
     return () => {
       cancelled = true
     }
-  }, [open, token?.tokenId])
+  }, [open, token])
 
   const sanitizedComment = comment.trim()
   const commentByteLength = React.useMemo(() => getCommentByteLength(comment), [comment])
@@ -652,6 +653,8 @@ export function TokenReviewDialog({
     isCommentTooLong,
     isInvoiceStale,
     isAwaitingBackend,
+    isGuestMode,
+    mnemonic,
     payInvoice,
     pollInvoiceUntilSettled,
     persistSessionForCurrentToken,

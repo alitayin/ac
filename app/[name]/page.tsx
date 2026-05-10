@@ -9,7 +9,7 @@ import PriceChart from "@/components/ui/PriceChart";
 import Piechart from "@/components/ui/Piechart";
 import TokenTx from "@/components/ui/TokenTx";
 import { tokens } from "@/config/tokens";
-import { useEffect, useState, useRef } from "react"
+import { useCallback, useEffect, useState, useRef } from "react"
 import {
   Select,
   SelectContent,
@@ -212,7 +212,7 @@ export default function TokenPage() {
     fetchChronikTokenInfo();
   }, [hasValidRoute, tokenData.tokenId]);
 
-  const fetchOrderBook = async () => {
+  const fetchOrderBook = useCallback(async () => {
     try {
       const data = await fetchAgoraOrderBook(tokenData.tokenId)
       if (data.success && data.data) {
@@ -223,9 +223,9 @@ export default function TokenPage() {
     } catch (error) {
       setOrderBook(null)
     }
-  }
+  }, [tokenData.tokenId])
 
-  const loadTokenStats = async (
+  const loadTokenStats = useCallback(async (
     tokenId: string,
     name: string,
     options?: { etokenDbAvailable?: boolean },
@@ -253,7 +253,7 @@ export default function TokenPage() {
     } finally {
       isLoadingStats.current = false
     }
-  }
+  }, [chainTipHeight, knownTokenDecimals])
 
   const loadTokenStatsRef = useRef(loadTokenStats)
   useEffect(() => {
@@ -299,7 +299,7 @@ export default function TokenPage() {
     const interval = setInterval(fetchData, 30000)
     
     return () => clearInterval(interval)
-  }, [hasValidRoute, tokenData.tokenId, tokenData.name])
+  }, [fetchOrderBook, hasValidRoute, loadTokenStats, tokenData.tokenId, tokenData.name])
 
   useEffect(() => {
     if (!hasValidRoute || !tokenData.tokenId) {

@@ -6,6 +6,20 @@
 
 ## 2026-05-10
 
+### 🎉 v4.3.10 发布
+
+**主要改动：**
+- Enabled real ESLint scanning by removing the global `eslintIgnore: ["**/*"]`
+- Cleared all `react-hooks/exhaustive-deps` warnings across swap, promote, token detail, TokenTable, wallet, order/listing, and related UI paths
+- Stabilized hook dependencies and cleanup refs to avoid stale callbacks and timer cleanup drift
+
+**验证：**
+- ✅ `npm run lint` 通过（剩余 3 个 `<img>` 优化 warning）
+- ✅ `npm test -- __tests__/unit/OrderBook.test.tsx __tests__/unit/orderlist-ui.test.tsx __tests__/unit/orderlist-token-loading.test.tsx __tests__/unit/SwapPanel.behavior.test.tsx __tests__/unit/TokenTable.test.tsx __tests__/unit/token-page.test.tsx __tests__/unit/WalletContext.test.tsx` 通过
+- ✅ `git diff --check` 通过
+
+---
+
 ### 🎉 v4.3.9 发布
 
 **主要改动：**

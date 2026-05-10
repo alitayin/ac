@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -35,7 +35,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState<boolean>(false);
   const [listingToCancel, setListingToCancel] = useState<UserListing | null>(null);
 
-  const loadListings = async () => {
+  const loadListings = useCallback(async () => {
     if (!mnemonic || !ecashAddress) {
       setListings([]);
       setAvailableTokens([]);
@@ -84,11 +84,11 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [ecashAddress, mnemonic, toast]);
 
   useEffect(() => {
     loadListings();
-  }, [ecashAddress, mnemonic]);
+  }, [loadListings]);
 
   const handleCancelClick = (listing: UserListing) => {
     setListingToCancel(listing);

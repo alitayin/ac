@@ -234,7 +234,7 @@ export function SwapPanel({
       const interval = setInterval(fetchOrderBook, POLLING_INTERVAL_MS);
       return () => clearInterval(interval);
     }
-  }, [showProPanel, selectedToken.id]);
+  }, [fetchOrderBook, showProPanel, selectedToken.id]);
 
   const handleSaveMnemonic = async () => {
     const fullMnemonic = mnemonicWords.join(' ').trim();
@@ -252,7 +252,7 @@ export function SwapPanel({
   };
 
   // Core calculation function (not debounced)
-  const calculateAverageExecutionPriceCore = async (buyAmount: number, spendAmount: number, tokenId: string) => {
+  const calculateAverageExecutionPriceCore = useCallback(async (buyAmount: number, spendAmount: number, tokenId: string) => {
     try {
 
       const data = await fetchOrderBookCached(tokenId);
@@ -308,7 +308,12 @@ export function SwapPanel({
       console.error('Calculation failed:', error);
       return { avgPrice: 0, actualAmount: 0, slippagePercent: 0 };
     }
-  };
+  }, [fetchOrderBookCached, tokenPrice]);
+
+  const calculateAverageExecutionPriceCoreRef = useRef(calculateAverageExecutionPriceCore);
+  useEffect(() => {
+    calculateAverageExecutionPriceCoreRef.current = calculateAverageExecutionPriceCore;
+  }, [calculateAverageExecutionPriceCore]);
 
   // Debounced version with 300ms delay
   const debouncedCalculateRef = useRef<ReturnType<typeof debounce>>();
@@ -317,13 +322,13 @@ export function SwapPanel({
     if (!debouncedCalculateRef.current) {
       debouncedCalculateRef.current = debounce(
         (amount: number, spend: number, token: string) => {
-          calculateAverageExecutionPriceCore(amount, spend, token);
+          calculateAverageExecutionPriceCoreRef.current(amount, spend, token);
         },
         300
       );
     }
     debouncedCalculateRef.current(buyAmount, spendAmount, tokenId);
-  }, [tokenPrice]);
+  }, []);
 
   // Cleanup debounce on unmount
   useEffect(() => {
@@ -334,7 +339,7 @@ export function SwapPanel({
     };
   }, []);
 
-  const resetBuyEstimateState = (nextReceiveAmount = '') => {
+  const resetBuyEstimateState = useCallback((nextReceiveAmount = '') => {
     setReceiveAmount(nextReceiveAmount);
     setAvgExecutionPrice(0);
     setSlippage(0);
@@ -343,7 +348,7 @@ export function SwapPanel({
     setSweepMaxPrice(0);
     setSweepTokenCostXec(0);
     setBuyErrorMessage('');
-  };
+  }, []);
 
   const calculateLimitReceiveAmount = (
     inputAmount: string,
@@ -469,7 +474,7 @@ export function SwapPanel({
     setSweepTokenCostXec(sweepResult.totalCostXec);
     setSweepQuoteVersion((currentVersion) => currentVersion + 1);
     return sweepResult;
-  }, [balance, fetchOrderBookCached, networkFee, selectedToken.id]);
+  }, [balance, fetchOrderBookCached, networkFee, resetBuyEstimateState, selectedToken.id]);
 
   const calculateReceiveAmount = (inputAmount: string) => {
     if (buyMode === "sweep") {
@@ -539,7 +544,7 @@ export function SwapPanel({
     }
   };
 
-  const calculateNetworkFeeFromUtxos = async (): Promise<number> => {
+  const calculateNetworkFeeFromUtxos = useCallback(async (): Promise<number> => {
     try {
       if (!isWalletConnected || !ecashAddress) {
         return DEFAULT_BASE_NETWORK_FEE_XEC;
@@ -556,7 +561,7 @@ export function SwapPanel({
       setNetworkFee(DEFAULT_BASE_NETWORK_FEE_XEC);
       return DEFAULT_BASE_NETWORK_FEE_XEC;
     }
-  };
+  }, [ecashAddress, isWalletConnected]);
 
   useEffect(() => {
     if (!isWalletConnected || !ecashAddress) {
@@ -565,34 +570,9 @@ export function SwapPanel({
     }
 
     void calculateNetworkFeeFromUtxos();
-  }, [ecashAddress, isWalletConnected]);
+  }, [calculateNetworkFeeFromUtxos, ecashAddress, isWalletConnected]);
 
-  const getTokenPrice = async (tokenId: string) => {
-    if (!tokenId) {
-      setTokenPrice(0);
-      setMarketPrice(0);
-      return 0;
-    }
-
-    if (useBestOrderPrice) {
-      try {
-        const data = await fetchOrderBookCached(tokenId);
-
-        if (data && data.stats && data.stats.min_price) {
-          return data.stats.min_price;
-        } else {
-          return fetchTokenPrice(tokenId);
-        }
-      } catch (error) {
-        console.error('Failed to fetch order book price:', error);
-        return fetchTokenPrice(tokenId);
-      }
-    } else {
-      return fetchTokenPrice(tokenId);
-    }
-  };
-
-  const fetchTokenPrice = async (tokenId: string) => {
+  const fetchTokenPrice = useCallback(async (tokenId: string) => {
     if (!tokenId) {
       setTokenPrice(0);
       setMarketPrice(0);
@@ -626,12 +606,37 @@ export function SwapPanel({
       setMarketPrice(0);
       return 0;
     }
-  };
+  }, []);
 
-  const calculateTokenUsdPrice = (): string => {
+  const getTokenPrice = useCallback(async (tokenId: string) => {
+    if (!tokenId) {
+      setTokenPrice(0);
+      setMarketPrice(0);
+      return 0;
+    }
+
+    if (useBestOrderPrice) {
+      try {
+        const data = await fetchOrderBookCached(tokenId);
+
+        if (data && data.stats && data.stats.min_price) {
+          return data.stats.min_price;
+        } else {
+          return fetchTokenPrice(tokenId);
+        }
+      } catch (error) {
+        console.error('Failed to fetch order book price:', error);
+        return fetchTokenPrice(tokenId);
+      }
+    } else {
+      return fetchTokenPrice(tokenId);
+    }
+  }, [fetchOrderBookCached, fetchTokenPrice, useBestOrderPrice]);
+
+  const calculateTokenUsdPrice = useCallback((): string => {
     if (!tokenPrice || !xecPrice) return '';
     return (tokenPrice * xecPrice).toFixed(4);
-  };
+  }, [tokenPrice, xecPrice]);
 
   const formatTokenPrice = useCallback((price: number): string => {
     if (price === 0) return '0.00';
@@ -674,7 +679,7 @@ export function SwapPanel({
   // Memoize USD price calculation
   const tokenUsdPrice = useMemo(() =>
     calculateTokenUsdPrice(),
-    [tokenPrice, xecPrice]
+    [calculateTokenUsdPrice]
   );
 
   const effectiveBuyMaxPrice = useMemo(
@@ -747,7 +752,7 @@ export function SwapPanel({
     [networkFee],
   );
 
-  const handleTokenSelect = (tokenId: string, tokenName: string) => {
+  const handleTokenSelect = useCallback((tokenId: string, tokenName: string) => {
     if (!tokenId) {
       setSelectedToken(EMPTY_SELECTED_TOKEN);
       setTokenPrice(0);
@@ -766,7 +771,7 @@ export function SwapPanel({
     });
     setSpendAmount('');
     resetBuyEstimateState('');
-  };
+  }, [formatTokenPrice, getTokenPrice, resetBuyEstimateState]);
 
   useEffect(() => {
     if (initialQueryTokenAppliedRef.current) {
@@ -782,7 +787,7 @@ export function SwapPanel({
     initialQueryTokenAppliedRef.current = true;
     const queryTokenName = initialTokenName.trim();
     handleTokenSelect(queryTokenId, queryTokenName || shortenTokenId(queryTokenId));
-  }, [hasInitialQueryToken, initialTokenId, initialTokenName]);
+  }, [handleTokenSelect, hasInitialQueryToken, initialTokenId, initialTokenName]);
 
   useEffect(() => {
     if (!selectedToken.id) {
@@ -797,7 +802,7 @@ export function SwapPanel({
       setTokenPriceInput(formatTokenPrice(price));
       setMarketPrice(price);
     });
-  }, [useBestOrderPrice]);
+  }, [formatTokenPrice, getTokenPrice, selectedToken.id, useBestOrderPrice]);
 
   useEffect(() => {
     if (buyMode === "sweep" && spendAmount) {
@@ -1184,7 +1189,14 @@ export function SwapPanel({
     return () => {
       cancelled = true;
     };
-  }, [hasInitialQueryToken, isWalletConnected, selectedToken.id, userTokens]);
+  }, [
+    handleTokenSelect,
+    hasInitialQueryToken,
+    isWalletConnected,
+    resetBuyEstimateState,
+    selectedToken.id,
+    userTokens,
+  ]);
 
 
   const handleCreateListing = async () => {
