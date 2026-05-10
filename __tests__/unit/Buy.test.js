@@ -116,6 +116,45 @@ describe('Buy.js', () => {
       expect(result.pricePerToken).toBe(1);
     });
 
+    it('should match an offer within the 8-decimal display price boundary', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          pricePerToken: 123.00000358037953,
+          totalTokenAmount: 1000n,
+          totalXEC: 123000.00358037953,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
+        success: true,
+        txid: 'display-boundary',
+        actualAmount: 808n,
+        totalXECPaid: 99384.0029,
+        pricePerToken: 123.00000358037953,
+        networkFee: 10,
+        swapFeePaid: 5.46,
+      });
+
+      const result = await main({
+        tokenId: 'token-display-boundary',
+        tokenDecimals: 0,
+        amount: 808,
+        maxPrice: 123.00000358,
+        buyerAddress: 'ecash:test',
+        buyerMnemonic: 'test mnemonic',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.txid).toBe('display-boundary');
+      expect(ecashQuicksend.fetchAgoraOffers).toHaveBeenCalledWith({
+        tokenId: 'token-display-boundary',
+        maxPrice: 123.000003585,
+      });
+      expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenCalledWith(
+        expect.objectContaining({ pricePerToken: 123.00000358037953 }),
+        expect.objectContaining({ amount: 808n }),
+      );
+    });
+
     it('should aggregate multi-transaction fills and fee totals', async () => {
       vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
         buildOffer({
@@ -354,7 +393,7 @@ describe('Buy.js', () => {
 
       expect(ecashQuicksend.fetchAgoraOffers).toHaveBeenCalledWith({
         tokenId: 'token123',
-        maxPrice: 0.0001,
+        maxPrice: 0.000100000000005,
       });
       expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenCalledWith(
         expect.any(Object),
