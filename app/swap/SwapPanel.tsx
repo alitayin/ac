@@ -135,6 +135,7 @@ export function SwapPanel({
   const [marketPrice, setMarketPrice] = useState<number>(0);
   const [sweepMarketPrice, setSweepMarketPrice] = useState<number>(0);
   const [sweepMaxPrice, setSweepMaxPrice] = useState<number>(0);
+  const [sweepTokenCostXec, setSweepTokenCostXec] = useState<number>(0);
   const [sweepQuoteVersion, setSweepQuoteVersion] = useState<number>(0);
   const [totalTokensBought, setTotalTokensBought] = useState<number>(0);
   const [isOfflineOrder, setIsOfflineOrder] = useState<boolean>(false);
@@ -340,6 +341,7 @@ export function SwapPanel({
     setTotalTokensBought(0);
     setSweepMarketPrice(0);
     setSweepMaxPrice(0);
+    setSweepTokenCostXec(0);
     setBuyErrorMessage('');
   };
 
@@ -382,6 +384,7 @@ export function SwapPanel({
 
     setBuyErrorMessage('');
     setSweepMaxPrice(0);
+    setSweepTokenCostXec(0);
     setReceiveAmount(truncatedReceive.toString());
 
     calculateAverageExecutionPrice(truncatedReceive, availableSpend, selectedToken.id);
@@ -439,6 +442,7 @@ export function SwapPanel({
       setTotalTokensBought(0);
       setSweepMarketPrice(0);
       setSweepMaxPrice(0);
+      setSweepTokenCostXec(0);
       setReceiveAmount('0');
 
       if (sweepResult.reason === "INSUFFICIENT_BUDGET") {
@@ -462,6 +466,7 @@ export function SwapPanel({
     setTotalTokensBought(sweepResult.receiveAmount);
     setSweepMarketPrice(sweepResult.marketPrice);
     setSweepMaxPrice(sweepResult.maxPrice);
+    setSweepTokenCostXec(sweepResult.totalCostXec);
     setSweepQuoteVersion((currentVersion) => currentVersion + 1);
     return sweepResult;
   }, [balance, fetchOrderBookCached, networkFee, selectedToken.id]);
@@ -720,13 +725,17 @@ export function SwapPanel({
   }, [effectiveBuyMaxPrice, spendAmount, receiveAmount]);
 
   const estimatedTokenCost = useMemo(() => {
+    if (buyMode === "sweep") {
+      return sweepTokenCostXec;
+    }
+
     const receive = parseFloat(receiveAmount || "0");
     if (!Number.isFinite(receive) || receive <= 0 || effectiveBuyMaxPrice <= 0) {
       return 0;
     }
 
     return receive * effectiveBuyMaxPrice;
-  }, [effectiveBuyMaxPrice, receiveAmount]);
+  }, [buyMode, effectiveBuyMaxPrice, receiveAmount, sweepTokenCostXec]);
 
   const estimatedFeeSummary = useMemo(
     () => calculateAgoraFeeSummary(estimatedTokenCost, networkFee),
@@ -876,6 +885,7 @@ export function SwapPanel({
       createdAt: string;
       raw?: string;
       selectedUtxos?: any[];
+      tokenCostCapXec?: number;
     } = {
       remainingAmount: exactReceiveAmount,
       maxPrice: orderMaxPrice,
@@ -884,6 +894,10 @@ export function SwapPanel({
       transactions: [],
       createdAt: new Date().toISOString()
     };
+
+    if (buyMode === "sweep" && estimatedFeeSummary.tokenCostXec > 0) {
+      orderData.tokenCostCapXec = estimatedFeeSummary.tokenCostXec;
+    }
 
     if (isOfflineOrder) {
       try {
@@ -979,6 +993,7 @@ export function SwapPanel({
     const currentFee = await calculateNetworkFeeFromUtxos();
     let latestReceiveAmount = parseFloat(receiveAmount || '0');
     let latestMaxPrice = effectiveBuyMaxPrice;
+    let latestTokenCost = estimatedTokenCost;
 
     if (spendAmount && parseFloat(spendAmount) > 0) {
       if (buyMode === "sweep") {
@@ -998,6 +1013,7 @@ export function SwapPanel({
 
         latestReceiveAmount = refreshedSweepQuote.receiveAmount;
         latestMaxPrice = refreshedSweepQuote.maxPrice;
+        latestTokenCost = refreshedSweepQuote.totalCostXec;
       } else {
         const refreshedLimitQuote = calculateLimitReceiveAmount(
           spendAmount,
@@ -1014,6 +1030,7 @@ export function SwapPanel({
         }
 
         latestReceiveAmount = refreshedLimitQuote.receiveAmount;
+        latestTokenCost = latestMaxPrice * latestReceiveAmount;
       }
     }
     
@@ -1028,8 +1045,7 @@ export function SwapPanel({
       return;
     }
     
-    const tokenCost = latestMaxPrice * latestReceiveAmount;
-    const totalAmount = calculateAgoraFeeSummary(tokenCost, currentFee).totalCostXec;
+    const totalAmount = calculateAgoraFeeSummary(latestTokenCost, currentFee).totalCostXec;
     const currentBalance = parseFloat(balance || '0');
     if (Number.isFinite(currentBalance) && totalAmount > currentBalance) {
       toast({

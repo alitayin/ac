@@ -6,6 +6,18 @@
 
 ## 2026-05-10
 
+### 🎉 v4.3.8 发布
+
+**主要改动：**
+- Sweep buy now uses the actual quote token cost as the hard spend cap instead of `receiveAmount * maxMatchedPrice`
+- Sweep orders persist a `tokenCostCapXec` so execution cannot overspend the quoted ladder cost while still using max matched price as protection
+- Listing cancellation now uses the raw offer atom amount, fixing tokens with decimals
+
+**验证：**
+- ✅ `npm test -- __tests__/unit/SwapPanel.behavior.test.tsx __tests__/unit/agora-orders.test.ts __tests__/unit/Buy.test.js __tests__/unit/Auto.test.js` 通过
+
+---
+
 ### 🎉 v4.3.7 发布
 
 **主要改动：**

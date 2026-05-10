@@ -23,6 +23,7 @@ export interface StoredSwapOrder {
   raw?: string;
   selectedUtxos?: any[];
   failureReason?: string;
+  tokenCostCapXec?: number;
 }
 
 export type StoredSwapOrders = Record<string, StoredSwapOrder>;

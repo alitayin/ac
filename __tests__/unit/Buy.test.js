@@ -175,6 +175,64 @@ describe('Buy.js', () => {
       );
     });
 
+    it('should cap sweep execution by quoted token cost, not amount times max price', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          pricePerToken: 1,
+          totalTokenAmount: 10n,
+          totalXEC: 10,
+        }),
+        buildOffer({
+          pricePerToken: 3,
+          totalTokenAmount: 10n,
+          totalXEC: 30,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer)
+        .mockResolvedValueOnce({
+          success: true,
+          txid: 'tx-cheap',
+          actualAmount: 10n,
+          totalXECPaid: 10,
+          pricePerToken: 1,
+          networkFee: 0,
+          swapFeePaid: 0,
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          txid: 'tx-expensive',
+          actualAmount: 5n,
+          totalXECPaid: 15,
+          pricePerToken: 3,
+          networkFee: 0,
+          swapFeePaid: 0,
+        });
+
+      const result = await main({
+        tokenId: 'token-sweep-cap',
+        tokenDecimals: 0,
+        amount: 20,
+        maxPrice: 3,
+        tokenCostCapXec: 25,
+        buyerAddress: 'ecash:test',
+        buyerMnemonic: 'test mnemonic',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.actualAmount).toBe(15);
+      expect(result.totalTokenCostPaid).toBe(25);
+      expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ pricePerToken: 1 }),
+        expect.objectContaining({ amount: 10n }),
+      );
+      expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ pricePerToken: 3 }),
+        expect.objectContaining({ amount: 5n }),
+      );
+    });
+
     it('should surface acceptAgoraOffer failure reason when matched offers cannot execute', async () => {
       vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
         buildOffer(),

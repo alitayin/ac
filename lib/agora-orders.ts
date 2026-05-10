@@ -58,6 +58,18 @@ const getMakerAddress = (makerPk: Record<string, number> | undefined | null): st
   }
 }
 
+const getOfferTokenAmountAtoms = (offer: any): bigint => {
+  try {
+    const partial = offer?.variant?.type === "PARTIAL" ? offer.variant.params : null
+    if (partial && typeof partial.offeredAtoms === "function") {
+      return BigInt(partial.offeredAtoms())
+    }
+  } catch (error) {
+  }
+
+  return getTokenAmountFromToken(offer?.token)
+}
+
 const getTokenDecimals = async (tokenId: string): Promise<number> => {
   if (decimalsCache.has(tokenId)) {
     return decimalsCache.get(tokenId) as number
@@ -83,7 +95,7 @@ const getTokenDecimals = async (tokenId: string): Promise<number> => {
 
 const formatOffer = (offer: any, divisor: number): Order | null => {
   try {
-    const totalTokens = getTokenAmountFromToken(offer.token)
+    const totalTokens = getOfferTokenAmountAtoms(offer)
     if (totalTokens <= BigInt(0)) return null
     
     const totalSats = offer.variant.type === 'PARTIAL' 
@@ -180,10 +192,18 @@ const derivePubkeyHex = (mnemonic: string): string => {
   return Buffer.from(pubkey).toString('hex')
 }
 
+export type UserListing = Order & {
+  tokenId: string
+  tokenName: string
+  rawOffer: any
+  tokenDecimals: number
+  totalTokenAmountAtoms: bigint
+}
+
 export type UserListingsResponse = {
   success: boolean
   data?: {
-    listings: Array<Order & { tokenId: string; tokenName: string; rawOffer: any }>
+    listings: UserListing[]
   }
   error?: string
 }
@@ -213,6 +233,7 @@ export const fetchUserListings = async (
         const formattedOffer = formatOffer(offer, divisor)
 
         if (!formattedOffer) return null
+        const totalTokenAmountAtoms = getOfferTokenAmountAtoms(offer)
 
         // Try to get token name from config first
         const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
@@ -232,6 +253,8 @@ export const fetchUserListings = async (
           ...formattedOffer,
           tokenId,
           tokenName,
+          tokenDecimals: decimals,
+          totalTokenAmountAtoms,
           rawOffer: offer, // Store the raw offer for cancellation
         }
       } catch (error) {
@@ -239,7 +262,7 @@ export const fetchUserListings = async (
       }
     })
 
-    const listings = (await Promise.all(listingsPromises)).filter(Boolean) as Array<Order & { tokenId: string; tokenName: string; rawOffer: any }>
+    const listings = (await Promise.all(listingsPromises)).filter(Boolean) as UserListing[]
 
     listings.sort((a, b) => b.price - a.price)
 
@@ -256,4 +279,3 @@ export const fetchUserListings = async (
     }
   }
 }
-

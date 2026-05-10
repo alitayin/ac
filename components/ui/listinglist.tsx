@@ -7,7 +7,7 @@ import { tokens } from '@/config/tokens';
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCw, Trash2 } from "lucide-react";
-import { fetchUserListings } from "@/lib/agora-orders";
+import { fetchUserListings, type UserListing } from "@/lib/agora-orders";
 import { cancelAgoraOffer } from "ecash-quicksend";
 import {
   AlertDialog,
@@ -20,16 +20,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-interface Listing {
-  price: number;
-  amount: number;
-  total: number;
-  makerAddress?: string;
-  tokenId: string;
-  tokenName: string;
-  rawOffer: any;
-}
-
 interface ListingListProps {
   ecashAddress: string;
   mnemonic: string;
@@ -37,13 +27,13 @@ interface ListingListProps {
 
 export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
   const { toast } = useToast();
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [listings, setListings] = useState<UserListing[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [tokenFilter, setTokenFilter] = useState<string>("all");
   const [availableTokens, setAvailableTokens] = useState<Array<{id: string, name: string}>>([]);
   const [isCancelling, setIsCancelling] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState<boolean>(false);
-  const [listingToCancel, setListingToCancel] = useState<Listing | null>(null);
+  const [listingToCancel, setListingToCancel] = useState<UserListing | null>(null);
 
   const loadListings = async () => {
     if (!mnemonic || !ecashAddress) {
@@ -100,7 +90,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
     loadListings();
   }, [ecashAddress, mnemonic]);
 
-  const handleCancelClick = (listing: Listing) => {
+  const handleCancelClick = (listing: UserListing) => {
     setListingToCancel(listing);
     setCancelDialogOpen(true);
   };
@@ -116,7 +106,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
       const wrappedOffer = {
         offer: listingToCancel.rawOffer,
         pricePerToken: listingToCancel.price,
-        totalTokenAmount: BigInt(Math.floor(listingToCancel.amount * Math.pow(10, 0))), // Will need proper decimals
+        totalTokenAmount: listingToCancel.totalTokenAmountAtoms,
         totalXEC: listingToCancel.total,
         offerType: listingToCancel.rawOffer.variant?.type || 'PARTIAL'
       };
