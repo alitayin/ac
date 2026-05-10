@@ -421,7 +421,7 @@ describe('Auto.js', () => {
           tokenId: 'token1',
           requestedAmount: 10,
           requestedMaxPrice: 100,
-          executionMaxPrice: 100.2,
+          executionMaxPrice: 100,
           reason: 'INSUFFICIENT_BALANCE_WITH_FEE',
           message: 'Need at least 11365840 sats total including network fee, have 11365834 sats',
         }),

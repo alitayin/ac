@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-05-10
+
+### 🎉 v4.3.7 发布
+
+**主要改动：**
+- Removed hidden 0.2% buy execution cushion so saved max price is enforced exactly
+- Buy execution now tries matching Agora offers cheapest-first to align execution with quote simulation
+- Added unit coverage for exact max price execution and cheapest-first offer execution
+
+**验证：**
+- ✅ `npm test -- __tests__/unit/Auto.test.js __tests__/unit/Buy.test.js` 通过
+- ✅ `npm run lint` 通过
+
+---
+
 ## 2026-05-08
 
 ### 🎉 v4.3.6 发布

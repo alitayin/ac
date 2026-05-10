@@ -133,18 +133,18 @@ describe('Buy.js', () => {
         .mockResolvedValueOnce({
           success: true,
           txid: 'tx-1',
-          actualAmount: 200n,
-          totalXECPaid: 315.46,
-          pricePerToken: 1.5,
+          actualAmount: 300n,
+          totalXECPaid: 417.46,
+          pricePerToken: 1.4,
           networkFee: 10,
           swapFeePaid: 5.46,
         })
         .mockResolvedValueOnce({
           success: true,
           txid: 'tx-2',
-          actualAmount: 300n,
-          totalXECPaid: 417.46,
-          pricePerToken: 1.35,
+          actualAmount: 200n,
+          totalXECPaid: 315.46,
+          pricePerToken: 1.5,
           networkFee: 12,
           swapFeePaid: 5.46,
         });
@@ -163,6 +163,16 @@ describe('Buy.js', () => {
       expect(result.swapFee).toBe(10.92);
       expect(result.totalFees).toBe(32.92);
       expect(result.transactions).toHaveLength(2);
+      expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ pricePerToken: 1.4 }),
+        expect.any(Object),
+      );
+      expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ pricePerToken: 1.5 }),
+        expect.any(Object),
+      );
     });
 
     it('should surface acceptAgoraOffer failure reason when matched offers cannot execute', async () => {
