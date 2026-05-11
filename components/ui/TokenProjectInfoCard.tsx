@@ -210,6 +210,9 @@ const normalizeUrlFormState = (state: ProjectInfoFormState): ProjectInfoFormStat
 const normalizeHex = (value?: string | null): string =>
   typeof value === "string" ? value.trim().toLowerCase() : ""
 
+const normalizeAddress = (value?: string | null): string =>
+  typeof value === "string" ? value.trim().toLowerCase() : ""
+
 const hasAnyFormField = (state: ProjectInfoFormState): boolean => {
   const normalized = normalizeFormState(state)
   return Boolean(
@@ -345,13 +348,25 @@ export function TokenProjectInfoCard({
 
   const normalizedAuthPubkey = normalizeHex(authPubkey)
   const normalizedWalletPubkey = normalizeHex(publicKeyHex)
+  const creatorAddress = React.useMemo(
+    () => getGenesisAuthorityAddress(authPubkey),
+    [authPubkey],
+  )
+  const isGenesisAuthorityAddressWallet = Boolean(
+    creatorAddress &&
+      ecashAddress &&
+      normalizeAddress(ecashAddress) === normalizeAddress(creatorAddress),
+  )
   const isGenesisAuthPubkeyWallet = Boolean(
     normalizedAuthPubkey &&
       normalizedWalletPubkey &&
       normalizedWalletPubkey === normalizedAuthPubkey,
   )
+  const isGenesisAuthorityWallet = Boolean(
+    isGenesisAuthPubkeyWallet || isGenesisAuthorityAddressWallet,
+  )
   const hasSigningWallet = Boolean(isWalletConnected && ecashAddress && mnemonic && !isGuestMode)
-  const canEdit = Boolean(isGenesisAuthPubkeyWallet && hasSigningWallet)
+  const canEdit = Boolean(isGenesisAuthorityWallet && hasSigningWallet)
   const descriptionByteLength = React.useMemo(
     () => getByteLength(formState.description),
     [formState.description],
@@ -387,10 +402,6 @@ export function TokenProjectInfoCard({
       (hasProjectInfoRecord || hasAnyFormField(formState)),
   )
   const submitFeeLabel = getFeeLabel(invoice, hasProjectInfoRecord, tokenId)
-  const creatorAddress = React.useMemo(
-    () => getGenesisAuthorityAddress(authPubkey),
-    [authPubkey],
-  )
   const createdAtLabel = React.useMemo(
     () => formatCreatedAt(createdTimestamp),
     [createdTimestamp],
@@ -761,7 +772,7 @@ export function TokenProjectInfoCard({
   }
 
   const handleSubmitProjectInfo = React.useCallback(async () => {
-    if (!tokenId || !ecashAddress || !mnemonic || isGuestMode || !isGenesisAuthPubkeyWallet) {
+    if (!tokenId || !ecashAddress || !mnemonic || isGuestMode || !isGenesisAuthorityWallet) {
       return
     }
 
@@ -896,7 +907,7 @@ export function TokenProjectInfoCard({
     formState,
     hasProjectInfoRecord,
     invoice,
-    isGenesisAuthPubkeyWallet,
+    isGenesisAuthorityWallet,
     isGuestMode,
     isInvoiceStale,
     mnemonic,
@@ -938,7 +949,7 @@ export function TokenProjectInfoCard({
                   <Edit3 data-icon="inline-start" />
                   {hasProjectInfoRecord ? "Edit" : "Initialize"}
                 </Button>
-              ) : isGenesisAuthPubkeyWallet && !hasSigningWallet ? (
+              ) : isGenesisAuthorityWallet && !hasSigningWallet ? (
                 <Badge variant="outline" className="shrink-0 rounded-md">
                   Wallet locked
                 </Badge>
@@ -1101,7 +1112,7 @@ export function TokenProjectInfoCard({
             ) : null}
           </div>
 
-          {!canEdit && isGenesisAuthPubkeyWallet && !hasSigningWallet ? (
+          {!canEdit && isGenesisAuthorityWallet && !hasSigningWallet ? (
             <Alert className="border-primary/20 bg-primary/5">
               <Wallet data-icon="inline-start" />
               <AlertTitle>Signing wallet required</AlertTitle>
@@ -1144,12 +1155,12 @@ export function TokenProjectInfoCard({
                     Guest-mode or address-only sessions cannot publish project info.
                   </AlertDescription>
                 </Alert>
-              ) : !isGenesisAuthPubkeyWallet ? (
+              ) : !isGenesisAuthorityWallet ? (
                 <Alert className="border-primary/20 bg-primary/5">
                   <Wallet data-icon="inline-start" />
                   <AlertTitle>Genesis key required</AlertTitle>
                   <AlertDescription>
-                    The connected wallet must match this token's genesis authority public key.
+                    The connected wallet must match this token's genesis authority.
                   </AlertDescription>
                 </Alert>
               ) : (

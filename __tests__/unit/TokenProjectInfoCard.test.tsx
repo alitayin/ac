@@ -48,6 +48,7 @@ const TEST_TOKEN_ID =
   "5cb20c6cdeaee3abf53f7dcaaa1092ad10a0e2e9dcd94ee07272b631e65d7371"
 const AUTH_PUBKEY =
   "0334b744e6338ad438c92900c0ed1869c3fd2c0f35a4a9b97a88447b6e2b145f10"
+const AUTH_ADDRESS = "ecash:qzamd387e3twen34jk8c0s3k0nflt6yvyuva5lu6l8"
 
 describe("TokenProjectInfoCard", () => {
   beforeEach(() => {
@@ -131,6 +132,58 @@ describe("TokenProjectInfoCard", () => {
         "We may remove content we consider inappropriate at any time, without providing a reason or refund.",
       ),
     ).toBeInTheDocument()
+  })
+
+  it("allows initialization when the wallet address matches the genesis authority address", async () => {
+    walletMock.mockReturnValue({
+      isWalletConnected: true,
+      ecashAddress: AUTH_ADDRESS,
+      mnemonic: "test mnemonic",
+      isGuestMode: false,
+      publicKeyHex: "",
+      refreshBalance: vi.fn(),
+    })
+    createInvoiceMock.mockResolvedValue({
+      invoiceId: "invoice-1",
+      tokenId: TEST_TOKEN_ID,
+      status: "published",
+      description: "address match",
+      websiteUrl: null,
+      xUrl: null,
+      telegramUrl: null,
+      paymentAddress: "ecash:payment",
+      expectedPaidSats: 10000,
+      expectedPaidXec: "100",
+      paymentTxid: null,
+    })
+
+    render(
+      <TokenProjectInfoCard
+        tokenId={TEST_TOKEN_ID}
+        tokenName="Test Token"
+        authPubkey={AUTH_PUBKEY}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Initialize" })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Initialize" }))
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "address match" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Initialize" }))
+
+    await waitFor(() => {
+      expect(createInvoiceMock).toHaveBeenCalledWith(
+        TEST_TOKEN_ID,
+        expect.objectContaining({
+          editorAddress: AUTH_ADDRESS,
+          description: "address match",
+        }),
+      )
+    })
   })
 
   it("renders the buy link in the project info header", async () => {
