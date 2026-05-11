@@ -15,7 +15,7 @@ import {
   Send,
   Wallet,
 } from "lucide-react"
-import { encodeCashAddress } from "ecashaddrjs"
+import { encodeCashAddress, encodeOutputScript } from "ecashaddrjs"
 import { shaRmd160 } from "ecash-lib"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -41,6 +41,7 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
+import { fetchTokenGenesisCreatorAddress } from "@/lib/chronik"
 import { useWallet } from "@/lib/context/WalletContext"
 import {
   createEtokenDbProjectInfoInvoice,
@@ -57,6 +58,7 @@ type TokenProjectInfoCardProps = {
   tokenId: string
   tokenName: string
   authPubkey?: string | null
+  creatorAddress?: string | null
   tokenTicker?: string | null
   createdBlockHeight?: number | null
   createdTimestamp?: number | null
@@ -316,6 +318,7 @@ export function TokenProjectInfoCard({
   tokenId,
   tokenName,
   authPubkey,
+  creatorAddress: providedCreatorAddress,
   tokenTicker,
   createdBlockHeight,
   createdTimestamp,
@@ -329,7 +332,6 @@ export function TokenProjectInfoCard({
   const {
     isWalletConnected,
     ecashAddress,
-    userTokens,
     mnemonic,
     isGuestMode,
     publicKeyHex,
@@ -344,14 +346,18 @@ export function TokenProjectInfoCard({
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [statusMessage, setStatusMessage] = React.useState("")
   const [errorMessage, setErrorMessage] = React.useState("")
+  const [genesisCreatorAddress, setGenesisCreatorAddress] = React.useState<string | null>(null)
   const mountedRef = React.useRef(true)
   const resumeAttemptedInvoiceRef = React.useRef<string | null>(null)
 
   const normalizedAuthPubkey = normalizeHex(authPubkey)
   const normalizedWalletPubkey = normalizeHex(publicKeyHex)
   const creatorAddress = React.useMemo(
-    () => getGenesisAuthorityAddress(authPubkey),
-    [authPubkey],
+    () =>
+      providedCreatorAddress ||
+      getGenesisAuthorityAddress(authPubkey) ||
+      genesisCreatorAddress,
+    [authPubkey, genesisCreatorAddress, providedCreatorAddress],
   )
   const isGenesisAuthorityAddressWallet = Boolean(
     creatorAddress &&
@@ -366,20 +372,7 @@ export function TokenProjectInfoCard({
   const isGenesisAuthorityWallet = Boolean(
     isGenesisAuthPubkeyWallet || isGenesisAuthorityAddressWallet,
   )
-  const hasWalletTokenBalance = React.useMemo(() => {
-    const rawBalance = userTokens?.[tokenId]
-    if (!rawBalance) {
-      return false
-    }
-    try {
-      return BigInt(rawBalance) > 0n
-    } catch (_error) {
-      return Number(rawBalance) > 0
-    }
-  }, [tokenId, userTokens])
-  const isProjectInfoEditorWallet = Boolean(
-    isGenesisAuthorityWallet || hasWalletTokenBalance,
-  )
+  const isProjectInfoEditorWallet = isGenesisAuthorityWallet
   const hasSigningWallet = Boolean(isWalletConnected && ecashAddress && mnemonic && !isGuestMode)
   const canOpenEditor = isProjectInfoEditorWallet
   const canEdit = Boolean(canOpenEditor && hasSigningWallet)
@@ -562,6 +555,30 @@ export function TokenProjectInfoCard({
       cancelled = true
     }
   }, [tokenId])
+
+  React.useEffect(() => {
+    if (!tokenId || providedCreatorAddress || authPubkey) {
+      setGenesisCreatorAddress(null)
+      return
+    }
+
+    let cancelled = false
+    void fetchTokenGenesisCreatorAddress(tokenId)
+      .then((address) => {
+        if (!cancelled && mountedRef.current) {
+          setGenesisCreatorAddress(address)
+        }
+      })
+      .catch(() => {
+        if (!cancelled && mountedRef.current) {
+          setGenesisCreatorAddress(null)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authPubkey, providedCreatorAddress, tokenId])
 
   React.useEffect(() => {
     if (!isDialogOpen) {
@@ -1024,7 +1041,7 @@ export function TokenProjectInfoCard({
               </>
             ) : (
               <p className="text-sm leading-6 text-muted-foreground">
-                The token creator has not added project information yet. (Project information is submitted and edited by the token holder.)
+                The token creator has not added project information yet. (Project information is submitted and edited by the token creator.)
               </p>
             )}
           </div>
@@ -1172,7 +1189,7 @@ export function TokenProjectInfoCard({
                   <Wallet data-icon="inline-start" />
                   <AlertTitle>Genesis key required</AlertTitle>
                   <AlertDescription>
-                    The connected wallet must hold this token or match this token's genesis authority.
+                    The connected wallet must match this token's creator address.
                   </AlertDescription>
                 </Alert>
               ) : (

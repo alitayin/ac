@@ -22,6 +22,7 @@ const createDeferred = <T,>(): Deferred<T> => {
 
 const {
   fetchBlockchainInfoMock,
+  fetchTokenGenesisCreatorAddressMock,
   fetchTokenDetailsMock,
   getCachedTokenDetailsMock,
   getTokenDecimalsFromDetailsMock,
@@ -37,6 +38,7 @@ const {
   reviewDialogMock,
 } = vi.hoisted(() => ({
   fetchBlockchainInfoMock: vi.fn(),
+  fetchTokenGenesisCreatorAddressMock: vi.fn(),
   fetchTokenDetailsMock: vi.fn(),
   getCachedTokenDetailsMock: vi.fn(),
   getTokenDecimalsFromDetailsMock: vi.fn(),
@@ -107,6 +109,8 @@ vi.mock("@/lib/agora-ws", () => ({
 
 vi.mock("@/lib/chronik", () => ({
   fetchBlockchainInfo: (...args: unknown[]) => fetchBlockchainInfoMock(...args),
+  fetchTokenGenesisCreatorAddress: (...args: unknown[]) =>
+    fetchTokenGenesisCreatorAddressMock(...args),
   fetchTokenDetails: (...args: unknown[]) => fetchTokenDetailsMock(...args),
   getCachedTokenDetails: (...args: unknown[]) => getCachedTokenDetailsMock(...args),
   getTokenAmountFromToken: vi.fn(() => 0),
@@ -168,6 +172,7 @@ describe("TokenTable bootstrap", () => {
     })
     useXECPriceMock.mockReturnValue(0.05)
     watchAgoraTokensMock.mockReturnValue(() => {})
+    fetchTokenGenesisCreatorAddressMock.mockResolvedValue(null)
     fetchTokenDetailsMock.mockResolvedValue(null)
     getCachedTokenDetailsMock.mockReturnValue(null)
     getTokenDecimalsFromDetailsMock.mockImplementation((_details, fallback = 0) => fallback)
@@ -346,16 +351,19 @@ describe("TokenTable bootstrap", () => {
       expect(screen.getByText("Alpha Token")).toBeInTheDocument()
     })
 
-    expect(screen.getByText("Editable")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText("Editable")).toBeInTheDocument()
+    })
   })
 
-  it("shows an Editable badge when the connected wallet holds the token", async () => {
+  it("shows an Editable badge when the connected wallet matches fallback creator address", async () => {
+    fetchTokenGenesisCreatorAddressMock.mockResolvedValue(
+      "ecash:qp6y7wk7xmtr9pfr0kw9yxcnrfg3x2f8ssgsekdjgr",
+    )
     useWalletMock.mockReturnValue({
       isWalletConnected: true,
       ecashAddress: "ecash:qp6y7wk7xmtr9pfr0kw9yxcnrfg3x2f8ssgsekdjgr",
-      userTokens: {
-        "alpha-token-id": "1",
-      },
+      userTokens: {},
       publicKeyHex: "",
     })
     fetchBlockchainInfoMock.mockResolvedValue({ tipHeight: 900000 })

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const {
   createInvoiceMock,
   fetchProjectInfoMock,
+  fetchTokenGenesisCreatorAddressMock,
   fetchInvoiceMock,
   quickSendXecMock,
   submitInvoiceTxMock,
@@ -12,6 +13,7 @@ const {
 } = vi.hoisted(() => ({
   createInvoiceMock: vi.fn(),
   fetchProjectInfoMock: vi.fn(),
+  fetchTokenGenesisCreatorAddressMock: vi.fn(),
   fetchInvoiceMock: vi.fn(),
   quickSendXecMock: vi.fn(),
   submitInvoiceTxMock: vi.fn(),
@@ -35,6 +37,11 @@ vi.mock("@/lib/context/WalletContext", () => ({
   useWallet: () => walletMock(),
 }))
 
+vi.mock("@/lib/chronik", () => ({
+  fetchTokenGenesisCreatorAddress: (...args: unknown[]) =>
+    fetchTokenGenesisCreatorAddressMock(...args),
+}))
+
 vi.mock("@/lib/etokendb", () => ({
   createEtokenDbProjectInfoInvoice: (...args: unknown[]) => createInvoiceMock(...args),
   fetchEtokenDbProjectInfoInvoice: (...args: unknown[]) => fetchInvoiceMock(...args),
@@ -55,6 +62,7 @@ describe("TokenProjectInfoCard", () => {
     vi.clearAllMocks()
     localStorage.clear()
     fetchProjectInfoMock.mockResolvedValue(null)
+    fetchTokenGenesisCreatorAddressMock.mockResolvedValue(null)
     fetchInvoiceMock.mockResolvedValue({
       invoiceId: "invoice-1",
       tokenId: TEST_TOKEN_ID,
@@ -122,7 +130,7 @@ describe("TokenProjectInfoCard", () => {
 
     expect(
       await screen.findByText(
-        "The token creator has not added project information yet. (Project information is submitted and edited by the token holder.)",
+        "The token creator has not added project information yet. (Project information is submitted and edited by the token creator.)",
       ),
     ).toBeInTheDocument()
 
@@ -188,14 +196,13 @@ describe("TokenProjectInfoCard", () => {
     })
   })
 
-  it("allows initialization when the wallet holds a token without an auth pubkey", async () => {
-    const holderAddress = "ecash:qp6y7wk7xmtr9pfr0kw9yxcnrfg3x2f8ssgsekdjgr"
+  it("allows initialization when the wallet matches a fallback genesis creator address", async () => {
+    const creatorAddress = "ecash:qp6y7wk7xmtr9pfr0kw9yxcnrfg3x2f8ssgsekdjgr"
+    fetchTokenGenesisCreatorAddressMock.mockResolvedValue(creatorAddress)
     walletMock.mockReturnValue({
       isWalletConnected: true,
-      ecashAddress: holderAddress,
-      userTokens: {
-        [TEST_TOKEN_ID]: "1",
-      },
+      ecashAddress: creatorAddress,
+      userTokens: {},
       mnemonic: "test mnemonic",
       isGuestMode: false,
       publicKeyHex: "",
@@ -205,7 +212,7 @@ describe("TokenProjectInfoCard", () => {
       invoiceId: "invoice-1",
       tokenId: TEST_TOKEN_ID,
       status: "published",
-      description: "holder match",
+      description: "creator match",
       websiteUrl: null,
       xUrl: null,
       telegramUrl: null,
@@ -229,7 +236,7 @@ describe("TokenProjectInfoCard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Initialize" }))
     fireEvent.change(screen.getByLabelText("Description"), {
-      target: { value: "holder match" },
+      target: { value: "creator match" },
     })
     fireEvent.click(screen.getByRole("button", { name: "Initialize" }))
 
@@ -237,8 +244,8 @@ describe("TokenProjectInfoCard", () => {
       expect(createInvoiceMock).toHaveBeenCalledWith(
         TEST_TOKEN_ID,
         expect.objectContaining({
-          editorAddress: holderAddress,
-          description: "holder match",
+          editorAddress: creatorAddress,
+          description: "creator match",
         }),
       )
     })

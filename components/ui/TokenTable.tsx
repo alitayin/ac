@@ -89,6 +89,7 @@ import { UI_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
 import {
   fetchBlockchainInfo,
+  fetchTokenGenesisCreatorAddress,
   fetchTokenDetails,
   getCachedTokenDetails,
   getTokenAmountFromToken,
@@ -517,7 +518,7 @@ const getStoredFilterOption = (): FilterOption => {
 export default function Component() {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const { toast } = useToast()
-  const { ecashAddress, publicKeyHex, userTokens } = useWallet()
+  const { ecashAddress, publicKeyHex } = useWallet()
 
   const [data, setData] = React.useState<TokenTableRow[]>(createFallbackTokenRows)
   const [isLoading, setIsLoading] = React.useState(true)
@@ -540,6 +541,7 @@ export default function Component() {
   const [isLocalFallbackMode, setIsLocalFallbackMode] = React.useState(false)
   const [activeReviewTokenId, setActiveReviewTokenId] = React.useState<string | null>(null)
   const [tokenAuthPubkeys, setTokenAuthPubkeys] = React.useState<Map<string, string>>(new Map())
+  const [tokenCreatorAddresses, setTokenCreatorAddresses] = React.useState<Map<string, string>>(new Map())
   const router = useRouter()
   
   const loadingTokens = React.useRef<Set<string>>(new Set())
@@ -597,6 +599,7 @@ export default function Component() {
     }
 
     const authPubkey = getTokenAuthPubkeyFromDetails(tokenDetails)
+    const authorityAddress = getGenesisAuthorityAddressFromPubkey(authPubkey)
 
     setTokenAuthPubkeys((prev) => {
       const nextAuthPubkey = authPubkey ?? ""
@@ -607,36 +610,32 @@ export default function Component() {
       next.set(tokenId, nextAuthPubkey)
       return next
     })
+    setTokenCreatorAddresses((prev) => {
+      const nextCreatorAddress = normalizeAddress(authorityAddress)
+      if (prev.get(tokenId) === nextCreatorAddress) {
+        return prev
+      }
+      const next = new Map(prev)
+      next.set(tokenId, nextCreatorAddress)
+      return next
+    })
   }, [])
 
   const isProjectInfoEditable = React.useCallback(
     (tokenId: string): boolean => {
-      const rawTokenBalance = userTokens?.[tokenId]
-      if (rawTokenBalance) {
-        try {
-          if (BigInt(rawTokenBalance) > 0n) {
-            return true
-          }
-        } catch (_error) {
-          if (Number(rawTokenBalance) > 0) {
-            return true
-          }
-        }
-      }
-
       const authPubkey = tokenAuthPubkeys.get(tokenId)
       if (authPubkey && normalizedWalletPubkey && authPubkey === normalizedWalletPubkey) {
         return true
       }
 
-      const authorityAddress = getGenesisAuthorityAddressFromPubkey(authPubkey)
+      const authorityAddress = tokenCreatorAddresses.get(tokenId)
       return Boolean(
         authorityAddress &&
           normalizedWalletAddress &&
-          normalizeAddress(authorityAddress) === normalizedWalletAddress,
+          authorityAddress === normalizedWalletAddress,
       )
     },
-    [normalizedWalletAddress, normalizedWalletPubkey, tokenAuthPubkeys, userTokens],
+    [normalizedWalletAddress, normalizedWalletPubkey, tokenAuthPubkeys, tokenCreatorAddresses],
   )
 
   React.useEffect(() => {
@@ -691,9 +690,15 @@ export default function Component() {
     const tokensNeedingAuthPubkey = data
       .map((token) => token.tokenId)
       .filter(
-        (tokenId) =>
-          !tokenAuthPubkeys.has(tokenId) &&
-          !loadingAuthPubkeyTokensRef.current.has(tokenId),
+        (tokenId) => {
+          const authPubkey = tokenAuthPubkeys.get(tokenId)
+          const creatorAddress = tokenCreatorAddresses.get(tokenId)
+          return (
+            !authPubkey &&
+            !creatorAddress &&
+            !loadingAuthPubkeyTokensRef.current.has(tokenId)
+          )
+        },
       )
       .slice(0, 30)
 
@@ -715,12 +720,43 @@ export default function Component() {
           const cached = getCachedTokenDetails(tokenId)
           if (cached) {
             recordTokenAuthPubkey(tokenId, cached)
+            const authPubkey = getTokenAuthPubkeyFromDetails(cached)
+            if (authPubkey) {
+              continue
+            }
+            const creatorAddress = await fetchTokenGenesisCreatorAddress(tokenId, chronikClient)
+            if (!cancelled) {
+              setTokenCreatorAddresses((prev) => {
+                const nextCreatorAddress = normalizeAddress(creatorAddress)
+                if (prev.get(tokenId) === nextCreatorAddress) {
+                  return prev
+                }
+                const next = new Map(prev)
+                next.set(tokenId, nextCreatorAddress)
+                return next
+              })
+            }
             continue
           }
 
           const tokenInfo = await fetchTokenDetails(tokenId, chronikClient)
           if (!cancelled) {
             recordTokenAuthPubkey(tokenId, tokenInfo)
+          }
+          const authPubkey = getTokenAuthPubkeyFromDetails(tokenInfo)
+          if (!authPubkey && !cancelled) {
+            const creatorAddress = await fetchTokenGenesisCreatorAddress(tokenId, chronikClient)
+            if (!cancelled) {
+              setTokenCreatorAddresses((prev) => {
+                const nextCreatorAddress = normalizeAddress(creatorAddress)
+                if (prev.get(tokenId) === nextCreatorAddress) {
+                  return prev
+                }
+                const next = new Map(prev)
+                next.set(tokenId, nextCreatorAddress)
+                return next
+              })
+            }
           }
         } catch (_error) {
           if (!cancelled) {
@@ -745,12 +781,14 @@ export default function Component() {
     normalizedWalletPubkey,
     recordTokenAuthPubkey,
     tokenAuthPubkeys,
+    tokenCreatorAddresses,
   ])
 
   const clearCacheAndReload = () => {
     clearTokenCache()
     clearCachedTopVolumeTokens()
     setTokenAuthPubkeys(new Map())
+    setTokenCreatorAddresses(new Map())
     setLoadedTokens(new Set())
     setHighlightFields(new Map())
     setData(createFallbackTokenRows())

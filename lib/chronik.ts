@@ -1,4 +1,5 @@
 import { ChronikClient } from "chronik-client"
+import { encodeOutputScript } from "ecashaddrjs"
 import { tokens } from "@/config/tokens"
 import { storageManager } from './storage-manager'
 
@@ -40,6 +41,42 @@ export const fetchAddressXecUtxos = async (address: string, client?: ChronikClie
   const utxos = utxosResp?.utxos || []
 
   return utxos.filter((utxo: any) => !utxo.token)
+}
+
+export const getAddressFromOutputScript = (outputScript?: string | null): string | null => {
+  if (!outputScript) {
+    return null
+  }
+
+  try {
+    return encodeOutputScript(outputScript, "ecash")
+  } catch (_error) {
+    return null
+  }
+}
+
+export const getTokenGenesisCreatorAddressFromTx = (tx: any): string | null => {
+  const inputs = Array.isArray(tx?.inputs) ? tx.inputs : []
+  for (const input of inputs) {
+    const address = getAddressFromOutputScript(input?.outputScript)
+    if (address) {
+      return address
+    }
+  }
+  return null
+}
+
+export const fetchTokenGenesisCreatorAddress = async (
+  tokenId: string,
+  client?: ChronikClient,
+): Promise<string | null> => {
+  if (!tokenId) {
+    throw new Error("tokenId is required")
+  }
+
+  const c = client || chronik
+  const tx = await c.tx(tokenId)
+  return getTokenGenesisCreatorAddressFromTx(tx)
 }
 
 export const getTokenAmountFromToken = (token: any): bigint => {
