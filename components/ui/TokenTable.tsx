@@ -16,6 +16,8 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar"
+import { encodeCashAddress } from "ecashaddrjs"
+import { shaRmd160 } from "ecash-lib"
 import {
   ColumnDef,
   flexRender,
@@ -336,6 +338,36 @@ const getTokenAuthPubkeyFromDetails = (tokenDetails: any): string | null => {
 const normalizeHex = (value?: string | null): string =>
   typeof value === "string" ? value.trim().toLowerCase() : ""
 
+const normalizeAddress = (value?: string | null): string =>
+  typeof value === "string" ? value.trim().toLowerCase() : ""
+
+const hexToBytes = (value: string): Uint8Array => {
+  const normalized = value.trim().toLowerCase()
+  if (!/^[0-9a-f]+$/.test(normalized) || normalized.length % 2 !== 0) {
+    throw new Error("Invalid hex")
+  }
+
+  const bytes = new Uint8Array(normalized.length / 2)
+  for (let i = 0; i < normalized.length; i += 2) {
+    bytes[i / 2] = parseInt(normalized.slice(i, i + 2), 16)
+  }
+  return bytes
+}
+
+const getGenesisAuthorityAddressFromPubkey = (authPubkey?: string | null): string | null => {
+  try {
+    const normalized = normalizeHex(authPubkey)
+    if (normalized.length !== 66) {
+      return null
+    }
+
+    const pubkeyHash = shaRmd160(hexToBytes(normalized))
+    return encodeCashAddress("ecash", "p2pkh", pubkeyHash)
+  } catch (_error) {
+    return null
+  }
+}
+
 const getTokenRouteParam = (token: Pick<Token, "tokenId">): string => {
   return token.tokenId
 }
@@ -485,7 +517,7 @@ const getStoredFilterOption = (): FilterOption => {
 export default function Component() {
   const { chronik: chronikClient, isLoading: isChronikLoading } = useChronik()
   const { toast } = useToast()
-  const { publicKeyHex } = useWallet()
+  const { ecashAddress, publicKeyHex, userTokens } = useWallet()
 
   const [data, setData] = React.useState<TokenTableRow[]>(createFallbackTokenRows)
   const [isLoading, setIsLoading] = React.useState(true)
@@ -493,8 +525,6 @@ export default function Component() {
   const [loadedTokens, setLoadedTokens] = React.useState<Set<string>>(new Set())
   const [refreshNonce, setRefreshNonce] = React.useState(0)
   const [errorTokens, setErrorTokens] = React.useState<Set<string>>(new Set())
-  const [loadedIcons, setLoadedIcons] = React.useState<Set<string>>(new Set())
-  const [failedIcons, setFailedIcons] = React.useState<Set<string>>(new Set())
   const [chainTipHeight, setChainTipHeight] = React.useState<number | null>(null)
   const [searchExpanded, setSearchExpanded] = React.useState(false)
   const [searchInput, setSearchInput] = React.useState("")
@@ -556,6 +586,10 @@ export default function Component() {
     () => normalizeHex(publicKeyHex),
     [publicKeyHex],
   )
+  const normalizedWalletAddress = React.useMemo(
+    () => normalizeAddress(ecashAddress),
+    [ecashAddress],
+  )
 
   const recordTokenAuthPubkey = React.useCallback((tokenId: string, tokenDetails: any) => {
     if (!tokenDetails) {
@@ -577,10 +611,32 @@ export default function Component() {
 
   const isProjectInfoEditable = React.useCallback(
     (tokenId: string): boolean => {
+      const rawTokenBalance = userTokens?.[tokenId]
+      if (rawTokenBalance) {
+        try {
+          if (BigInt(rawTokenBalance) > 0n) {
+            return true
+          }
+        } catch (_error) {
+          if (Number(rawTokenBalance) > 0) {
+            return true
+          }
+        }
+      }
+
       const authPubkey = tokenAuthPubkeys.get(tokenId)
-      return Boolean(authPubkey && normalizedWalletPubkey && authPubkey === normalizedWalletPubkey)
+      if (authPubkey && normalizedWalletPubkey && authPubkey === normalizedWalletPubkey) {
+        return true
+      }
+
+      const authorityAddress = getGenesisAuthorityAddressFromPubkey(authPubkey)
+      return Boolean(
+        authorityAddress &&
+          normalizedWalletAddress &&
+          normalizeAddress(authorityAddress) === normalizedWalletAddress,
+      )
     },
-    [normalizedWalletPubkey, tokenAuthPubkeys],
+    [normalizedWalletAddress, normalizedWalletPubkey, tokenAuthPubkeys, userTokens],
   )
 
   React.useEffect(() => {
@@ -622,7 +678,12 @@ export default function Component() {
   }, [])
 
   React.useEffect(() => {
-    if (!normalizedWalletPubkey || isChronikLoading || !chronikClient || data.length === 0) {
+    if (
+      (!normalizedWalletPubkey && !normalizedWalletAddress) ||
+      isChronikLoading ||
+      !chronikClient ||
+      data.length === 0
+    ) {
       return
     }
 
@@ -680,6 +741,7 @@ export default function Component() {
     chronikClient,
     data,
     isChronikLoading,
+    normalizedWalletAddress,
     normalizedWalletPubkey,
     recordTokenAuthPubkey,
     tokenAuthPubkeys,
@@ -690,8 +752,6 @@ export default function Component() {
     clearCachedTopVolumeTokens()
     setTokenAuthPubkeys(new Map())
     setLoadedTokens(new Set())
-    setLoadedIcons(new Set())
-    setFailedIcons(new Set())
     setHighlightFields(new Map())
     setData(createFallbackTokenRows())
     setIsLoading(true)
@@ -783,62 +843,21 @@ export default function Component() {
       header: "Name",
       cell: ({ row }) => {
         const isRowLoading = isLoading || !hasRowMarketData(row.original)
-        const isIconLoaded = loadedIcons.has(row.original.tokenId)
-        const isIconFailed = failedIcons.has(row.original.tokenId)
-
-        const markIconLoaded = () => {
-          setLoadedIcons((prev) => {
-            if (prev.has(row.original.tokenId)) return prev
-            const next = new Set(prev)
-            next.add(row.original.tokenId)
-            return next
-          })
-          setFailedIcons((prev) => {
-            if (!prev.has(row.original.tokenId)) return prev
-            const next = new Set(prev)
-            next.delete(row.original.tokenId)
-            return next
-          })
-        }
-
-        const markIconFailed = () => {
-          setFailedIcons((prev) => {
-            if (prev.has(row.original.tokenId)) return prev
-            const next = new Set(prev)
-            next.add(row.original.tokenId)
-            return next
-          })
-        }
 
         return (
           <div 
             className="flex items-center gap-2 cursor-pointer hover:opacity-80"
             onClick={() => router.push(`/${getTokenRouteParam(row.original)}`)}
           >
-              <Avatar className="h-8 w-8 relative overflow-hidden">
-                {!isIconLoaded && !isIconFailed && (
-                  <div className="absolute inset-0 rounded-full bg-accent animate-pulse" />
-                )}
-                <Image
+              <Avatar className="h-8 w-8">
+                <AvatarImage
                   src={`https://icons.etokens.cash/32/${row.original.tokenId}.png`}
                   alt={row.original.name}
-                  width={32}
-                  height={32}
-                  unoptimized
-                  loading="lazy"
-                  className={cn(
-                    "h-full w-full object-cover transition-opacity duration-300",
-                    isIconFailed ? "hidden" : "",
-                    isIconLoaded ? "opacity-100" : "opacity-0",
-                  )}
-                  onLoad={markIconLoaded}
-                  onError={markIconFailed}
+                  className="object-cover"
                 />
-                {isIconFailed && (
-                  <AvatarFallback>
-                    {row.original.name.substring(0, 2)}
-                  </AvatarFallback>
-                )}
+                <AvatarFallback className="text-xs">
+                  {row.original.name.substring(0, 2)}
+                </AvatarFallback>
               </Avatar>
               <div className="flex items-center gap-2 flex-wrap">
                 <span>{row.original.name}</span>

@@ -162,6 +162,7 @@ describe("TokenTable bootstrap", () => {
     })
     useWalletMock.mockReturnValue({
       isWalletConnected: false,
+      ecashAddress: "",
       userTokens: {},
       publicKeyHex: "",
     })
@@ -325,6 +326,7 @@ describe("TokenTable bootstrap", () => {
 
     useWalletMock.mockReturnValue({
       isWalletConnected: true,
+      ecashAddress: "ecash:test-address",
       userTokens: {},
       publicKeyHex: authPubkey.toUpperCase(),
     })
@@ -347,9 +349,37 @@ describe("TokenTable bootstrap", () => {
     expect(screen.getByText("Editable")).toBeInTheDocument()
   })
 
+  it("shows an Editable badge when the connected wallet holds the token", async () => {
+    useWalletMock.mockReturnValue({
+      isWalletConnected: true,
+      ecashAddress: "ecash:qp6y7wk7xmtr9pfr0kw9yxcnrfg3x2f8ssgsekdjgr",
+      userTokens: {
+        "alpha-token-id": "1",
+      },
+      publicKeyHex: "",
+    })
+    fetchBlockchainInfoMock.mockResolvedValue({ tipHeight: 900000 })
+    fetchEtokenDbTopVolumeTokensMock.mockResolvedValue([makeTopVolumeToken()])
+    getCachedTokenDetailsMock.mockReturnValue({
+      genesisInfo: {
+        tokenName: "Alpha Token",
+        decimals: 2,
+      },
+    })
+
+    render(<TokenTable />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Token")).toBeInTheDocument()
+    })
+
+    expect(screen.getByText("Editable")).toBeInTheDocument()
+  })
+
   it("does not show an Editable badge for a non-owner wallet", async () => {
     useWalletMock.mockReturnValue({
       isWalletConnected: true,
+      ecashAddress: "ecash:test-address",
       userTokens: {},
       publicKeyHex:
         "02ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",

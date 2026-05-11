@@ -329,6 +329,7 @@ export function TokenProjectInfoCard({
   const {
     isWalletConnected,
     ecashAddress,
+    userTokens,
     mnemonic,
     isGuestMode,
     publicKeyHex,
@@ -365,8 +366,23 @@ export function TokenProjectInfoCard({
   const isGenesisAuthorityWallet = Boolean(
     isGenesisAuthPubkeyWallet || isGenesisAuthorityAddressWallet,
   )
+  const hasWalletTokenBalance = React.useMemo(() => {
+    const rawBalance = userTokens?.[tokenId]
+    if (!rawBalance) {
+      return false
+    }
+    try {
+      return BigInt(rawBalance) > 0n
+    } catch (_error) {
+      return Number(rawBalance) > 0
+    }
+  }, [tokenId, userTokens])
+  const isProjectInfoEditorWallet = Boolean(
+    isGenesisAuthorityWallet || hasWalletTokenBalance,
+  )
   const hasSigningWallet = Boolean(isWalletConnected && ecashAddress && mnemonic && !isGuestMode)
-  const canEdit = Boolean(isGenesisAuthorityWallet && hasSigningWallet)
+  const canOpenEditor = isProjectInfoEditorWallet
+  const canEdit = Boolean(canOpenEditor && hasSigningWallet)
   const descriptionByteLength = React.useMemo(
     () => getByteLength(formState.description),
     [formState.description],
@@ -772,7 +788,7 @@ export function TokenProjectInfoCard({
   }
 
   const handleSubmitProjectInfo = React.useCallback(async () => {
-    if (!tokenId || !ecashAddress || !mnemonic || isGuestMode || !isGenesisAuthorityWallet) {
+    if (!tokenId || !ecashAddress || !mnemonic || isGuestMode || !isProjectInfoEditorWallet) {
       return
     }
 
@@ -907,7 +923,7 @@ export function TokenProjectInfoCard({
     formState,
     hasProjectInfoRecord,
     invoice,
-    isGenesisAuthorityWallet,
+    isProjectInfoEditorWallet,
     isGuestMode,
     isInvoiceStale,
     mnemonic,
@@ -939,7 +955,7 @@ export function TokenProjectInfoCard({
                   <Link href={buyHref}>Buy</Link>
                 </Button>
               ) : null}
-              {canEdit ? (
+              {canOpenEditor ? (
                 <Button
                   type="button"
                   size="sm"
@@ -949,10 +965,6 @@ export function TokenProjectInfoCard({
                   <Edit3 data-icon="inline-start" />
                   {hasProjectInfoRecord ? "Edit" : "Initialize"}
                 </Button>
-              ) : isGenesisAuthorityWallet && !hasSigningWallet ? (
-                <Badge variant="outline" className="shrink-0 rounded-md">
-                  Wallet locked
-                </Badge>
               ) : null}
             </div>
           </div>
@@ -1112,7 +1124,7 @@ export function TokenProjectInfoCard({
             ) : null}
           </div>
 
-          {!canEdit && isGenesisAuthorityWallet && !hasSigningWallet ? (
+          {!canEdit && canOpenEditor && !hasSigningWallet ? (
             <Alert className="border-primary/20 bg-primary/5">
               <Wallet data-icon="inline-start" />
               <AlertTitle>Signing wallet required</AlertTitle>
@@ -1155,12 +1167,12 @@ export function TokenProjectInfoCard({
                     Guest-mode or address-only sessions cannot publish project info.
                   </AlertDescription>
                 </Alert>
-              ) : !isGenesisAuthorityWallet ? (
+              ) : !isProjectInfoEditorWallet ? (
                 <Alert className="border-primary/20 bg-primary/5">
                   <Wallet data-icon="inline-start" />
                   <AlertTitle>Genesis key required</AlertTitle>
                   <AlertDescription>
-                    The connected wallet must match this token's genesis authority.
+                    The connected wallet must hold this token or match this token's genesis authority.
                   </AlertDescription>
                 </Alert>
               ) : (

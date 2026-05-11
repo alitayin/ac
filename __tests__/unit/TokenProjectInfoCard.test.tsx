@@ -85,6 +85,7 @@ describe("TokenProjectInfoCard", () => {
     walletMock.mockReturnValue({
       isWalletConnected: true,
       ecashAddress: "ecash:test-address",
+      userTokens: {},
       mnemonic: "test mnemonic",
       isGuestMode: false,
       publicKeyHex: AUTH_PUBKEY,
@@ -138,6 +139,7 @@ describe("TokenProjectInfoCard", () => {
     walletMock.mockReturnValue({
       isWalletConnected: true,
       ecashAddress: AUTH_ADDRESS,
+      userTokens: {},
       mnemonic: "test mnemonic",
       isGuestMode: false,
       publicKeyHex: "",
@@ -181,6 +183,62 @@ describe("TokenProjectInfoCard", () => {
         expect.objectContaining({
           editorAddress: AUTH_ADDRESS,
           description: "address match",
+        }),
+      )
+    })
+  })
+
+  it("allows initialization when the wallet holds a token without an auth pubkey", async () => {
+    const holderAddress = "ecash:qp6y7wk7xmtr9pfr0kw9yxcnrfg3x2f8ssgsekdjgr"
+    walletMock.mockReturnValue({
+      isWalletConnected: true,
+      ecashAddress: holderAddress,
+      userTokens: {
+        [TEST_TOKEN_ID]: "1",
+      },
+      mnemonic: "test mnemonic",
+      isGuestMode: false,
+      publicKeyHex: "",
+      refreshBalance: vi.fn(),
+    })
+    createInvoiceMock.mockResolvedValue({
+      invoiceId: "invoice-1",
+      tokenId: TEST_TOKEN_ID,
+      status: "published",
+      description: "holder match",
+      websiteUrl: null,
+      xUrl: null,
+      telegramUrl: null,
+      paymentAddress: "ecash:payment",
+      expectedPaidSats: 10000,
+      expectedPaidXec: "100",
+      paymentTxid: null,
+    })
+
+    render(
+      <TokenProjectInfoCard
+        tokenId={TEST_TOKEN_ID}
+        tokenName="Test Token"
+        authPubkey={null}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Initialize" })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Initialize" }))
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "holder match" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Initialize" }))
+
+    await waitFor(() => {
+      expect(createInvoiceMock).toHaveBeenCalledWith(
+        TEST_TOKEN_ID,
+        expect.objectContaining({
+          editorAddress: holderAddress,
+          description: "holder match",
         }),
       )
     })
