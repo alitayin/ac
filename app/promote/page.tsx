@@ -9,6 +9,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Coins,
+  Download,
   History,
   Loader2,
   Megaphone,
@@ -306,6 +307,35 @@ export default function PromotePage() {
     () => parseManualAddresses(manualAddressesInput),
     [manualAddressesInput],
   );
+  const manualInvalidCount = manualParse.invalidEntries.length;
+  const downloadInvalidManualAddresses = useCallback(() => {
+    if (manualParse.invalidEntries.length === 0 || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const blob = new Blob([manualParse.invalidEntries.join("\n")], {
+        type: "text/plain;charset=utf-8",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "promote-invalid-addresses.txt";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Download failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Could not download invalid addresses.",
+        variant: "destructive",
+      });
+    }
+  }, [manualParse.invalidEntries, toast]);
   const isHolderAudience = recipientMode === "holders";
   const isManualAudience = recipientMode === "manual";
 
@@ -970,6 +1000,12 @@ export default function PromotePage() {
     mode === "token-airdrop"
       ? tokenSendDisabledReason
       : messageSendDisabledReason;
+  const readySendDescription =
+    isManualAudience && manualInvalidCount > 0
+      ? `Ready. ${manualInvalidCount.toLocaleString()} invalid manual entr${
+          manualInvalidCount === 1 ? "y was" : "ies were"
+        } ignored and will not be sent.`
+      : "Ready.";
 
   const resetWorkspace = useCallback(() => {
     setMode("token-airdrop");
@@ -1466,13 +1502,30 @@ export default function PromotePage() {
                           <span>{manualParse.duplicateCount.toLocaleString()} duplicates</span>
                         </div>
 
-                        {manualParse.invalidEntries.length > 0 ? (
+                        {manualInvalidCount > 0 ? (
                           <Alert>
                             <AlertCircle className="h-4 w-4" />
                             <AlertTitle>Invalid addresses ignored</AlertTitle>
-                            <AlertDescription>
-                              {manualParse.invalidEntries.slice(0, 3).join(", ")}
-                              {manualParse.invalidEntries.length > 3 ? " ..." : ""}
+                            <AlertDescription className="space-y-2">
+                              <p>
+                                {manualInvalidCount.toLocaleString()}{" "}
+                                {manualInvalidCount === 1 ? "entry was" : "entries were"} removed
+                                from the send list.
+                              </p>
+                              <p className="break-all font-mono text-xs">
+                                {manualParse.invalidEntries.slice(0, 3).join(", ")}
+                                {manualInvalidCount > 3 ? " ..." : ""}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 rounded-lg"
+                                onClick={downloadInvalidManualAddresses}
+                              >
+                                <Download className="mr-2 h-3.5 w-3.5" />
+                                Download invalid list
+                              </Button>
                             </AlertDescription>
                           </Alert>
                         ) : null}
@@ -1772,7 +1825,7 @@ export default function PromotePage() {
                     <Alert>
                       <CheckCircle2 className="h-4 w-4" />
                       <AlertTitle>Ready to send</AlertTitle>
-                      <AlertDescription>Ready.</AlertDescription>
+                      <AlertDescription>{readySendDescription}</AlertDescription>
                     </Alert>
                   )}
 

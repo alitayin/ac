@@ -1,5 +1,6 @@
 "use client"
-import { useState } from "react"
+import Image from "next/image"
+import { useState, type ReactNode } from "react"
 import Header from "@/components/ui/header"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,7 +12,7 @@ import { QuestionMarkCircledIcon } from "@radix-ui/react-icons"
 import { useToast } from "@/hooks/use-toast"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 
-const LabelWithHelp = ({ htmlFor, children }: { htmlFor?: string, children: React.ReactNode }) => (
+const LabelWithHelp = ({ htmlFor, children }: { htmlFor?: string, children: ReactNode }) => (
   <div className="flex items-center gap-2">
     <Label htmlFor={htmlFor}>{children}</Label>
     <Dialog>
@@ -19,7 +20,13 @@ const LabelWithHelp = ({ htmlFor, children }: { htmlFor?: string, children: Reac
         <QuestionMarkCircledIcon className="h-4 w-4 cursor-pointer text-gray-500 hover:text-gray-700" />
       </DialogTrigger>
       <DialogContent className="max-w-xl">
-        <img src="/list.png" alt="Reference" className="w-full" />
+        <Image
+          src="/list.png"
+          alt="Reference"
+          width={2206}
+          height={2747}
+          className="h-auto w-full"
+        />
       </DialogContent>
     </Dialog>
   </div>

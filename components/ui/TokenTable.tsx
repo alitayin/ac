@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import {
   Table,
@@ -818,9 +819,12 @@ export default function Component() {
                 {!isIconLoaded && !isIconFailed && (
                   <div className="absolute inset-0 rounded-full bg-accent animate-pulse" />
                 )}
-                <img
+                <Image
                   src={`https://icons.etokens.cash/32/${row.original.tokenId}.png`}
                   alt={row.original.name}
+                  width={32}
+                  height={32}
+                  unoptimized
                   loading="lazy"
                   className={cn(
                     "h-full w-full object-cover transition-opacity duration-300",
@@ -927,9 +931,11 @@ export default function Component() {
                             </DialogDescription>
                           </DialogHeader>
                           <div className="flex justify-center py-4">
-                            <img 
-                              src={tokenConfig.youtubeHoverImage} 
-                              alt="YouTube Preview" 
+                            <Image
+                              src={tokenConfig.youtubeHoverImage}
+                              alt="YouTube Preview"
+                              width={2722}
+                              height={1698}
                               className="w-full h-auto rounded-lg"
                             />
                           </div>

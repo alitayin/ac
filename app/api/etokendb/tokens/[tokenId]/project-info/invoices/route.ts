@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { ETOKENDB_UPSTREAM_BASE_URL, isValidEtokenDbTokenId } from "@/lib/etokendb"
+import { normalizeSafeExternalUrl } from "@/lib/safe-url"
 import { ETOKENDB_PROXY_HEADERS, proxyEtokenDbError } from "../../../../proxy-utils"
 
 export const dynamic = "force-dynamic"
@@ -8,6 +9,64 @@ export const revalidate = 0
 export const runtime = "nodejs"
 
 const REQUEST_TIMEOUT_MS = 8_000
+const PROJECT_INFO_URL_FIELDS = ["websiteUrl", "xUrl", "telegramUrl"] as const
+
+type ProjectInfoInvoiceBody = Record<string, unknown>
+
+type SanitizeProjectInfoInvoiceBodyResult =
+  | {
+      ok: true
+      body: ProjectInfoInvoiceBody
+    }
+  | {
+      ok: false
+      error: string
+    }
+
+const sanitizeProjectInfoInvoiceBody = (
+  body: ProjectInfoInvoiceBody,
+): SanitizeProjectInfoInvoiceBodyResult => {
+  const sanitizedBody: ProjectInfoInvoiceBody = { ...body }
+
+  for (const field of PROJECT_INFO_URL_FIELDS) {
+    const value = sanitizedBody[field]
+    if (value === undefined) {
+      continue
+    }
+    if (value === null) {
+      sanitizedBody[field] = null
+      continue
+    }
+    if (typeof value !== "string") {
+      return {
+        ok: false,
+        error: `Invalid ${field}`,
+      }
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed) {
+      sanitizedBody[field] = null
+      continue
+    }
+
+    const normalizedUrl = normalizeSafeExternalUrl(trimmed)
+    if (!normalizedUrl) {
+      return {
+        ok: false,
+        error: `Invalid ${field}`,
+      }
+    }
+
+    sanitizedBody[field] = normalizedUrl
+  }
+
+  return {
+    ok: true,
+    body: sanitizedBody,
+  }
+}
+
 export async function POST(
   request: Request,
   context: { params: { tokenId: string } },
@@ -28,11 +87,25 @@ export async function POST(
   }
 
   const body = await request.json().catch(() => null)
-  if (!body || typeof body !== "object") {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json(
       {
         ok: false,
         error: "Invalid JSON body",
+      },
+      {
+        status: 400,
+        headers: ETOKENDB_PROXY_HEADERS,
+      },
+    )
+  }
+
+  const sanitized = sanitizeProjectInfoInvoiceBody(body as ProjectInfoInvoiceBody)
+  if (!sanitized.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: sanitized.error,
       },
       {
         status: 400,
@@ -55,7 +128,7 @@ export async function POST(
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(sanitized.body),
       },
     )
 

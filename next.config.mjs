@@ -6,8 +6,14 @@ const CopyPlugin = require('copy-webpack-plugin');
 const nextConfig = {
   output: "standalone",
 
-  eslint: {
-    ignoreDuringBuilds: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "icons.etokens.cash",
+        pathname: "/**",
+      },
+    ],
   },
 
   experimental: {
