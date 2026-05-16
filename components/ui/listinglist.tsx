@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RefreshCw, Trash2 } from "lucide-react";
 import { fetchUserListings, type UserListing } from "@/lib/agora-orders";
 import { cancelAgoraOffer } from "ecash-quicksend";
+import { isBlockedTokenId } from "@/lib/blocked-tokens";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,13 +48,17 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
       const response = await fetchUserListings(mnemonic);
 
       if (response.success && response.data) {
-        setListings(response.data.listings);
+        const visibleListings = response.data.listings.filter(
+          (listing) => !isBlockedTokenId(listing.tokenId),
+        );
+
+        setListings(visibleListings);
 
         // Extract unique tokens for filter
         const tokenSet = new Set<string>();
         const tokenList: Array<{id: string, name: string}> = [];
 
-        response.data.listings.forEach(listing => {
+        visibleListings.forEach(listing => {
           if (!tokenSet.has(listing.tokenId)) {
             tokenSet.add(listing.tokenId);
             tokenList.push({
@@ -148,6 +153,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
   };
 
   const filteredListings = listings.filter(listing => {
+    if (isBlockedTokenId(listing.tokenId)) return false;
     if (tokenFilter === "all") return true;
     return listing.tokenId === tokenFilter;
   });

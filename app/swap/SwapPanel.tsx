@@ -65,6 +65,7 @@ import {
   saveSwapOrder,
 } from "@/lib/swap-order-utils";
 import { fetchTokenDetails, getCachedTokenDetails } from "@/lib/chronik";
+import { isBlockedTokenId } from "@/lib/blocked-tokens";
 
 const MIN_ORDER_TOTAL_XEC = 100;
 const POLLING_INTERVAL_MS = 30000;
@@ -148,7 +149,8 @@ export function SwapPanel({
   const [isCreatingListing, setIsCreatingListing] = useState<boolean>(false);
   const { executeOrders } = useAutoExecution();
   const initialQueryTokenAppliedRef = useRef(false);
-  const hasInitialQueryToken = /^[a-f0-9]{64}$/i.test(initialTokenId.trim());
+  const hasInitialQueryToken =
+    /^[a-f0-9]{64}$/i.test(initialTokenId.trim()) && !isBlockedTokenId(initialTokenId);
 
   // Order book cache with 10 second TTL
   const orderBookCacheRef = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
@@ -173,7 +175,7 @@ export function SwapPanel({
 
   // Cached order book fetch with 10 second TTL
   const fetchOrderBookCached = useCallback(async (tokenId: string) => {
-    if (!tokenId) {
+    if (!tokenId || isBlockedTokenId(tokenId)) {
       return { orders: [] };
     }
 
@@ -753,7 +755,7 @@ export function SwapPanel({
   );
 
   const handleTokenSelect = useCallback((tokenId: string, tokenName: string) => {
-    if (!tokenId) {
+    if (!tokenId || isBlockedTokenId(tokenId)) {
       setSelectedToken(EMPTY_SELECTED_TOKEN);
       setTokenPrice(0);
       setTokenPriceInput('0.00');
@@ -842,7 +844,14 @@ export function SwapPanel({
   const createOrder = async () => {
     const orderMaxPrice = effectiveBuyMaxPrice;
 
-    if (!isWalletConnected || !ecashAddress || !selectedToken.id || !orderMaxPrice || !receiveAmount) {
+    if (
+      !isWalletConnected ||
+      !ecashAddress ||
+      !selectedToken.id ||
+      isBlockedTokenId(selectedToken.id) ||
+      !orderMaxPrice ||
+      !receiveAmount
+    ) {
       return;
     }
     
@@ -1149,7 +1158,9 @@ export function SwapPanel({
         return;
       }
 
-      const ownedTokens = Object.entries(userTokens).filter(([_, amount]) => amount !== "0");
+      const ownedTokens = Object.entries(userTokens).filter(
+        ([tokenId, amount]) => amount !== "0" && !isBlockedTokenId(tokenId),
+      );
 
       if (!isWalletConnected || ownedTokens.length === 0) {
         setSelectedToken(EMPTY_SELECTED_TOKEN);

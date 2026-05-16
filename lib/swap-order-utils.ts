@@ -1,5 +1,7 @@
 "use client";
 
+import { isBlockedTokenId } from "./blocked-tokens";
+
 export const ORDERS_UPDATED_EVENT = "orders-updated";
 
 export type OrdersUpdatedReason =
@@ -46,7 +48,13 @@ export const createSwapOrderKey = (
   address: string,
   maxPrice: number,
   suffix = generateOrderKeySuffix(),
-): string => `${tokenId}|${address}|${maxPrice}|${suffix}`;
+): string => {
+  if (isBlockedTokenId(tokenId)) {
+    throw new Error("Token is not available");
+  }
+
+  return `${tokenId}|${address}|${maxPrice}|${suffix}`;
+};
 
 export const readSwapOrders = (): StoredSwapOrders => {
   if (typeof window === "undefined") {
@@ -153,7 +161,9 @@ export const getActiveOnlineOrdersForAddress = (
   return Object.fromEntries(
     Object.entries(orders).filter(
       ([orderKey, order]) =>
-        getAddressFromOrderKey(orderKey) === address && isActiveOnlineOrder(order),
+        getAddressFromOrderKey(orderKey) === address &&
+        !isBlockedTokenId(getTokenIdFromOrderKey(orderKey)) &&
+        isActiveOnlineOrder(order),
     ),
   );
 };

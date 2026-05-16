@@ -34,6 +34,7 @@ import {
 import { watchAgoraTokens } from "@/lib/agora-ws"
 import { loadTokenPageStats } from "@/lib/token-page-stats"
 import { cn } from "@/lib/utils"
+import { isBlockedTokenId } from "@/lib/blocked-tokens"
 
 interface TokenData {
   tokenId: string;
@@ -135,10 +136,14 @@ export default function TokenPage() {
         return normalizedKey === normalizedRouteParam || normalizedName === normalizedRouteParam;
       })?.[1]
     : undefined;
-  const matchedToken = matchedTokenById ?? matchedTokenByNameOrKey;
+  const matchedTokenCandidate = matchedTokenById ?? matchedTokenByNameOrKey;
+  const isBlockedRouteToken = isBlockedTokenId(
+    matchedTokenCandidate?.tokenId ?? (isValidTokenId ? routeParam : ""),
+  );
+  const matchedToken = isBlockedRouteToken ? undefined : matchedTokenCandidate;
 
-  const isCustomToken = !matchedToken && isValidTokenId;
-  const hasValidRoute = Boolean(matchedToken || isValidTokenId);
+  const isCustomToken = !isBlockedRouteToken && !matchedToken && isValidTokenId;
+  const hasValidRoute = !isBlockedRouteToken && Boolean(matchedToken || isValidTokenId);
 
   const configuredTokenDecimals =
     typeof (matchedToken as any)?.decimals === "number" ? (matchedToken as any).decimals : undefined

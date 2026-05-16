@@ -13,6 +13,7 @@ import {
   getCachedTokenDetails,
   getTokenDecimalsFromDetails,
 } from "@/lib/chronik";
+import { isBlockedTokenId } from "@/lib/blocked-tokens";
 
 type TokenDetailsMap = Record<string, any>;
 type SearchLookupState =
@@ -92,7 +93,10 @@ export function TokenSelector({
   const [tokenDetails, setTokenDetails] = useState<TokenDetailsMap>({});
   const tokenDetailsRef = useRef<TokenDetailsMap>({});
   const loadRequestIdRef = useRef(0);
-  const userTokenIds = useMemo(() => Object.keys(userTokens), [userTokens]);
+  const userTokenIds = useMemo(
+    () => Object.keys(userTokens).filter((tokenId) => !isBlockedTokenId(tokenId)),
+    [userTokens],
+  );
   const walletTokenIdsWithBalance = useMemo(
     () =>
       userTokenIds.filter((tokenId) => {
@@ -217,6 +221,15 @@ export function TokenSelector({
         setSearchLookup({
           status: "idle",
           tokenId: "",
+        });
+        setSearchedTokenDetail(null);
+        return;
+      }
+
+      if (isBlockedTokenId(normalizedSearchQuery)) {
+        setSearchLookup({
+          status: "not-found",
+          tokenId: normalizedSearchQuery,
         });
         setSearchedTokenDetail(null);
         return;

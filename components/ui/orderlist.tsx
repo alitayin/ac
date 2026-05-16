@@ -20,6 +20,7 @@ import {
   deleteSwapOrder,
   dispatchOrdersUpdated,
 } from "@/lib/swap-order-utils";
+import { isBlockedTokenId } from "@/lib/blocked-tokens";
 
 interface Order {
   remainingAmount: number;
@@ -154,6 +155,10 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
         const address = parts[1];
         const price = parts[2];
         // parts[3] is the random string (if present)
+
+        if (isBlockedTokenId(tokenId)) {
+          return;
+        }
 
         // Only show orders for the connected wallet
         if (address === ecashAddress) {
@@ -400,6 +405,8 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
 
   // Filter orders
   const filteredOrders = Object.entries(orders).filter(([orderKey, order]) => {
+    if (isBlockedTokenId(order.tokenId)) return false;
+
     // Token filter
     if (tokenFilter !== "all" && order.tokenId !== tokenFilter) return false;
     

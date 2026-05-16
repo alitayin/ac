@@ -130,6 +130,7 @@ import {
   compute24hStats,
 } from "@/lib/token-stats"
 import { watchAgoraTokens } from "@/lib/agora-ws"
+import { filterBlockedTokenIds, isBlockedTokenId } from "@/lib/blocked-tokens"
 import { useToast } from "@/hooks/use-toast"
 import { Spinner } from "@/components/ui/spinner"
 import TokenReviewDialog from "@/components/ui/TokenReviewDialog"
@@ -382,7 +383,12 @@ const getCustomTokens = (): string[] => {
 
   try {
     const stored = localStorage.getItem(CUSTOM_TOKENS_KEY)
-    return stored ? JSON.parse(stored) : []
+    const parsed = stored ? JSON.parse(stored) : []
+    return Array.isArray(parsed)
+      ? parsed.filter((tokenId): tokenId is string =>
+          typeof tokenId === "string" && !isBlockedTokenId(tokenId),
+        )
+      : []
   } catch (_error) {
     return []
   }
@@ -458,6 +464,10 @@ const createFallbackTokenRows = (): TokenTableRow[] => {
   const rowsByTokenId = new Map<string, TokenTableRow>()
 
   Object.values(tokens).forEach((tokenConfig) => {
+    if (isBlockedTokenId(tokenConfig.tokenId)) {
+      return
+    }
+
     rowsByTokenId.set(
       tokenConfig.tokenId,
       createInitialTokenRow(tokenConfig.tokenId, tokenConfig.name, {
@@ -1295,6 +1305,10 @@ export default function Component() {
   ]
 
   const applyTokenUpdate = React.useCallback((tokenId: string, patch: Partial<Token>) => {
+    if (isBlockedTokenId(tokenId)) {
+      return
+    }
+
     let updatedFields: Set<string> | undefined
     const nowTs = Date.now()
     setData((prevData) => {
@@ -1422,6 +1436,10 @@ export default function Component() {
     name: string,
     options?: { ignoreFilter?: boolean },
   ) => {
+    if (isBlockedTokenId(tokenId)) {
+      return
+    }
+
     if (!options?.ignoreFilter && filteredTokensRef.current.has(tokenId)) {
       return
     }
@@ -2132,6 +2150,10 @@ export default function Component() {
 
   const addCustomToken = (tokenId: string): boolean => {
     try {
+      if (isBlockedTokenId(tokenId)) {
+        throw new Error("Token is not available")
+      }
+
       const isInConfig = Object.values(tokens).some(t => t.tokenId === tokenId)
       if (isInConfig) {
         throw new Error('Token already exists in the default list')
@@ -2166,7 +2188,7 @@ export default function Component() {
   const handleSearchToken = async (tokenIdOverride?: string) => {
     const tokenId = (tokenIdOverride ?? trimmedSearchInput).trim()
 
-    if (!isValidTokenId(tokenId) || isChronikLoading || !chronikClient) {
+    if (!isValidTokenId(tokenId) || isBlockedTokenId(tokenId) || isChronikLoading || !chronikClient) {
       return
     }
 
@@ -2255,7 +2277,7 @@ export default function Component() {
     const handleWatchlistAdd = async (event: Event) => {
       const customEvent = event as CustomEvent<{ tokenId?: string }>
       const tokenId = customEvent.detail?.tokenId
-      if (!tokenId) return
+      if (!tokenId || isBlockedTokenId(tokenId)) return
 
       try {
         const details = await fetchTokenDetails(tokenId, chronikClient)
@@ -2366,7 +2388,7 @@ export default function Component() {
           }
 
           if (!shouldUseConfiguredFallback) {
-            etokenDbTokens.forEach((token) => {
+            filterBlockedTokenIds(etokenDbTokens).forEach((token) => {
               const tokenConfig = configuredTokensById.get(token.tokenId)
               upsertBootstrapCandidate({
                 tokenId: token.tokenId,
@@ -2384,6 +2406,10 @@ export default function Component() {
 
           if (shouldUseConfiguredFallback) {
             Object.values(tokens).forEach((tokenConfig: any) => {
+              if (isBlockedTokenId(tokenConfig.tokenId)) {
+                return
+              }
+
               upsertBootstrapCandidate({
                 tokenId: tokenConfig.tokenId,
                 fallbackName: tokenConfig.name,
@@ -2518,6 +2544,7 @@ export default function Component() {
         let etokenDbTokens: Awaited<ReturnType<typeof fetchEtokenDbTopVolumeTokens>> = []
         try {
           etokenDbTokens = await fetchEtokenDbTopVolumeTokens()
+          etokenDbTokens = filterBlockedTokenIds(etokenDbTokens)
           if (etokenDbTokens.length > 0) {
             shouldUseConfiguredFallback = false
             setCachedTopVolumeTokens(etokenDbTokens)
@@ -2793,7 +2820,9 @@ export default function Component() {
   }, [filteredTokens, data])
 
   const sortedData = React.useMemo(() => {
-    const filteredData = data.filter(token => !filteredTokens.has(token.tokenId));
+    const filteredData = data.filter(
+      (token) => !filteredTokens.has(token.tokenId) && !isBlockedTokenId(token.tokenId),
+    );
 
     const sortFunction = (a: Token, b: Token) => {
       if (sortBy === '24h') {
@@ -2865,7 +2894,10 @@ export default function Component() {
   const activeReviewToken = React.useMemo(
     () =>
       activeReviewTokenId
-        ? data.find((token) => token.tokenId === activeReviewTokenId) ?? null
+        ? data.find(
+            (token) =>
+              token.tokenId === activeReviewTokenId && !isBlockedTokenId(token.tokenId),
+          ) ?? null
         : null,
     [activeReviewTokenId, data],
   )

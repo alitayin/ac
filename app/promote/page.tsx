@@ -82,6 +82,7 @@ import {
   estimateTokenBatch,
 } from "@/lib/promote/utils";
 import { tokens as TOKEN_CONFIGS } from "@/config/tokens";
+import { isBlockedTokenId } from "@/lib/blocked-tokens";
 import { cn } from "@/lib/utils";
 
 const TOKEN_ID_PATTERN = /^[0-9a-f]{64}$/;
@@ -251,12 +252,14 @@ export default function PromotePage() {
 
   const configuredTokens = useMemo<ConfiguredToken[]>(
     () =>
-      Object.values(TOKEN_CONFIGS).map((token) => ({
-        tokenId: token.tokenId,
-        name: token.name,
-        symbol: token.symbol,
-        decimals: token.decimals ?? 0,
-      })),
+      Object.values(TOKEN_CONFIGS)
+        .filter((token) => !isBlockedTokenId(token.tokenId))
+        .map((token) => ({
+          tokenId: token.tokenId,
+          name: token.name,
+          symbol: token.symbol,
+          decimals: token.decimals ?? 0,
+        })),
     [],
   );
   const configuredTokenMap = useMemo(
@@ -302,6 +305,17 @@ export default function PromotePage() {
   const [sendTxIds, setSendTxIds] = useState<string[]>([]);
   const [feeTxId, setFeeTxId] = useState("");
   const [historyEntries, setHistoryEntries] = useState<PromoteHistoryEntry[]>([]);
+  const visibleUserTokens = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(userTokens).filter(([tokenId]) => !isBlockedTokenId(tokenId)),
+      ),
+    [userTokens],
+  );
+  const visibleHistoryEntries = useMemo(
+    () => historyEntries.filter((entry) => !isBlockedTokenId(entry.tokenId)),
+    [historyEntries],
+  );
 
   const manualParse = useMemo(
     () => parseManualAddresses(manualAddressesInput),
@@ -365,13 +379,13 @@ export default function PromotePage() {
     }
 
     const cachedDetails = Object.fromEntries(
-      Object.keys(userTokens)
+      Object.keys(visibleUserTokens)
         .map((tokenId) => [tokenId, getCachedTokenDetails(tokenId)] as const)
         .filter((entry): entry is [string, any] => Boolean(entry[1])),
     );
 
     setWalletTokenDetails(cachedDetails);
-  }, [isWalletConnected, userTokens]);
+  }, [isWalletConnected, visibleUserTokens]);
 
   useEffect(() => {
     if (!isWalletConnected || !chronikClient) {
@@ -379,7 +393,7 @@ export default function PromotePage() {
     }
 
     let cancelled = false;
-    const missingTokenIds = Object.keys(userTokens).filter(
+    const missingTokenIds = Object.keys(visibleUserTokens).filter(
       (tokenId) => !walletTokenDetails[tokenId],
     );
 
@@ -416,7 +430,7 @@ export default function PromotePage() {
     return () => {
       cancelled = true;
     };
-  }, [chronikClient, isWalletConnected, userTokens, walletTokenDetails]);
+  }, [chronikClient, isWalletConnected, visibleUserTokens, walletTokenDetails]);
 
   const loadTargetHolders = useCallback(
     async (rawTokenId: string) => {
@@ -430,6 +444,14 @@ export default function PromotePage() {
         setTargetTokenMeta(null);
         setHolderRows([]);
         setHolderLoadError("Token ID must be a 64-character hex string.");
+        return;
+      }
+
+      if (isBlockedTokenId(normalized)) {
+        setLoadedTargetTokenId("");
+        setTargetTokenMeta(null);
+        setHolderRows([]);
+        setHolderLoadError("Token is not available.");
         return;
       }
 
@@ -484,6 +506,12 @@ export default function PromotePage() {
 
   useEffect(() => {
     if (!airdropTokenId || !chronikClient) {
+      setAirdropTokenMeta(null);
+      return;
+    }
+
+    if (isBlockedTokenId(airdropTokenId)) {
+      setAirdropTokenId("");
       setAirdropTokenMeta(null);
       return;
     }
@@ -561,6 +589,10 @@ export default function PromotePage() {
 
         for (const utxo of response?.utxos ?? []) {
           if (utxo.token?.tokenId) {
+            if (isBlockedTokenId(utxo.token.tokenId)) {
+              continue;
+            }
+
             tokenCounts[utxo.token.tokenId] = (tokenCounts[utxo.token.tokenId] ?? 0) + 1;
             continue;
           }
@@ -630,17 +662,21 @@ export default function PromotePage() {
 
   const totalHoldingAtoms = useMemo(() => sumHoldingAtoms(recipients), [recipients]);
   const selectedWalletTokenBalance = useMemo(() => {
+    if (isBlockedTokenId(airdropTokenId)) {
+      return 0n;
+    }
+
     try {
-      return BigInt(userTokens[airdropTokenId] ?? "0");
+      return BigInt(visibleUserTokens[airdropTokenId] ?? "0");
     } catch {
       return 0n;
     }
-  }, [airdropTokenId, userTokens]);
+  }, [airdropTokenId, visibleUserTokens]);
   const xecBalanceSats = useMemo(() => parseDecimalToAtoms(balance, 2) ?? 0n, [balance]);
 
   const walletTokenOptions = useMemo(
     () =>
-      Object.entries(userTokens)
+      Object.entries(visibleUserTokens)
         .map(([tokenId, atoms]) => {
           const tokenDetails = walletTokenDetails[tokenId];
           const tokenConfig = configuredTokenMap.get(tokenId);
@@ -664,7 +700,7 @@ export default function PromotePage() {
 
           return left.balanceAtoms < right.balanceAtoms ? 1 : -1;
         }),
-    [configuredTokenMap, userTokens, walletTokenDetails],
+    [configuredTokenMap, visibleUserTokens, walletTokenDetails],
   );
 
   const targetQuickPicks = useMemo(() => {
@@ -892,6 +928,9 @@ export default function PromotePage() {
       return "Add at least one recipient.";
     }
     if (!airdropTokenId) {
+      return "Choose the token you want to send.";
+    }
+    if (isBlockedTokenId(airdropTokenId)) {
       return "Choose the token you want to send.";
     }
     if (distributionMode === "proportional" && !canUseProportional) {
@@ -1281,13 +1320,13 @@ export default function PromotePage() {
                     </DialogDescription>
                   </DialogHeader>
 
-                  {historyEntries.length === 0 ? (
+                  {visibleHistoryEntries.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-border/70 px-4 py-10 text-center text-sm text-muted-foreground">
                       No send history yet.
                     </div>
                   ) : (
                     <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
-                      {historyEntries.map((entry) => (
+                      {visibleHistoryEntries.map((entry) => (
                         <div
                           key={entry.id}
                           className="rounded-2xl border border-border/70 bg-background/80 p-4"

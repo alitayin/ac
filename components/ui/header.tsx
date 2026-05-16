@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Power,
@@ -48,6 +48,7 @@ import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerI
 import { getSafeExternalUrl } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { isBlockedTokenId } from "@/lib/blocked-tokens";
 import {
   useAddressNotifier,
   useWebSocketStatus as useOrderSyncStatus,
@@ -77,6 +78,13 @@ export default function Header({
   const [currentTheme, setCurrentTheme] = useState<string>("light");
   const [tokenDetails, setTokenDetails] = useState<{[key: string]: any}>({});
   const tokenDetailsRef = useRef<{[key: string]: any}>({});
+  const visibleUserTokens = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(userTokens).filter(([tokenId]) => !isBlockedTokenId(tokenId)),
+      ),
+    [userTokens],
+  );
   useAddressNotifier(isWalletConnected ? ecashAddress || undefined : undefined);
   const isNotifying = useOrderSyncStatus() === "connected";
   const [isLoginDrawerOpen, setIsLoginDrawerOpen] = useState(false);
@@ -135,7 +143,7 @@ export default function Header({
   };
 
   useEffect(() => {
-    if (!isWalletConnected || Object.keys(userTokens).length === 0) return;
+    if (!isWalletConnected || Object.keys(visibleUserTokens).length === 0) return;
     
     const loadCachedDetails = () => {
       try {
@@ -144,7 +152,7 @@ export default function Header({
         
         const cache = JSON.parse(cacheStr);
         const cachedDetails: {[key: string]: any} = {};
-        Object.keys(userTokens).forEach(tokenId => {
+        Object.keys(visibleUserTokens).forEach(tokenId => {
           if (cache[tokenId]) {
             cachedDetails[tokenId] = cache[tokenId];
           }
@@ -159,7 +167,7 @@ export default function Header({
     };
     
     loadCachedDetails();
-  }, [isWalletConnected, userTokens]);
+  }, [isWalletConnected, visibleUserTokens]);
   
   
   useEffect(() => {
@@ -169,9 +177,9 @@ export default function Header({
   
   useEffect(() => {
     const loadTokenDetails = async () => {
-      if (!isWalletConnected || Object.keys(userTokens).length === 0) return;
+      if (!isWalletConnected || Object.keys(visibleUserTokens).length === 0) return;
 
-      for (const tokenId of Object.keys(userTokens)) {
+      for (const tokenId of Object.keys(visibleUserTokens)) {
 
         if (tokenDetailsRef.current[tokenId]) continue;
 
@@ -192,7 +200,7 @@ export default function Header({
 
     loadTokenDetails();
 
-  }, [isWalletConnected, userTokens]);
+  }, [isWalletConnected, visibleUserTokens]);
   useEffect(() => {
 
     const TWELVE_HOURS = 12 * 60 * 60 * 1000;
@@ -482,8 +490,8 @@ export default function Header({
                       <div className="space-y-2">
                         <h3 className="text-sm font-medium text-muted-foreground">eTokens</h3>
                         <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2">
-                          {Object.keys(userTokens).length > 0 ? (
-                            Object.entries(userTokens).map(([tokenId, amount]) => {
+                          {Object.keys(visibleUserTokens).length > 0 ? (
+                            Object.entries(visibleUserTokens).map(([tokenId, amount]) => {
                               const tokenInfo = tokens[tokenId as keyof typeof tokens];
                               const tokenDetail = tokenDetails[tokenId];
                               

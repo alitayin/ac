@@ -9,6 +9,7 @@ import { detectAgoraTokenId } from "@/lib/chronik-transactions"
 import { WsMsgClient } from "chronik-client"
 import { formatNumber } from "@/lib/formatters"
 import { Activity, BadgeCheck } from "lucide-react"
+import { isBlockedTokenId } from "@/lib/blocked-tokens"
 
 type FlowToken = {
   tokenId: string
@@ -97,6 +98,8 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
         if (!token || !token.tokenId) continue
 
         const tokenId = token.tokenId as string
+        if (isBlockedTokenId(tokenId)) continue
+
         try {
           const atoms = BigInt(
             typeof token.atoms !== "undefined"
@@ -126,7 +129,8 @@ export default function RealTimeEtokenFlow({ onCountChange }: RealTimeEtokenFlow
         return
       }
 
-      const isAgora = !!detectAgoraTokenId(tx)
+      const agoraTokenId = detectAgoraTokenId(tx)
+      const isAgora = !!agoraTokenId && !isBlockedTokenId(agoraTokenId)
 
       const tokens: FlowToken[] = Array.from(tokenMap.values()).map((entry) => {
         const precision = Math.min(entry.decimals, 8)
