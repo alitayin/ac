@@ -503,18 +503,18 @@ export default function Header({
                                 >
                                   <CardContent className="p-0">
                                     <div className="flex items-center p-3">
-                                      <Avatar className="h-8 w-8 mr-3">
+                                      <Avatar className="h-8 w-8 mr-3 shrink-0">
                                         <AvatarImage 
                                           src={`https://icons.etokens.cash/32/${tokenId}.png`} 
                                           alt={tokenName} 
                                         />
                                         <AvatarFallback>{tokenSymbol}</AvatarFallback>
                                       </Avatar>
-                                      <div className="flex-1">
-                                        <div className="text-sm font-medium">{tokenName}</div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="truncate text-sm font-medium">{tokenName}</div>
                                         {tokenUrl && (
                                           <div className="text-xs text-blue-500 hover:underline">
-                                            <a href={tokenUrl} target="_blank" rel="noopener noreferrer">
+                                            <a className="block truncate" href={tokenUrl} target="_blank" rel="noopener noreferrer">
                                               {tokenUrl.length > 20 
                                                 ? `${tokenUrl.substring(0, 10)}...${tokenUrl.substring(tokenUrl.length - 7)}` 
                                                 : tokenUrl}
@@ -522,10 +522,10 @@ export default function Header({
                                           </div>
                                         )}
                                         {!tokenUrl && (
-                                          <div className="text-xs text-muted-foreground select-text">{tokenId}</div>
+                                          <div className="truncate text-xs text-muted-foreground select-text">{tokenId}</div>
                                         )}
                                       </div>
-                                      <div className="text-right">
+                                      <div className="shrink-0 text-right">
                                         <div className="text-sm font-medium">{formatTokenAmount(amount, tokenDecimals)}</div>
                                         <div className="text-xs text-muted-foreground">{tokenSymbol}</div>
                                       </div>
