@@ -153,4 +153,30 @@ describe('OrderList UI', () => {
       },
     });
   });
+
+  it('persists dust auto-complete after cloning order objects', async () => {
+    const orderKey = `token1-id|${mockAddress}|100`;
+    localStorage.setItem('swap_orders', JSON.stringify({
+      [orderKey]: {
+        remainingAmount: 0.5,
+        maxPrice: 100,
+        status: 'pending',
+        transactions: [],
+        orderType: 'online',
+        createdAt: '2026-04-20T08:00:00.000Z',
+      },
+    }));
+
+    render(<OrderList ecashAddress={mockAddress} balance={10000} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Token 1')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      const savedOrders = JSON.parse(localStorage.getItem('swap_orders') || '{}');
+      expect(savedOrders[orderKey].status).toBe('completed');
+      expect(savedOrders[orderKey].remainingAmount).toBe(0);
+    });
+  });
 });

@@ -556,6 +556,9 @@ export default function Component() {
   
   const loadingTokens = React.useRef<Set<string>>(new Set())
   const loadingTimeouts = React.useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const loadingRequestIds = React.useRef<Map<string, number>>(new Map())
+  const loadingRequestSequence = React.useRef(0)
+  const loadingAbortControllers = React.useRef<Map<string, AbortController>>(new Map())
   const wsReloadTimeouts = React.useRef<Map<string, NodeJS.Timeout>>(new Map())
   const searchContainerRef = React.useRef<HTMLDivElement | null>(null)
   const filteredTokensRef = React.useRef<Set<string>>(new Set())
@@ -575,6 +578,7 @@ export default function Component() {
   const [failedDataTokens, setFailedDataTokens] = React.useState<Set<string>>(new Set())
   const retryCountRef = React.useRef<Map<string, number>>(new Map())
   const dataRef = React.useRef<TokenTableRow[]>(data)
+  const tokenNameByIdRef = React.useRef<Map<string, string>>(new Map())
   const chainTipHeightRef = React.useRef<number | null>(chainTipHeight)
   const hasRowMarketData = React.useCallback(
     (token: TokenTableRow) => {
@@ -585,7 +589,17 @@ export default function Component() {
 
   React.useEffect(() => {
     dataRef.current = data
+    tokenNameByIdRef.current = new Map(data.map((token) => [token.tokenId, token.name]))
   }, [data])
+
+  const watchedTokenIdsKey = React.useMemo(
+    () => data.map((token) => token.tokenId).join("|"),
+    [data],
+  )
+  const watchedTokenIds = React.useMemo(
+    () => (watchedTokenIdsKey ? watchedTokenIdsKey.split("|") : []),
+    [watchedTokenIdsKey],
+  )
 
   React.useEffect(() => {
     chainTipHeightRef.current = chainTipHeight
@@ -1448,13 +1462,45 @@ export default function Component() {
     }
     
     loadingTokens.current.add(tokenId)
+    const requestId = ++loadingRequestSequence.current
+    loadingRequestIds.current.set(tokenId, requestId)
+    const loadAbortController = new AbortController()
+    loadingAbortControllers.current.set(tokenId, loadAbortController)
+    const isCurrentLoadRequest = () =>
+      !cancelledRef.current &&
+      loadingTokens.current.has(tokenId) &&
+      loadingRequestIds.current.get(tokenId) === requestId
     
     const timeoutId = setTimeout(() => {
+      if (
+        loadingRequestIds.current.get(tokenId) !== requestId ||
+        !loadingTokens.current.has(tokenId)
+      ) {
+        return
+      }
+
       loadingTokens.current.delete(tokenId)
       loadingTimeouts.current.delete(tokenId)
-      
+      loadAbortController.abort()
+      loadingAbortControllers.current.delete(tokenId)
+
       if (!cancelledRef.current) {
-        loadTokenStatsRef.current?.(tokenId, name, options)
+        setFailedDataTokens((prev) => {
+          const next = new Set(prev)
+          next.add(tokenId)
+          return next
+        })
+        setErrorTokens((prev) => {
+          const next = new Set(prev)
+          next.add(tokenId)
+          return next
+        })
+        setLoadedTokens((prev) => {
+          if (prev.has(tokenId)) return prev
+          const next = new Set(prev)
+          next.add(tokenId)
+          return next
+        })
       }
     }, 30000)
     
@@ -1475,7 +1521,7 @@ export default function Component() {
       if (summaryCacheValid) {
         const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
         const customTokens = getCustomTokens()
-        if (!cancelledRef.current) {
+        if (isCurrentLoadRequest()) {
           applyTokenUpdate(tokenId, {
             ...summaryCached.data,
             name,
@@ -1505,6 +1551,9 @@ export default function Component() {
           etokenDbSummary = await fetchEtokenDbTokenSummary(tokenId, {
             chronikClient: activeChronik,
           })
+          if (!isCurrentLoadRequest()) {
+            return
+          }
           setLargeDatasetTokens((prev) => {
             if (!prev.has(tokenId)) return prev
             const next = new Set(prev)
@@ -1512,8 +1561,15 @@ export default function Component() {
             return next
           })
         } catch (err) {
+          if (!isCurrentLoadRequest()) {
+            return
+          }
           console.error(`[etokendb Fetch Error] Token: ${name}, error:`, err)
         }
+      }
+
+      if (!isCurrentLoadRequest()) {
+        return
       }
 
       const currentToken = dataRef.current.find((token) => token.tokenId === tokenId)
@@ -1579,6 +1635,9 @@ export default function Component() {
       if (typeof effectiveTipHeight !== "number") {
         try {
           const info = await fetchBlockchainInfo(activeChronik)
+          if (!isCurrentLoadRequest()) {
+            return
+          }
           if (typeof info?.tipHeight === "number") {
             effectiveTipHeight = info.tipHeight
             chainTipHeightRef.current = info.tipHeight
@@ -1624,10 +1683,14 @@ export default function Component() {
                   ? Math.max(effectiveTipHeight - BLOCKS_PER_DAY, 0)
                   : undefined,
               failOnError: true,
+              signal: loadAbortController.signal,
             },
             activeChronik,
           )
         } catch (err) {
+          if (!isCurrentLoadRequest()) {
+            return
+          }
           console.error(`[24h Fetch Error] Token: ${name}, error:`, err)
 
           if (etokenDbSummary) {
@@ -1653,14 +1716,10 @@ export default function Component() {
               setTimeout(() => {
                 if (
                   !cancelledRef.current &&
+                  loadingRequestIds.current.get(tokenId) === requestId &&
+                  !loadingTokens.current.has(tokenId) &&
                   (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
                 ) {
-                  loadingTokens.current.delete(tokenId)
-                  const timeoutId = loadingTimeouts.current.get(tokenId)
-                  if (timeoutId) {
-                    clearTimeout(timeoutId)
-                    loadingTimeouts.current.delete(tokenId)
-                  }
                   loadTokenStatsRef.current?.(tokenId, name, options)
                 }
               }, 3000)
@@ -1696,6 +1755,10 @@ export default function Component() {
         }
       }
 
+      if (!isCurrentLoadRequest()) {
+        return
+      }
+
       let latestTx: Transaction[] = []
       if (needsChronikLatestTx) {
         try {
@@ -1706,10 +1769,14 @@ export default function Component() {
               targetCount: 1,
               pageSize: 50,
               failOnError: true,
+              signal: loadAbortController.signal,
             },
             activeChronik,
           )
         } catch (err) {
+          if (!isCurrentLoadRequest()) {
+            return
+          }
           if (!fetchError && !etokenDbSummary) {
             console.error(`[Latest Tx Fetch Error] Token: ${name}, error:`, err)
 
@@ -1729,14 +1796,10 @@ export default function Component() {
               setTimeout(() => {
                 if (
                   !cancelledRef.current &&
+                  loadingRequestIds.current.get(tokenId) === requestId &&
+                  !loadingTokens.current.has(tokenId) &&
                   (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
                 ) {
-                  loadingTokens.current.delete(tokenId)
-                  const timeoutId = loadingTimeouts.current.get(tokenId)
-                  if (timeoutId) {
-                    clearTimeout(timeoutId)
-                    loadingTimeouts.current.delete(tokenId)
-                  }
                   loadTokenStatsRef.current?.(tokenId, name, options)
                 }
               }, 3000)
@@ -1774,6 +1837,10 @@ export default function Component() {
             )
           }
         }
+      }
+
+      if (!isCurrentLoadRequest()) {
+        return
       }
 
       const {
@@ -1838,7 +1905,7 @@ export default function Component() {
               const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
               const customTokens = getCustomTokens()
 
-              if (!cancelledRef.current) {
+              if (isCurrentLoadRequest()) {
                 applyTokenUpdate(tokenId, {
                   tokenId,
                   name,
@@ -1904,6 +1971,7 @@ export default function Component() {
                     ? Math.max(effectiveTipHeight - BLOCKS_PER_7_DAYS, 0)
                     : undefined,
                 failOnError: true,
+                signal: loadAbortController.signal,
               },
               activeChronik
             )
@@ -1920,7 +1988,7 @@ export default function Component() {
               const tokenConfig = Object.values(tokens).find((t) => t.tokenId === tokenId)
               const customTokens = getCustomTokens()
 
-              if (!cancelledRef.current) {
+              if (isCurrentLoadRequest()) {
                 applyTokenUpdate(tokenId, {
                   tokenId,
                   name,
@@ -1976,6 +2044,9 @@ export default function Component() {
             // Clear retry count on success
             retryCountRef.current.delete(retry7dKey)
           } catch (err) {
+            if (!isCurrentLoadRequest()) {
+              return
+            }
             console.error(`[7D Fetch Error] Token: ${name}, error:`, err)
 
             const currentRetryCount = retryCountRef.current.get(retry7dKey) || 0
@@ -1994,14 +2065,10 @@ export default function Component() {
               setTimeout(() => {
                 if (
                   !cancelledRef.current &&
+                  loadingRequestIds.current.get(tokenId) === requestId &&
+                  !loadingTokens.current.has(tokenId) &&
                   (options?.ignoreFilter || !filteredTokensRef.current.has(tokenId))
                 ) {
-                  loadingTokens.current.delete(tokenId)
-                  const timeoutId = loadingTimeouts.current.get(tokenId)
-                  if (timeoutId) {
-                    clearTimeout(timeoutId)
-                    loadingTimeouts.current.delete(tokenId)
-                  }
                   loadTokenStatsRef.current?.(tokenId, name, options)
                 }
               }, 3000)
@@ -2078,11 +2145,11 @@ export default function Component() {
         watchlist: customTokens.includes(tokenId),
       }
 
-      if (!cancelledRef.current) {
+      if (isCurrentLoadRequest()) {
         applyTokenUpdate(tokenId, tokenSnapshot)
       }
 
-      if (!fetchError && !cancelledRef.current) {
+      if (!fetchError && isCurrentLoadRequest()) {
         setCachedTokenData(tokenId, {
           computedAt: savedAt,
           latestProcessedHeight: latestProcessedHeight || 0,
@@ -2109,7 +2176,7 @@ export default function Component() {
         retryCountRef.current.delete(retry7dKey)
       }
 
-      if (!cancelledRef.current) {
+      if (isCurrentLoadRequest()) {
         setLoadedTokens((prev) => {
           if (prev.has(tokenId)) return prev
           const next = new Set(prev)
@@ -2127,13 +2194,15 @@ export default function Component() {
         }
       }
     } finally {
-      const timeoutId = loadingTimeouts.current.get(tokenId)
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-        loadingTimeouts.current.delete(tokenId)
+      if (loadingRequestIds.current.get(tokenId) === requestId) {
+        const timeoutId = loadingTimeouts.current.get(tokenId)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          loadingTimeouts.current.delete(tokenId)
+        }
+        loadingAbortControllers.current.delete(tokenId)
+        loadingTokens.current.delete(tokenId)
       }
-      
-      loadingTokens.current.delete(tokenId)
     }
   }, [applyTokenUpdate, chronikClient])
 
@@ -2330,6 +2399,7 @@ export default function Component() {
     let isCancelled = false
     const loadingTimeoutsForEffect = loadingTimeouts.current
     const loadingTokensForEffect = loadingTokens.current
+    const loadingAbortControllersForEffect = loadingAbortControllers.current
 
     cancelledRef.current = false
     setIsLocalFallbackMode(false)
@@ -2703,6 +2773,10 @@ export default function Component() {
         clearTimeout(timeoutId)
       })
       loadingTimeoutsForEffect.clear()
+      loadingAbortControllersForEffect.forEach((controller) => {
+        controller.abort()
+      })
+      loadingAbortControllersForEffect.clear()
       loadingTokensForEffect.clear()
     }
   }, [applyTokenUpdate, chronikClient, isChronikLoading, recordTokenAuthPubkey, refreshNonce])
@@ -2712,13 +2786,16 @@ export default function Component() {
       return
     }
 
-    const tokenIds = data.map((t) => t.tokenId)
-    const unsubscribe = watchAgoraTokens(tokenIds, (tokenId) => {
+    if (watchedTokenIds.length === 0) {
+      return
+    }
+
+    const unsubscribe = watchAgoraTokens(watchedTokenIds, (tokenId) => {
       if (cancelledRef.current) return
       if (filteredTokensRef.current.has(tokenId)) return
 
       const name =
-        data.find((t) => t.tokenId === tokenId)?.name ||
+        tokenNameByIdRef.current.get(tokenId) ||
         Object.values(tokens).find((t) => t.tokenId === tokenId)?.name ||
         tokenId.substring(0, 6)
 
@@ -2752,7 +2829,7 @@ export default function Component() {
     return () => {
       unsubscribe()
     }
-  }, [chronikClient, data, isChronikLoading])
+  }, [chronikClient, isChronikLoading, watchedTokenIds, watchedTokenIdsKey])
 
   React.useEffect(() => {
     if (filterOption === 'all') {

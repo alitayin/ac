@@ -162,7 +162,7 @@ export function OrderList({ ecashAddress, balance = 0 }: OrderListProps) {
 
         // Only show orders for the connected wallet
         if (address === ecashAddress) {
-          const order = orderData as Order;
+          const order = { ...(orderData as Order) };
           
           // Add extra metadata to the order object
           order.tokenId = tokenId;

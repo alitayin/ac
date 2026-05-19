@@ -20,6 +20,7 @@ import {
 } from "ecash-quicksend";
 
 import { getTokenAmountFromToken } from "@/lib/chronik";
+export { parseDecimalToAtoms } from "@/lib/decimal";
 import type {
   AudienceSourceMode,
   BatchPlan,
@@ -97,38 +98,6 @@ export const formatSatsAsXec = (value: bigint): string => {
     .toString()
     .padStart(2, "0")
     .replace(/0+$/, "")}`;
-};
-
-export const parseDecimalToAtoms = (
-  value: string,
-  decimals: number,
-): bigint | null => {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  if (!/^\d+(\.\d+)?$/.test(trimmed)) {
-    return null;
-  }
-
-  const [integerPart, fractionPart = ""] = trimmed.split(".");
-
-  if (fractionPart.length > decimals) {
-    return null;
-  }
-
-  const normalizedFraction = `${fractionPart}${"0".repeat(decimals)}`.slice(
-    0,
-    decimals,
-  );
-
-  try {
-    return BigInt(`${integerPart}${normalizedFraction}`);
-  } catch {
-    return null;
-  }
 };
 
 export const normalizeAddress = (value: string): string =>

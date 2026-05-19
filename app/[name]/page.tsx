@@ -106,8 +106,36 @@ export default function TokenPage() {
   const [orderBook, setOrderBook] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<'trading' | 'orderbook' | 'address' | 'comments'>('trading');
   const [chronikTokenInfo, setChronikTokenInfo] = useState<any>(null)
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return true
+    }
+
+    return window.matchMedia("(min-width: 1024px)").matches
+  })
   
   const isLoadingStats = useRef<boolean>(false)
+  const shouldShowSidebarOrderBook = isDesktopViewport && activeTab !== 'orderbook'
+  const shouldFetchOrderBook = activeTab === 'orderbook' || shouldShowSidebarOrderBook
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return
+    }
+
+    const mediaQuery = window.matchMedia("(min-width: 1024px)")
+    const updateViewport = () => setIsDesktopViewport(mediaQuery.matches)
+
+    updateViewport()
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updateViewport)
+      return () => mediaQuery.removeEventListener("change", updateViewport)
+    }
+
+    mediaQuery.addListener(updateViewport)
+    return () => mediaQuery.removeListener(updateViewport)
+  }, [])
 
   const rawName = params.name.toString();
   let decodedName: string;
@@ -294,7 +322,7 @@ export default function TokenPage() {
             const result = await getTokenSupply(tokenData.tokenId)
             setSupply(result)
           })(),
-          fetchOrderBook()
+          shouldFetchOrderBook ? fetchOrderBook() : Promise.resolve()
         ])
       } catch {
       }
@@ -304,7 +332,7 @@ export default function TokenPage() {
     const interval = setInterval(fetchData, 30000)
     
     return () => clearInterval(interval)
-  }, [fetchOrderBook, hasValidRoute, loadTokenStats, tokenData.tokenId, tokenData.name])
+  }, [fetchOrderBook, hasValidRoute, loadTokenStats, shouldFetchOrderBook, tokenData.tokenId, tokenData.name])
 
   useEffect(() => {
     if (!hasValidRoute || !tokenData.tokenId) {
@@ -493,9 +521,9 @@ export default function TokenPage() {
               </h2>
             </div>
 
-            <div className={activeTab === 'trading' ? 'block' : 'hidden'}>
+            {activeTab === 'trading' ? (
               <TokenTx tokenId={tokenData.tokenId} className="shadow-none"/>
-            </div>
+            ) : null}
             {activeTab === 'orderbook' ? (
               <ErrorBoundary>
               <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} className="shadow-none" />
@@ -547,7 +575,7 @@ export default function TokenPage() {
             </div>
           )}
 
-          {activeTab !== 'orderbook' && (
+          {shouldShowSidebarOrderBook && (
             <div className="hidden lg:block">
               <ErrorBoundary>
                 <OrderBook orderBook={orderBook} tokenId={tokenData.tokenId} latestPrice={stats?.latestPrice || 0} className="shadow-none" />

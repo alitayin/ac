@@ -18,6 +18,10 @@ import {
 } from "@/lib/constants"
 import type { Order, OrderBookProps, BuyOrderResponse } from "@/lib/types"
 
+const BUY_ORDER_REQUEST_TIMEOUT_MS = 7000;
+const BUY_ORDER_INITIAL_BACKOFF_MS = 15000;
+const BUY_ORDER_MAX_BACKOFF_MS = 60000;
+
 export default function OrderBook({ orderBook, className = "", tokenId, latestPrice = 0 }: OrderBookProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showZoomButton, setShowZoomButton] = useState(false);
@@ -27,52 +31,133 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
   const collapsedAskRef = useRef<HTMLDivElement>(null);
   const collapsedBidRef = useRef<HTMLDivElement>(null);
   const xecPrice = useXECPrice();
+  const mountedRef = useRef(true);
+  const inFlightBuyOrdersRef = useRef<Promise<void> | null>(null);
+  const activeBuyOrdersAbortRef = useRef<AbortController | null>(null);
+  const buyOrdersBackoffRef = useRef({
+    until: 0,
+    delay: BUY_ORDER_INITIAL_BACKOFF_MS,
+  });
 
-  const fetchBuyOrders = useCallback(async () => {
-    try {
-      const data: BuyOrderResponse = await fetchTokenOrders(tokenId);
-      
-      let formattedOrders: Order[] = [];
+  useEffect(() => {
+    mountedRef.current = true;
 
-      if (!data.error && data.orders) {
-        formattedOrders = data.orders
-          .filter((order) => order.remainingAmount > 0)
-          .map((order) => ({
-            price: order.maxPrice,
-            amount: order.remainingAmount,
-            total: Number((order.maxPrice * order.remainingAmount).toFixed(2)),
-          }));
-      }
+    return () => {
+      mountedRef.current = false;
+      activeBuyOrdersAbortRef.current?.abort();
+      activeBuyOrdersAbortRef.current = null;
+      inFlightBuyOrdersRef.current = null;
+    };
+  }, []);
 
-      if (tokenId === TOKEN_IDS.SPARK) {
-        formattedOrders.push({
-          price: 1,
-          amount: 10000000000,
-          total: 10000000000
-        });
-      }
-      
-      setBuyOrders(formattedOrders);
-    } catch (error) {
-      console.error('Error fetching buy orders:', error);
-
-      // Even on request failure, keep the Spark page hint bid
-      if (tokenId === TOKEN_IDS.SPARK) {
-        setBuyOrders([{
-          price: 1,
-          amount: 10000000000,
-          total: 10000000000
-        }]);
-      } else {
-        setBuyOrders([]);
-      }
+  const fetchBuyOrders = useCallback((options: { force?: boolean } = {}) => {
+    if (inFlightBuyOrdersRef.current) {
+      return inFlightBuyOrdersRef.current;
     }
+
+    if (!options.force && Date.now() < buyOrdersBackoffRef.current.until) {
+      return Promise.resolve();
+    }
+
+    const controller = new AbortController();
+    activeBuyOrdersAbortRef.current = controller;
+    let didTimeout = false;
+    let request: Promise<void> | null = null;
+    const timeoutId = setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, BUY_ORDER_REQUEST_TIMEOUT_MS);
+
+    request = (async () => {
+      try {
+        const data: BuyOrderResponse = await fetchTokenOrders(tokenId, {
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted || !mountedRef.current) {
+          return;
+        }
+
+        let formattedOrders: Order[] = [];
+
+        if (!data.error && data.orders) {
+          formattedOrders = data.orders
+            .filter((order) => order.remainingAmount > 0)
+            .map((order) => ({
+              price: order.maxPrice,
+              amount: order.remainingAmount,
+              total: Number((order.maxPrice * order.remainingAmount).toFixed(2)),
+            }));
+        }
+
+        if (tokenId === TOKEN_IDS.SPARK) {
+          formattedOrders.push({
+            price: 1,
+            amount: 10000000000,
+            total: 10000000000
+          });
+        }
+
+        setBuyOrders(formattedOrders);
+        buyOrdersBackoffRef.current = {
+          until: 0,
+          delay: BUY_ORDER_INITIAL_BACKOFF_MS,
+        };
+      } catch (error) {
+        if ((controller.signal.aborted && !didTimeout) || !mountedRef.current) {
+          return;
+        }
+
+        console.error(
+          didTimeout
+            ? `Buy orders request timed out after ${BUY_ORDER_REQUEST_TIMEOUT_MS}ms`
+            : 'Error fetching buy orders:',
+          error,
+        );
+
+        // Even on request failure, keep the Spark page hint bid
+        if (tokenId === TOKEN_IDS.SPARK) {
+          setBuyOrders([{
+            price: 1,
+            amount: 10000000000,
+            total: 10000000000
+          }]);
+        } else {
+          setBuyOrders([]);
+        }
+
+        const delay = buyOrdersBackoffRef.current.delay;
+        buyOrdersBackoffRef.current = {
+          until: Date.now() + delay,
+          delay: Math.min(delay * 2, BUY_ORDER_MAX_BACKOFF_MS),
+        };
+      } finally {
+        clearTimeout(timeoutId);
+        if (activeBuyOrdersAbortRef.current === controller) {
+          activeBuyOrdersAbortRef.current = null;
+        }
+        if (request && inFlightBuyOrdersRef.current === request) {
+          inFlightBuyOrdersRef.current = null;
+        }
+      }
+    })();
+
+    inFlightBuyOrdersRef.current = request;
+    return request;
   }, [tokenId]);
 
   useEffect(() => {
-    fetchBuyOrders();
-    const interval = setInterval(fetchBuyOrders, UPDATE_INTERVALS.TEN_SECONDS);
-    return () => clearInterval(interval);
+    void fetchBuyOrders({ force: true });
+    const interval = setInterval(() => {
+      void fetchBuyOrders();
+    }, UPDATE_INTERVALS.TEN_SECONDS);
+
+    return () => {
+      clearInterval(interval);
+      activeBuyOrdersAbortRef.current?.abort();
+      activeBuyOrdersAbortRef.current = null;
+      inFlightBuyOrdersRef.current = null;
+    };
   }, [fetchBuyOrders]);
 
   // Keep collapsed lists scrolled to bottom to show lowest ask / highest bid by default

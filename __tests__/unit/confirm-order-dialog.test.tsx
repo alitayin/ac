@@ -7,7 +7,6 @@ describe("ConfirmOrderDialog", () => {
   const baseProps = {
     open: true,
     onOpenChange: vi.fn(),
-    isOfflineOrder: false,
     selectedToken: {
       id: "token-id-1",
       name: "StarShard",
@@ -36,10 +35,10 @@ describe("ConfirmOrderDialog", () => {
     expect(screen.getByRole("button", { name: /^confirm order$/i })).toBeInTheDocument();
   });
 
-  it("still shows custodial badge when offline order is enabled", () => {
-    render(<ConfirmOrderDialog {...baseProps} isOfflineOrder />);
+  it("shows the self-custody badge", () => {
+    render(<ConfirmOrderDialog {...baseProps} />);
 
-    expect(screen.getAllByText("Custodial").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Self-Custody").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /^confirm order$/i })).toBeInTheDocument();
   });
 

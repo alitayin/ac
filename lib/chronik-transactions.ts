@@ -231,6 +231,7 @@ interface FetchOptions {
   maxBlocksBack?: number
   stopBelowHeight?: number
   failOnError?: boolean
+  signal?: AbortSignal
 }
 
 
@@ -247,8 +248,18 @@ export const fetchAgoraTransactionsFromChronik = async (
   const maxBlocksBack = options.maxBlocksBack
   const stopBelowHeight = options.stopBelowHeight
   const failOnError = options.failOnError ?? false
+  const signal = options.signal
+  const throwIfAborted = () => {
+    if (signal?.aborted) {
+      const error = new Error("Aborted")
+      error.name = "AbortError"
+      throw error
+    }
+  }
 
+  throwIfAborted()
   const decimals = await getTokenDecimals(tokenId, client)
+  throwIfAborted()
   const divisor = Math.pow(10, decimals || 0)
 
   const result: TransactionWithStatus[] = []
@@ -258,10 +269,12 @@ export const fetchAgoraTransactionsFromChronik = async (
 
   for (let page = 0; ; page++) {
     try {
+      throwIfAborted()
       const history = await (activeChronik.tokenId(tokenId) as any).history(
         page,
         pageSize,
       )
+      throwIfAborted()
       const txs = history?.txs || []
 
       const batch: TransactionWithStatus[] = []
@@ -328,4 +341,3 @@ export const fetchAgoraTransactionsFromChronik = async (
 
   return result.sort((a, b) => b.timestamp - a.timestamp)
 }
-

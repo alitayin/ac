@@ -428,6 +428,85 @@ describe('Auto.js', () => {
       );
     });
 
+    it('canonicalizes decimal order amounts before buying and rounds the stored remainder', async () => {
+      const { chronik } = await import('@/lib/chronik.ts');
+
+      vi.mocked(chronik.token).mockResolvedValue({
+        genesisInfo: {
+          decimals: 6,
+          tokenTicker: 'TEST',
+          tokenName: 'Test Token',
+        },
+      });
+
+      buyMainMock.mockResolvedValue({
+        success: true,
+        txid: 'tx-decimal',
+        actualAmount: 0.1,
+        networkFee: 0,
+        swapFee: 0,
+        totalFees: 0,
+        totalXECPaid: 10,
+        transactions: [
+          {
+            txid: 'tx-decimal',
+            amount: 0.1,
+            networkFee: 0,
+            swapFee: 0,
+            totalFees: 0,
+            totalXECPaid: 10,
+          },
+        ],
+      });
+
+      localStorage.getItem.mockImplementation((key) => {
+        if (key === 'swap_orders') {
+          return JSON.stringify({
+            'unknown-decimal-token|addr1|100|rand1': {
+              remainingAmount: 0.30000000000000004,
+              maxPrice: 1000,
+              status: 'pending',
+              orderType: 'online',
+              transactions: [],
+            },
+          });
+        }
+
+        if (key === 'wallet_address') {
+          return 'addr1';
+        }
+
+        if (key === 'wallet_mnemonic') {
+          return 'seed phrase';
+        }
+
+        return null;
+      });
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ success: true }),
+      });
+
+      await processOrders();
+
+      expect(buyMainMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tokenId: 'unknown-decimal-token',
+          tokenDecimals: 6,
+          amount: '0.300000',
+        }),
+      );
+
+      const swapOrdersWrite = vi.mocked(localStorage.setItem).mock.calls.find(
+        ([key]) => key === 'swap_orders',
+      );
+      expect(swapOrdersWrite).toBeDefined();
+
+      const savedOrders = JSON.parse(swapOrdersWrite?.[1] || '{}');
+      expect(savedOrders['unknown-decimal-token|addr1|100|rand1'].remainingAmount).toBe(0.2);
+    });
+
     it('does not wait for server sync requests before releasing the execution promise', async () => {
       vi.useFakeTimers();
 

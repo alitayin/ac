@@ -19,7 +19,6 @@ import { useToast } from "@/hooks/use-toast";
 import { OrderList } from "@/components/ui/orderlist";
 import { ListingList } from "@/components/ui/listinglist";
 import { queueOrdersSync } from '@/lib/Auto.js';
-import { main as createOfflineBuyTransaction } from '@/lib/offlinebuy.js';
 import Image from "next/image";
 import {
   Tooltip,
@@ -139,7 +138,6 @@ export function SwapPanel({
   const [sweepTokenCostXec, setSweepTokenCostXec] = useState<number>(0);
   const [sweepQuoteVersion, setSweepQuoteVersion] = useState<number>(0);
   const [totalTokensBought, setTotalTokensBought] = useState<number>(0);
-  const [isOfflineOrder, setIsOfflineOrder] = useState<boolean>(false);
   const [showProPanel, setShowProPanel] = useState<boolean>(false);
   const [orderBook, setOrderBook] = useState<{ orders: any[] }>({ orders: [] });
   const [selectedTokenDecimals, setSelectedTokenDecimals] = useState<number>(0);
@@ -865,27 +863,6 @@ export function SwapPanel({
       return;
     }
 
-    if (isOfflineOrder) {
-      const existingOrders = readSwapOrders();
-      const hasActiveCustodialOrder = Object.keys(existingOrders).some(orderKey => {
-        const parts = orderKey.split('|');
-        const address = parts[1];
-        const order = existingOrders[orderKey];
-        return address === ecashAddress && 
-               order.orderType === 'offline' && 
-               order.status === 'pending';
-      });
-
-      if (hasActiveCustodialOrder) {
-        toast({
-          title: "Custodial order limit reached",
-          description: "During beta testing, only one active custodial buy order is allowed per wallet",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
     const exactReceiveAmount = parseFloat(receiveAmount);
 
     const orderKey = createSwapOrderKey(selectedToken.id, ecashAddress, orderMaxPrice);
@@ -897,14 +874,12 @@ export function SwapPanel({
       orderType: string;
       transactions: any[];
       createdAt: string;
-      raw?: string;
-      selectedUtxos?: any[];
       tokenCostCapXec?: number;
     } = {
       remainingAmount: exactReceiveAmount,
       maxPrice: orderMaxPrice,
       status: "pending",
-      orderType: isOfflineOrder ? "offline" : "online",
+      orderType: "online",
       transactions: [],
       createdAt: new Date().toISOString()
     };
@@ -913,55 +888,9 @@ export function SwapPanel({
       orderData.tokenCostCapXec = estimatedFeeSummary.tokenCostXec;
     }
 
-    if (isOfflineOrder) {
-      try {
-        const walletMnemonic = localStorage.getItem('wallet_mnemonic');
-        if (!walletMnemonic) {
-          throw new Error('Wallet mnemonic not found');
-        }
-
-        const proxyBuyAmount = orderMaxPrice * exactReceiveAmount;
-        const config = {
-          amount: proxyBuyAmount,
-          maxPrice: 1.0000,
-          tokenId: 'd047864a5e17cc12fa784704e83d39a69443bf6029acf3afb8babd9379acd7a3',
-          tokenDecimals: 2,
-          buyerMnemonic: walletMnemonic,
-          buyerAddress: ecashAddress
-        };
-
-        const transactionResult = await createOfflineBuyTransaction(config);
-
-        if (transactionResult.success && 'rawTxHex' in transactionResult && transactionResult.rawTxHex) {
-          orderData.raw = transactionResult.rawTxHex;
-          if ('selectedUtxos' in transactionResult && transactionResult.selectedUtxos) {
-            orderData.selectedUtxos = transactionResult.selectedUtxos;
-          }
-
-          toast({
-            title: "✅ Offline transaction created",
-            description: `Raw transaction hash generated and saved to order. Check console for details.`,
-          });
-        } else {
-          throw new Error(transactionResult.message || 'Failed to create offline transaction');
-        }
-             } catch (error) {
-         console.error('❌ Failed to create offline transaction:', error);
-         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-         toast({
-           title: "Failed to create offline transaction",
-           description: errorMessage,
-           variant: "destructive",
-         });
-         return;
-       }
-    }
-
     const existingOrders = saveSwapOrder(orderKey, orderData, "created");
 
-    if (!isOfflineOrder) {
-      executeOrders().catch(() => {});
-    }
+    executeOrders().catch(() => {});
     
     void queueOrdersSync(existingOrders, ecashAddress).then((synced) => {
       if (synced) {
@@ -983,12 +912,10 @@ export function SwapPanel({
     
     startOrdersRainbowEffect();
     
-    if (!isOfflineOrder) {
-      toast({
-        title: "✅ Order created successfully",
-        description: `You have successfully created a purchase order for ${exactReceiveAmount} ${selectedToken.name}. Agora will check current sell orders immediately.`,
-      });
-    }
+    toast({
+      title: "✅ Order created successfully",
+      description: `You have successfully created a purchase order for ${exactReceiveAmount} ${selectedToken.name}. Agora will check current sell orders immediately.`,
+    });
   };
 
   const handleConfirmClick = async () => {
@@ -1077,8 +1004,6 @@ export function SwapPanel({
       });
       return;
     }
-    
-    setIsOfflineOrder(false);
     
     setIsConfirmDialogOpen(true);
   };
@@ -1507,7 +1432,6 @@ export function SwapPanel({
                   <ConfirmOrderDialog
                     open={isConfirmDialogOpen}
                     onOpenChange={setIsConfirmDialogOpen}
-                    isOfflineOrder={isOfflineOrder}
                     selectedToken={selectedToken}
                     receiveAmount={receiveAmount}
                     spendAmount={spendAmount}

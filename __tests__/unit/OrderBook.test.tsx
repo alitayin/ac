@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import OrderBook from '@/components/ui/OrderBook'
 
@@ -35,7 +35,12 @@ describe('OrderBook Performance Optimization', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
     vi.mocked(fetchTokenOrders).mockResolvedValue(mockBuyOrders)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('should render order book with correct ask prices', async () => {
@@ -68,7 +73,12 @@ describe('OrderBook Performance Optimization', () => {
     )
 
     await waitFor(() => {
-      expect(fetchTokenOrders).toHaveBeenCalledWith('test-token-id')
+      expect(fetchTokenOrders).toHaveBeenCalledWith(
+        'test-token-id',
+        expect.objectContaining({
+          signal: expect.any(Object),
+        }),
+      )
     })
 
     // Verify bid prices are displayed after fetch
@@ -186,5 +196,62 @@ describe('OrderBook Performance Optimization', () => {
 
     // The component should identify that 150 >= 100 (lowestAsk) is abnormal
     // This verifies the abnormal price detection logic remains correct
+  })
+
+  it('should dedupe overlapping buy order polls for the same token', async () => {
+    vi.useFakeTimers()
+    vi.mocked(fetchTokenOrders).mockImplementation(() => new Promise(() => {}))
+
+    render(
+      <OrderBook
+        orderBook={mockOrderBook}
+        tokenId="test-token-id"
+        latestPrice={100}
+      />
+    )
+
+    expect(fetchTokenOrders).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(30000)
+
+    expect(fetchTokenOrders).toHaveBeenCalledTimes(1)
+  })
+
+  it('should back off after timed-out buy order polls', async () => {
+    vi.useFakeTimers()
+    vi.mocked(fetchTokenOrders).mockImplementation((_tokenId, options) =>
+      new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => {
+          const error = new Error('Aborted')
+          error.name = 'AbortError'
+          reject(error)
+        })
+      }),
+    )
+
+    render(
+      <OrderBook
+        orderBook={mockOrderBook}
+        tokenId="test-token-id"
+        latestPrice={100}
+      />
+    )
+
+    expect(fetchTokenOrders).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(7000)
+    await Promise.resolve()
+
+    expect(fetchTokenOrders).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(13000)
+    await Promise.resolve()
+
+    expect(fetchTokenOrders).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(10000)
+    await Promise.resolve()
+
+    expect(fetchTokenOrders).toHaveBeenCalledTimes(2)
   })
 })

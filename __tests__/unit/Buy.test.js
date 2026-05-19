@@ -409,6 +409,97 @@ describe('Buy.js', () => {
       );
     });
 
+    it('should parse decimal string amounts exactly', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          totalTokenAmount: 1234567n,
+          totalXEC: 123.4567,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
+        success: true,
+        txid: 'string-amount',
+        actualAmount: 1234567n,
+        totalXECPaid: 133.4567,
+        pricePerToken: 0.0001,
+        networkFee: 10,
+        swapFeePaid: 0,
+      });
+
+      const result = await main({
+        tokenId: 'token-string-amount',
+        tokenDecimals: 6,
+        amount: '1.234567',
+        maxPrice: 100,
+        buyerAddress: 'ecash:test',
+        buyerMnemonic: 'test mnemonic',
+      });
+
+      expect(result.success).toBe(true);
+      expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          amount: 1234567n,
+        }),
+      );
+    });
+
+    it('should expand scientific notation amounts before parsing', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer({
+          totalTokenAmount: 1n,
+          totalXEC: 0.00000001,
+        }),
+      ]);
+      vi.mocked(ecashQuicksend.acceptAgoraOffer).mockResolvedValue({
+        success: true,
+        txid: 'scientific-amount',
+        actualAmount: 1n,
+        totalXECPaid: 0.00000002,
+        pricePerToken: 0.00000001,
+        networkFee: 0,
+        swapFeePaid: 0,
+      });
+
+      const result = await main({
+        tokenId: 'token-scientific-amount',
+        tokenDecimals: 8,
+        amount: 1e-8,
+        maxPrice: 1,
+        buyerAddress: 'ecash:test',
+        buyerMnemonic: 'test mnemonic',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.actualAmount).toBe(1e-8);
+      expect(ecashQuicksend.acceptAgoraOffer).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          amount: 1n,
+        }),
+      );
+    });
+
+    it('should reject amounts with more precision than the token supports', async () => {
+      vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
+        buildOffer(),
+      ]);
+
+      const result = await main({
+        tokenId: 'token-too-precise',
+        tokenDecimals: 6,
+        amount: '1.2345678',
+        maxPrice: 100,
+        buyerAddress: 'ecash:test',
+        buyerMnemonic: 'test mnemonic',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.reason).toBe('INVALID_INPUT');
+      expect(result.message).toContain('Invalid amount');
+      expect(ecashQuicksend.acceptAgoraOffer).not.toHaveBeenCalled();
+    });
+
     it('should handle missing tokenDecimals (default to 0)', async () => {
       vi.mocked(ecashQuicksend.fetchAgoraOffers).mockResolvedValue([
         buildOffer({

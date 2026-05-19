@@ -20,7 +20,6 @@ import Image from "next/image";
 interface ConfirmOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  isOfflineOrder: boolean;
   selectedToken: { id: string; name: string };
   receiveAmount: string;
   spendAmount: string;
@@ -76,7 +75,6 @@ function BreakdownRow({
 export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   open,
   onOpenChange,
-  isOfflineOrder,
   selectedToken,
   receiveAmount,
   spendAmount,
@@ -91,7 +89,6 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   onClose,
   onConfirm,
 }) => {
-  const custodyLabel = isOfflineOrder ? "Custodial" : "Self-Custody";
   const totalXec =
     receiveAmount && tokenPrice
       ? tokenCost + totalFees
@@ -134,9 +131,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <AlertDialogTitle>Confirm Order</AlertDialogTitle>
-                  <Badge variant={isOfflineOrder ? "outline" : "secondary"}>
-                    {custodyLabel}
-                  </Badge>
+                  <Badge variant="secondary">Self-Custody</Badge>
                 </div>
                 <AlertDialogDescription>
                   Check the key numbers before submitting.
