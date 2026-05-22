@@ -20,14 +20,13 @@ import {
   CardContent,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import { DollarSign } from "lucide-react"
 import { useXECPrice } from "@/lib/price"
 import { formatNumber, formatPrice } from "@/lib/formatters"
 import { getRelativeTime, formatTime } from "@/lib/time-utils"
 import { Transaction, TokenComponentProps } from "@/lib/types"
-import { TOKEN_IDS, PRICE_CONSTANTS, UPDATE_INTERVALS, UI_CONSTANTS } from "@/lib/constants"
+import { PRICE_CONSTANTS, UPDATE_INTERVALS, UI_CONSTANTS } from "@/lib/constants"
 import { fetchAgoraTransactionsFromChronik } from "@/lib/chronik-transactions"
 import { watchAgoraTokens } from "@/lib/agora-ws"
 import { cn } from "@/lib/utils"
@@ -41,7 +40,10 @@ export default function Component({ tokenId, className }: TokenComponentProps) {
   const [data, setData] = React.useState<Transaction[]>([])
   const [lastUpdate, setLastUpdate] = React.useState<string>("")
   const [showUSD, setShowUSD] = React.useState(false)
+  const [, setClockTick] = React.useState(0)
   const fetchIdRef = React.useRef(0)
+  const fetchInFlightRef = React.useRef(false)
+  const pendingRefreshRef = React.useRef(false)
   const xecPrice = useXECPrice()
 
   const maxAmount = React.useMemo(() => getMaxAmount(data), [data])
@@ -155,7 +157,15 @@ export default function Component({ tokenId, className }: TokenComponentProps) {
   ], [showUSD, xecPrice, maxAmount, toggleShowUSD])
 
   React.useEffect(() => {
+    let isCancelled = false
+
     const fetchData = async () => {
+      if (fetchInFlightRef.current) {
+        pendingRefreshRef.current = true
+        return
+      }
+
+      fetchInFlightRef.current = true
       const fetchId = ++fetchIdRef.current
       const collected: Transaction[] = []
 
@@ -163,7 +173,7 @@ export default function Component({ tokenId, className }: TokenComponentProps) {
         await fetchAgoraTransactionsFromChronik(
           tokenId,
           (batch) => {
-            if (fetchIdRef.current !== fetchId) return
+            if (fetchIdRef.current !== fetchId || isCancelled) return
             collected.push(...batch)
             collected.sort((a, b) => b.timestamp - a.timestamp)
             setData([...collected])
@@ -172,27 +182,37 @@ export default function Component({ tokenId, className }: TokenComponentProps) {
           { pageSize: 100 },
         )
 
-        if (fetchIdRef.current !== fetchId) return
+        if (fetchIdRef.current !== fetchId || isCancelled) return
         collected.sort((a, b) => b.timestamp - a.timestamp)
         setData([...collected])
         setLastUpdate(new Date().toLocaleString())
-      } catch (_error) {}
+      } catch (_error) {
+      } finally {
+        fetchInFlightRef.current = false
+        if (!isCancelled && pendingRefreshRef.current) {
+          pendingRefreshRef.current = false
+          void fetchData()
+        }
+      }
     }
 
-    fetchData()
-    
+    void fetchData()
+
     const unwatch = watchAgoraTokens([tokenId], (updatedTokenId) => {
       if (updatedTokenId === tokenId) {
-        fetchData()
+        void fetchData()
       }
     })
-    
+
     const interval = setInterval(() => {
-      setData(prevData => [...prevData])
+      setClockTick((tick) => tick + 1)
     }, UPDATE_INTERVALS.ONE_MINUTE)
-    
+
     return () => {
+      isCancelled = true
       fetchIdRef.current += 1
+      fetchInFlightRef.current = false
+      pendingRefreshRef.current = false
       unwatch()
       clearInterval(interval)
     }
