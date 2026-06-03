@@ -10,10 +10,18 @@ const { mockFetchTokenDetails, mockGetCachedTokenDetails, mockGetTokenDecimalsFr
     mockGetTokenDecimalsFromDetails: vi.fn(),
   }))
 
+const { mockFetchEtokenDbTopVolumeTokens } = vi.hoisted(() => ({
+  mockFetchEtokenDbTopVolumeTokens: vi.fn(),
+}))
+
 vi.mock('@/lib/chronik', () => ({
   fetchTokenDetails: mockFetchTokenDetails,
   getCachedTokenDetails: mockGetCachedTokenDetails,
   getTokenDecimalsFromDetails: mockGetTokenDecimalsFromDetails,
+}))
+
+vi.mock('@/lib/etokendb', () => ({
+  fetchEtokenDbTopVolumeTokens: mockFetchEtokenDbTopVolumeTokens,
 }))
 
 describe('TokenSelector', () => {
@@ -38,6 +46,8 @@ describe('TokenSelector', () => {
     mockOnTokenMetaChange.mockReset()
     mockGetCachedTokenDetails.mockReset()
     mockGetCachedTokenDetails.mockReturnValue(null)
+    mockFetchEtokenDbTopVolumeTokens.mockReset()
+    mockFetchEtokenDbTopVolumeTokens.mockResolvedValue([])
 
     mockGetTokenDecimalsFromDetails.mockImplementation((detail, fallback = 0) => {
       return detail?.genesisInfo?.decimals ?? fallback
@@ -48,15 +58,33 @@ describe('TokenSelector', () => {
         'token-1': 2,
         'token-2': 4,
         'token-3': 6,
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': 8,
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb': 2,
       }
 
       return {
         tokenId,
         genesisInfo: {
           tokenName:
-            tokenId === 'token-1' ? 'Token One' : tokenId === 'token-2' ? 'Token Two' : 'Token Three',
+            tokenId === 'token-1'
+              ? 'Token One'
+              : tokenId === 'token-2'
+                ? 'Token Two'
+                : tokenId === 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+                  ? 'Staked XEC'
+                  : tokenId === 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+                    ? 'Firma'
+                    : 'Token Three',
           tokenTicker:
-            tokenId === 'token-1' ? 'ONE' : tokenId === 'token-2' ? 'TWO' : 'THREE',
+            tokenId === 'token-1'
+              ? 'ONE'
+              : tokenId === 'token-2'
+                ? 'TWO'
+                : tokenId === 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+                  ? 'XECX'
+                  : tokenId === 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+                    ? 'FIRMA'
+                    : 'THREE',
           decimals: decimalsByTokenId[tokenId] ?? 0,
         },
       }
@@ -314,5 +342,62 @@ describe('TokenSelector', () => {
     expect(mockGetCachedTokenDetails).toHaveBeenCalledWith(exactTokenId)
     expect(mockFetchTokenDetails).not.toHaveBeenCalledWith(exactTokenId)
     expect(mockOnTokenSelect).toHaveBeenCalledWith(exactTokenId, 'Alpha Token')
+  })
+
+  it('should search top-volume active tokens by ticker outside the wallet', async () => {
+    const xecxTokenId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const firmaTokenId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    mockFetchEtokenDbTopVolumeTokens.mockResolvedValue([
+      { tokenId: xecxTokenId },
+      { tokenId: firmaTokenId },
+    ])
+
+    render(
+      <TokenSelector
+        selectedToken={{ id: '', name: '' }}
+        userTokens={{}}
+        onTokenSelect={mockOnTokenSelect}
+        onTokenMetaChange={mockOnTokenMetaChange}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Select token'))
+    fireEvent.change(await screen.findByPlaceholderText('Search token'), {
+      target: { value: 'xecx' },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Active tokens')).toBeInTheDocument()
+      expect(screen.getByText('Staked XEC')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Staked XEC'))
+
+    expect(mockFetchEtokenDbTopVolumeTokens).toHaveBeenCalledWith({ pageSize: 100 })
+    expect(mockOnTokenSelect).toHaveBeenCalledWith(xecxTokenId, 'Staked XEC')
+  })
+
+  it('should search top-volume active tokens by name outside the wallet', async () => {
+    const firmaTokenId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    mockFetchEtokenDbTopVolumeTokens.mockResolvedValue([{ tokenId: firmaTokenId }])
+
+    render(
+      <TokenSelector
+        selectedToken={{ id: '', name: '' }}
+        userTokens={{}}
+        onTokenSelect={mockOnTokenSelect}
+        onTokenMetaChange={mockOnTokenMetaChange}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Select token'))
+    fireEvent.change(await screen.findByPlaceholderText('Search token'), {
+      target: { value: 'firma' },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Firma')).toBeInTheDocument()
+      expect(screen.getByText('FIRMA')).toBeInTheDocument()
+    })
   })
 })

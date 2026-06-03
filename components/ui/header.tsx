@@ -41,7 +41,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FlickeringGrid } from "@/components/magicui/flickering-grid";
 import { useWallet } from "@/lib/context/WalletContext";
 import { useXECPrice } from "@/lib/price";
-import appVersion from "@/version.json";
+import packageInfo from "@/package.json";
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik";
 import TelegramAgoraBotDialog from "@/components/ui/TelegramAgoraBotDialog";
 import { WalletConnectDrawerInner } from "@/components/swap/WalletConnectDrawerInner";
@@ -310,7 +310,7 @@ export default function Header({
             onClick={runConfetti}
             className="hidden sm:inline rounded bg-blue-100 px-2 py-0 h-6 shadow-none text-xs font-normal text-blue-600 tracking-tight"
           >
-            <span>{appVersion.version}</span>
+            <span>{packageInfo.version}</span>
           </ConfettiButton>
         </div>
 
