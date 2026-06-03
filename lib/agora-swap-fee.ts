@@ -56,17 +56,25 @@ export const calculateAgoraSwapFeeXec = (
 export const calculateAgoraFeeSummary = (
   tokenCostXec: number,
   networkFeeXec: number,
+  swapFeeCreditXec: number = 0,
 ) => {
   const normalizedTokenCostXec = normalizeXec(tokenCostXec);
   const normalizedNetworkFeeXec = normalizeXec(networkFeeXec);
   const swapFeeXec = calculateAgoraSwapFeeXec(normalizedTokenCostXec);
-  const totalFeesXec = normalizedNetworkFeeXec + swapFeeXec;
+  const normalizedSwapFeeCreditXec = Math.min(
+    swapFeeXec,
+    normalizeXec(swapFeeCreditXec),
+  );
+  const netSwapFeeXec = Math.max(0, swapFeeXec - normalizedSwapFeeCreditXec);
+  const totalFeesXec = normalizedNetworkFeeXec + netSwapFeeXec;
   const totalCostXec = normalizedTokenCostXec + totalFeesXec;
 
   return {
     tokenCostXec: normalizedTokenCostXec,
     networkFeeXec: normalizedNetworkFeeXec,
     swapFeeXec,
+    swapFeeCreditXec: normalizedSwapFeeCreditXec,
+    netSwapFeeXec,
     totalFeesXec,
     totalCostXec,
   };

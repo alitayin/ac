@@ -48,7 +48,13 @@ import {
   calculateAgoraFeeSummary,
   estimateAgoraTokenCostFromBudget,
   getMinimumAgoraBuyFeesXec,
+  xecToSats,
 } from "@/lib/agora-swap-fee";
+import {
+  creditSatsToXec,
+  getServiceCreditQuote,
+  type ServiceCreditQuote,
+} from "@/lib/service-token-credit";
 import { calculateAgoraSweepBuy } from "@/lib/agora-sweep-buy";
 import WalletConnectDrawerInner from "@/components/swap/WalletConnectDrawerInner";
 import PriceCard from "@/components/swap/PriceCard";
@@ -60,7 +66,6 @@ import { Transaction } from "@/lib/types";
 import { useAutoExecution } from "@/lib/context/AutoExecutionContext";
 import {
   createSwapOrderKey,
-  readSwapOrders,
   saveSwapOrder,
 } from "@/lib/swap-order-utils";
 import { fetchTokenDetails, getCachedTokenDetails } from "@/lib/chronik";
@@ -109,7 +114,6 @@ export function SwapPanel({
     userTokens,
     connectWallet,
     disconnectWallet,
-    isGuestMode,
     mnemonic
   } = useWallet();
   const [spendAmount, setSpendAmount] = useState<string>('');
@@ -142,6 +146,7 @@ export function SwapPanel({
   const [orderBook, setOrderBook] = useState<{ orders: any[] }>({ orders: [] });
   const [selectedTokenDecimals, setSelectedTokenDecimals] = useState<number>(0);
   const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC); // Network fee estimated from wallet UTXO count
+  const [useServiceCredit, setUseServiceCredit] = useState<boolean>(false);
   const [sellAmount, setSellAmount] = useState<string>('');
   const [sellPrice, setSellPrice] = useState<string>('');
   const [isCreatingListing, setIsCreatingListing] = useState<boolean>(false);
@@ -742,14 +747,60 @@ export function SwapPanel({
     return receive * effectiveBuyMaxPrice;
   }, [buyMode, effectiveBuyMaxPrice, receiveAmount, sweepTokenCostXec]);
 
+  const serviceCreditQuote = useMemo<ServiceCreditQuote>(
+    () => getServiceCreditQuote(
+      xecToSats(calculateAgoraFeeSummary(estimatedTokenCost, networkFee).swapFeeXec),
+      userTokens,
+    ),
+    [estimatedTokenCost, networkFee, userTokens],
+  );
+
+  const estimatedServiceCreditXec = useMemo(
+    () =>
+      serviceCreditQuote.canCover
+        ? Math.min(
+            creditSatsToXec(serviceCreditQuote.creditSats),
+            calculateAgoraFeeSummary(estimatedTokenCost, networkFee).swapFeeXec,
+          )
+        : 0,
+    [estimatedTokenCost, networkFee, serviceCreditQuote],
+  );
+
+  const serviceCreditOverpayXec = useMemo(
+    () => creditSatsToXec(serviceCreditQuote.overpaySats),
+    [serviceCreditQuote],
+  );
+
+  useEffect(() => {
+    if (useServiceCredit && !serviceCreditQuote.canCover) {
+      setUseServiceCredit(false);
+    }
+  }, [serviceCreditQuote.canCover, useServiceCredit]);
+
+  const serviceCreditLabel = useMemo(() => {
+    if (!serviceCreditQuote.redemptions.length) {
+      return "Use SS/SC credit";
+    }
+
+    const tokenText = serviceCreditQuote.redemptions
+      .map((item) => `${item.amountAtoms} ${item.symbol}`)
+      .join(" + ");
+
+    return `Use ${tokenText}`;
+  }, [serviceCreditQuote]);
+
   const estimatedFeeSummary = useMemo(
-    () => calculateAgoraFeeSummary(estimatedTokenCost, networkFee),
-    [estimatedTokenCost, networkFee],
+    () => calculateAgoraFeeSummary(
+      estimatedTokenCost,
+      networkFee,
+      useServiceCredit ? estimatedServiceCreditXec : 0,
+    ),
+    [estimatedTokenCost, estimatedServiceCreditXec, networkFee, useServiceCredit],
   );
 
   const minimumBuyFees = useMemo(
-    () => getMinimumAgoraBuyFeesXec(networkFee),
-    [networkFee],
+    () => Math.max(0, getMinimumAgoraBuyFeesXec(networkFee) - (useServiceCredit ? estimatedServiceCreditXec : 0)),
+    [estimatedServiceCreditXec, networkFee, useServiceCredit],
   );
 
   const handleTokenSelect = useCallback((tokenId: string, tokenName: string) => {
@@ -853,16 +904,6 @@ export function SwapPanel({
       return;
     }
     
-    if (isGuestMode) {
-      toast({
-        title: "Guest Mode Restriction",
-        description: "Cannot create orders in guest mode. Please connect wallet with recovery phrase to create orders",
-        variant: "destructive",
-      });
-      setIsConfirmDialogOpen(false);
-      return;
-    }
-
     const exactReceiveAmount = parseFloat(receiveAmount);
 
     const orderKey = createSwapOrderKey(selectedToken.id, ecashAddress, orderMaxPrice);
@@ -875,6 +916,7 @@ export function SwapPanel({
       transactions: any[];
       createdAt: string;
       tokenCostCapXec?: number;
+      serviceCreditEnabled?: boolean;
     } = {
       remainingAmount: exactReceiveAmount,
       maxPrice: orderMaxPrice,
@@ -886,6 +928,10 @@ export function SwapPanel({
 
     if (buyMode === "sweep" && estimatedFeeSummary.tokenCostXec > 0) {
       orderData.tokenCostCapXec = estimatedFeeSummary.tokenCostXec;
+    }
+
+    if (useServiceCredit && serviceCreditQuote.canCover) {
+      orderData.serviceCreditEnabled = true;
     }
 
     const existingOrders = saveSwapOrder(orderKey, orderData, "created");
@@ -923,14 +969,6 @@ export function SwapPanel({
       return;
     }
     
-    if (isGuestMode) {
-      toast({
-        title: "Guest Mode Restriction",
-        description: "Cannot create orders in guest mode. Please connect wallet with recovery phrase to create orders",
-        variant: "destructive",
-      });
-      return;
-    }
     const currentFee = await calculateNetworkFeeFromUtxos();
     let latestReceiveAmount = parseFloat(receiveAmount || '0');
     let latestMaxPrice = effectiveBuyMaxPrice;
@@ -986,7 +1024,33 @@ export function SwapPanel({
       return;
     }
     
-    const totalAmount = calculateAgoraFeeSummary(latestTokenCost, currentFee).totalCostXec;
+    const latestGrossFeeSummary = calculateAgoraFeeSummary(latestTokenCost, currentFee);
+    const latestServiceCreditQuote = getServiceCreditQuote(
+      xecToSats(latestGrossFeeSummary.swapFeeXec),
+      userTokens,
+    );
+    const latestServiceCreditXec =
+      useServiceCredit && latestServiceCreditQuote.canCover
+        ? Math.min(
+            creditSatsToXec(latestServiceCreditQuote.creditSats),
+            latestGrossFeeSummary.swapFeeXec,
+          )
+        : 0;
+    if (useServiceCredit && !latestServiceCreditQuote.canCover) {
+      toast({
+        title: "SS/SC credit unavailable",
+        description: "Your current SS/SC balance no longer covers this swap fee.",
+        variant: "destructive",
+      });
+      setUseServiceCredit(false);
+      return;
+    }
+    const latestFeeSummary = calculateAgoraFeeSummary(
+      latestTokenCost,
+      currentFee,
+      latestServiceCreditXec,
+    );
+    const totalAmount = latestFeeSummary.totalCostXec;
     const currentBalance = parseFloat(balance || '0');
     if (Number.isFinite(currentBalance) && totalAmount > currentBalance) {
       toast({
@@ -1140,15 +1204,6 @@ export function SwapPanel({
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet with recovery phrase",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (isGuestMode) {
-      toast({
-        title: "Guest Mode Restriction",
-        description: "Cannot create listings in guest mode. Please connect wallet with recovery phrase",
         variant: "destructive",
       });
       return;
@@ -1385,6 +1440,12 @@ export function SwapPanel({
                   balance={balance}
                   networkFee={networkFee}
                   swapFee={estimatedFeeSummary.swapFeeXec}
+                  swapFeeCredit={estimatedFeeSummary.swapFeeCreditXec}
+                  serviceCreditLabel={serviceCreditLabel}
+                  serviceCreditEnabled={useServiceCredit}
+                  setServiceCreditEnabled={setUseServiceCredit}
+                  serviceCreditAvailable={serviceCreditQuote.canCover}
+                  serviceCreditOverpay={serviceCreditOverpayXec}
                   totalFees={estimatedFeeSummary.totalFeesXec}
                   minimumTotalFees={minimumBuyFees}
                   toast={toast}
@@ -1438,6 +1499,9 @@ export function SwapPanel({
                     tokenPrice={effectiveBuyMaxPrice}
                     networkFee={networkFee}
                     swapFee={estimatedFeeSummary.swapFeeXec}
+                    swapFeeCredit={estimatedFeeSummary.swapFeeCreditXec}
+                    serviceCreditLabel={serviceCreditLabel}
+                    serviceCreditOverpay={useServiceCredit ? serviceCreditOverpayXec : 0}
                     totalFees={estimatedFeeSummary.totalFeesXec}
                     tokenCost={estimatedFeeSummary.tokenCostXec}
                     feeDescription={AGORA_SWAP_FEE_DESCRIPTION}
@@ -1602,7 +1666,7 @@ export function SwapPanel({
                     className="w-full text-md rounded-xl h-12"
                     variant="default"
                     onClick={handleCreateListing}
-                    disabled={isCreatingListing || !isWalletConnected || isGuestMode}
+                    disabled={isCreatingListing || !isWalletConnected}
                   >
                     {isCreatingListing ? "Creating..." : isWalletConnected ? "Create Listing" : "Connect wallet"}
                   </Button>

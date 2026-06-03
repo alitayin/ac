@@ -10,6 +10,7 @@ import {
 vi.mock('ecash-quicksend', () => ({
   fetchAgoraOffers: vi.fn(),
   acceptAgoraOffer: vi.fn(),
+  sendToken: vi.fn(),
 }));
 
 const buildOffer = (overrides = {}) => ({
@@ -29,6 +30,9 @@ describe('Buy.js', () => {
       success: false,
       reason: 'NO_SUITABLE_OFFERS',
       message: 'No matching offers found',
+    });
+    vi.mocked(ecashQuicksend.sendToken).mockResolvedValue({
+      txid: 'service-credit-redemption',
     });
   });
 

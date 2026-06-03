@@ -13,6 +13,12 @@ interface SpendCardProps {
   balance: string;
   networkFee: number;
   swapFee: number;
+  swapFeeCredit?: number;
+  serviceCreditLabel?: string;
+  serviceCreditEnabled?: boolean;
+  setServiceCreditEnabled?: (enabled: boolean) => void;
+  serviceCreditAvailable?: boolean;
+  serviceCreditOverpay?: number;
   totalFees: number;
   minimumTotalFees: number;
   toast: (options: any) => void;
@@ -24,8 +30,13 @@ export const SpendCard: React.FC<SpendCardProps> = ({
   calculateReceiveAmount,
   isWalletConnected,
   balance,
-  networkFee,
   swapFee,
+  swapFeeCredit = 0,
+  serviceCreditLabel = "SS/SC credit",
+  serviceCreditEnabled = false,
+  setServiceCreditEnabled,
+  serviceCreditAvailable = false,
+  serviceCreditOverpay = 0,
   totalFees,
   minimumTotalFees,
   toast,
@@ -108,6 +119,36 @@ export const SpendCard: React.FC<SpendCardProps> = ({
             <span>Estimated fees</span>
             <span>{totalFees.toFixed(2)} XEC</span>
           </div>
+          <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Swap fee</span>
+            <span>{swapFee.toFixed(2)} XEC</span>
+          </div>
+          {serviceCreditAvailable ? (
+            <div className="mt-2 rounded-lg border bg-muted/30 p-2 text-xs">
+              <label className="flex cursor-pointer items-center justify-between gap-3">
+                <span className="text-foreground">{serviceCreditLabel}</span>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  checked={serviceCreditEnabled}
+                  onChange={(event) =>
+                    setServiceCreditEnabled?.(event.target.checked)
+                  }
+                />
+              </label>
+              {serviceCreditEnabled ? (
+                <div className="mt-1 flex items-center justify-between text-muted-foreground">
+                  <span>Applied</span>
+                  <span>-{swapFeeCredit.toFixed(2)} XEC</span>
+                </div>
+              ) : null}
+              {serviceCreditEnabled && serviceCreditOverpay > 0 ? (
+                <div className="mt-1 text-muted-foreground">
+                  This redemption overpays by {serviceCreditOverpay.toFixed(2)} XEC.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </Card>

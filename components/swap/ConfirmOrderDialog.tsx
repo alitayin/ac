@@ -26,6 +26,9 @@ interface ConfirmOrderDialogProps {
   tokenPrice: number;
   networkFee: number;
   swapFee: number;
+  swapFeeCredit?: number;
+  serviceCreditLabel?: string;
+  serviceCreditOverpay?: number;
   totalFees: number;
   tokenCost: number;
   feeDescription: string;
@@ -81,6 +84,9 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   tokenPrice,
   networkFee,
   swapFee,
+  swapFeeCredit = 0,
+  serviceCreditLabel = "SS/SC credit",
+  serviceCreditOverpay = 0,
   totalFees,
   tokenCost,
   feeDescription,
@@ -107,6 +113,14 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
     maximumFractionDigits: 2,
   });
   const formattedSwapFee = formatDisplayNumber(swapFee, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const formattedSwapFeeCredit = formatDisplayNumber(swapFeeCredit, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const formattedServiceCreditOverpay = formatDisplayNumber(serviceCreditOverpay, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -200,7 +214,15 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
               <BreakdownRow label="Order value" value={formattedTokenCost} />
               <BreakdownRow label={priceLabel} value={formatTokenPrice(tokenPrice)} />
               <BreakdownRow label={feeDescription} value={formattedSwapFee} />
+              {swapFeeCredit > 0 ? (
+                <BreakdownRow label={serviceCreditLabel} value={`-${formattedSwapFeeCredit}`} />
+              ) : null}
               <BreakdownRow label="Network fee" value={formattedNetworkFee} />
+              {serviceCreditOverpay > 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                  SS/SC redemption overpays by {formattedServiceCreditOverpay} XEC for this order.
+                </div>
+              ) : null}
               <div className="rounded-lg bg-muted/60 p-2.5">
                 <BreakdownRow label="Total fees" value={formattedTotalFees} />
                 <div className="mt-2 border-t border-border/60 pt-2">

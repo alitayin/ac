@@ -26,6 +26,7 @@ export interface StoredSwapOrder {
   selectedUtxos?: any[];
   failureReason?: string;
   tokenCostCapXec?: number;
+  serviceCreditEnabled?: boolean;
 }
 
 export type StoredSwapOrders = Record<string, StoredSwapOrder>;
