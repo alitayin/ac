@@ -675,4 +675,63 @@ describe("etokendb", () => {
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     })
   })
+
+  it("creates token-paid review invoices through the local proxy", async () => {
+    const invoicePayload = {
+      ok: true,
+      data: {
+        invoiceId: "550e8400-e29b-41d4-a716-446655440002",
+        tokenId: "c67bf5c2b6d91cfb46a5c1772582eff80d88686887be10aa63b0945479cf4ed4",
+        authorAddress: "ecash:qpr8h2m24zk0xv2h7x7w4jv3n7q3y3tu4s7v5u8n2s",
+        score: 8,
+        comment: "",
+        paymentAddress: "ecash:qppaymentsample8h2m24zk0xv2h7x7w4jv3n7q3y3t",
+        expectedPaidSats: 10_000_123,
+        expectedPaidXec: "100001.23",
+        paymentKind: "token",
+        paymentTokenId: "d1131675cb62b65909fb45ba53b022da0bd0f34aaa71fc61770115472b186ffb",
+        paymentTokenSymbol: "SS",
+        creditSatsPerAtom: 500,
+        expectedPaidAtoms: "20001",
+        status: "pending",
+        expiresAt: 1_776_240_000_000,
+        paymentTxid: null,
+        publishedReviewId: null,
+      },
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => invoicePayload,
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(
+      createEtokenDbReviewInvoice(invoicePayload.data.tokenId, {
+        authorAddress: invoicePayload.data.authorAddress,
+        score: 8,
+        paymentKind: "token",
+        paymentTokenSymbol: "SS",
+      }),
+    ).resolves.toMatchObject({
+      invoiceId: invoicePayload.data.invoiceId,
+      paymentKind: "token",
+      paymentTokenSymbol: "SS",
+      paymentTokenId: invoicePayload.data.paymentTokenId,
+      creditSatsPerAtom: 500,
+      expectedPaidAtoms: "20001",
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/etokendb/tokens/${invoicePayload.data.tokenId}/reviews/invoices`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          authorAddress: invoicePayload.data.authorAddress,
+          score: 8,
+          paymentKind: "token",
+          paymentTokenSymbol: "SS",
+        }),
+      }),
+    )
+  })
 })

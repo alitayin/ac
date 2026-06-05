@@ -117,11 +117,15 @@ export type ReviewInvoiceStatus =
 export type ProjectInfoInvoiceStatus = ReviewInvoiceStatus
 
 export type ProjectInfoFeeTier = "initial" | "update"
+export type ReviewPaymentKind = "xec" | "token"
+export type ReviewPaymentTokenSymbol = "SS" | "SC"
 
 export type CreateEtokenDbReviewInvoiceInput = {
   authorAddress: string
   score: number
   comment?: string
+  paymentKind?: ReviewPaymentKind
+  paymentTokenSymbol?: ReviewPaymentTokenSymbol
 }
 
 export type CreateEtokenDbProjectInfoInvoiceInput = {
@@ -149,6 +153,11 @@ export type EtokenDbReviewInvoice = {
   paymentAddress: string
   expectedPaidSats: number
   expectedPaidXec: string
+  paymentKind: ReviewPaymentKind
+  paymentTokenId: string | null
+  paymentTokenSymbol: ReviewPaymentTokenSymbol | null
+  creditSatsPerAtom: number | null
+  expectedPaidAtoms: string | null
   status: ReviewInvoiceStatus
   expiresAt: number
   paymentTxid: string | null
@@ -1073,6 +1082,23 @@ export const mapEtokenDbReviewInvoice = (
     paymentAddress: invoice.paymentAddress,
     expectedPaidSats: coerceCount(invoice.expectedPaidSats),
     expectedPaidXec: invoice.expectedPaidXec,
+    paymentKind: invoice.paymentKind === "token" ? "token" : "xec",
+    paymentTokenId:
+      typeof invoice.paymentTokenId === "string" && invoice.paymentTokenId.length > 0
+        ? invoice.paymentTokenId
+        : null,
+    paymentTokenSymbol:
+      invoice.paymentTokenSymbol === "SS" || invoice.paymentTokenSymbol === "SC"
+        ? invoice.paymentTokenSymbol
+        : null,
+    creditSatsPerAtom:
+      invoice.creditSatsPerAtom === null || invoice.creditSatsPerAtom === undefined
+        ? null
+        : coerceCount(invoice.creditSatsPerAtom),
+    expectedPaidAtoms:
+      typeof invoice.expectedPaidAtoms === "string" && invoice.expectedPaidAtoms.length > 0
+        ? invoice.expectedPaidAtoms
+        : null,
     status: invoice.status as ReviewInvoiceStatus,
     expiresAt: coerceCount(invoice.expiresAt),
     paymentTxid:

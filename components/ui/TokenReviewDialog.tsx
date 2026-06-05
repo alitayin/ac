@@ -4,6 +4,7 @@ import * as React from "react"
 import quick from "ecash-quicksend"
 import {
   CheckCircle2,
+  Coins,
   ExternalLink,
   Loader2,
   MessageSquareText,
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/lib/context/WalletContext"
 import {
@@ -32,8 +34,10 @@ import {
   fetchEtokenDbReviewInvoice,
   fetchEtokenDbTokenReviewSummary,
   submitEtokenDbReviewInvoiceTx,
+  type CreateEtokenDbReviewInvoiceInput,
   type EtokenDbReviewInvoice,
   type EtokenDbTokenReviewSummary,
+  type ReviewPaymentTokenSymbol,
 } from "@/lib/etokendb"
 import {
   DEFAULT_REVIEW_SCORE,
@@ -44,6 +48,10 @@ import {
   REVIEW_UNRATED_LABEL,
   REVIEW_UNRATED_STAR_ICON_CLASS,
 } from "@/lib/review-score"
+import {
+  formatServiceCreditXec,
+  SERVICE_CREDIT_TOKENS,
+} from "@/lib/service-token-credit"
 import type { Token } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -60,9 +68,12 @@ type TokenReviewDialogToken = Pick<
 
 type TokenReviewDialogProps = {
   open: boolean
-  onOpenChange: (open: boolean) => void
+  onOpenChange: (_open: boolean) => void
   token: TokenReviewDialogToken | null
-  onPublished?: (tokenId: string, summary: EtokenDbTokenReviewSummary) => void
+  onPublished?: (
+    _tokenId: string,
+    _summary: EtokenDbTokenReviewSummary,
+  ) => void
 }
 
 const POLL_INTERVAL_MS = 3_000
@@ -70,8 +81,17 @@ const POLL_TIMEOUT_MS = 60_000
 const COMMENT_MAX_BYTES = 500
 const SCORE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 const PENDING_REVIEW_STORAGE_KEY = "token_review_pending_v1"
+const XEC_PAYMENT_VALUE = "xec"
 
 const textEncoder = new TextEncoder()
+
+type ReviewPaymentSelection = typeof XEC_PAYMENT_VALUE | ReviewPaymentTokenSymbol
+type ReviewPaymentTokenOption = (typeof SERVICE_CREDIT_TOKENS)[number] & {
+  symbol: ReviewPaymentTokenSymbol
+}
+
+const REVIEW_PAYMENT_TOKEN_OPTIONS =
+  SERVICE_CREDIT_TOKENS as ReviewPaymentTokenOption[]
 
 type PendingReviewSession = {
   tokenId: string
@@ -79,6 +99,7 @@ type PendingReviewSession = {
   score: number
   comment: string
   txid: string | null
+  paymentMethod?: ReviewPaymentSelection
   updatedAt: number
 }
 
@@ -190,6 +211,85 @@ const formatLastReviewAt = (timestamp: number | null): string => {
   }
 }
 
+const isReviewPaymentTokenSymbol = (
+  value: ReviewPaymentSelection,
+): value is ReviewPaymentTokenSymbol => value === "SS" || value === "SC"
+
+const getInvoicePaymentSelection = (
+  invoice: EtokenDbReviewInvoice | null,
+): ReviewPaymentSelection => {
+  if (
+    invoice?.paymentKind === "token" &&
+    (invoice.paymentTokenSymbol === "SS" || invoice.paymentTokenSymbol === "SC")
+  ) {
+    return invoice.paymentTokenSymbol
+  }
+
+  return XEC_PAYMENT_VALUE
+}
+
+const formatTokenAtoms = (value?: string | number | bigint | null): string => {
+  try {
+    const atoms =
+      typeof value === "bigint" ? value : BigInt(value ?? "0")
+    return new Intl.NumberFormat("en").format(atoms)
+  } catch (_error) {
+    return "0"
+  }
+}
+
+const formatInvoicePaymentAmount = (
+  invoice: EtokenDbReviewInvoice | null,
+): string => {
+  if (
+    invoice?.paymentKind === "token" &&
+    invoice.paymentTokenSymbol &&
+    invoice.expectedPaidAtoms
+  ) {
+    return `${formatTokenAtoms(invoice.expectedPaidAtoms)} ${invoice.paymentTokenSymbol}`
+  }
+
+  return invoice?.expectedPaidXec ? `${invoice.expectedPaidXec} XEC` : "XEC"
+}
+
+const getReviewTokenBalanceAtoms = (
+  symbol: ReviewPaymentTokenSymbol,
+  userTokens: Record<string, string>,
+): bigint => {
+  const tokenConfig = REVIEW_PAYMENT_TOKEN_OPTIONS.find(
+    (option) => option.symbol === symbol,
+  )
+  if (!tokenConfig) {
+    return 0n
+  }
+
+  try {
+    return BigInt(userTokens[tokenConfig.tokenId] || "0")
+  } catch (_error) {
+    return 0n
+  }
+}
+
+const getCreateReviewInvoiceInput = (params: {
+  authorAddress: string
+  score: number
+  comment: string
+  paymentMethod: ReviewPaymentSelection
+}): CreateEtokenDbReviewInvoiceInput => {
+  const input: CreateEtokenDbReviewInvoiceInput = {
+    authorAddress: params.authorAddress,
+    score: params.score,
+    comment: params.comment || undefined,
+  }
+
+  if (isReviewPaymentTokenSymbol(params.paymentMethod)) {
+    input.paymentKind = "token"
+    input.paymentTokenSymbol = params.paymentMethod
+  }
+
+  return input
+}
+
 export function TokenReviewDialog({
   open,
   onOpenChange,
@@ -202,11 +302,14 @@ export function TokenReviewDialog({
     ecashAddress,
     mnemonic,
     isGuestMode,
+    userTokens,
     refreshBalance,
   } = useWallet()
 
   const [score, setScore] = React.useState<number | null>(DEFAULT_REVIEW_SCORE)
   const [comment, setComment] = React.useState("")
+  const [paymentMethod, setPaymentMethod] =
+    React.useState<ReviewPaymentSelection>(XEC_PAYMENT_VALUE)
   const [invoice, setInvoice] = React.useState<EtokenDbReviewInvoice | null>(null)
   const [summary, setSummary] = React.useState<EtokenDbTokenReviewSummary | null>(null)
   const [isRefreshingSummary, setIsRefreshingSummary] = React.useState(false)
@@ -256,6 +359,7 @@ export function TokenReviewDialog({
     setInvoice(null)
     setScore(DEFAULT_REVIEW_SCORE)
     setComment("")
+    setPaymentMethod(XEC_PAYMENT_VALUE)
     setIsRefreshingSummary(true)
     resumeAttemptedInvoiceRef.current = null
 
@@ -263,6 +367,13 @@ export function TokenReviewDialog({
     if (pendingSession) {
       setScore(pendingSession.score)
       setComment(pendingSession.comment)
+      if (
+        pendingSession.paymentMethod === XEC_PAYMENT_VALUE ||
+        pendingSession.paymentMethod === "SS" ||
+        pendingSession.paymentMethod === "SC"
+      ) {
+        setPaymentMethod(pendingSession.paymentMethod)
+      }
     }
 
     let cancelled = false
@@ -294,7 +405,9 @@ export function TokenReviewDialog({
   const hasSigningWallet = Boolean(isWalletConnected && ecashAddress && mnemonic && !isGuestMode)
   const isInvoiceStale =
     Boolean(invoice) &&
-    (invoice?.score !== score || invoice?.comment !== sanitizedComment)
+    (invoice?.score !== score ||
+      invoice?.comment !== sanitizedComment ||
+      getInvoicePaymentSelection(invoice) !== paymentMethod)
   const isPublishedInvoice =
     Boolean(invoice) && !isInvoiceStale && invoice?.status === "published"
   const isAwaitingBackend =
@@ -311,7 +424,18 @@ export function TokenReviewDialog({
   const currentAverageToneClasses = getReviewScoreToneClasses(
     hasCurrentAverage ? summary?.averageScore : null,
   )
-  const submitFeeLabel = formatFeeLabel(invoice?.expectedPaidXec)
+  const invoicePaymentLabel = formatInvoicePaymentAmount(invoice)
+  const selectedPaymentLabel =
+    paymentMethod === XEC_PAYMENT_VALUE ? "XEC" : paymentMethod
+  const submitFeeLabel = invoice && !isInvoiceStale
+    ? invoicePaymentLabel
+    : paymentMethod === XEC_PAYMENT_VALUE
+      ? `${formatFeeLabel(null)} XEC`
+      : paymentMethod
+  const selectedTokenBalance =
+    paymentMethod === "SS" || paymentMethod === "SC"
+      ? getReviewTokenBalanceAtoms(paymentMethod, userTokens)
+      : null
 
   const refreshSummary = React.useCallback(async () => {
     if (!token) {
@@ -341,6 +465,7 @@ export function TokenReviewDialog({
       score: number
       comment: string
       txid: string | null
+      paymentMethod: ReviewPaymentSelection
     }) => {
       if (!token) {
         return
@@ -352,6 +477,7 @@ export function TokenReviewDialog({
         score: next.score,
         comment: next.comment,
         txid: next.txid,
+        paymentMethod: next.paymentMethod,
         updatedAt: Date.now(),
       })
     },
@@ -389,6 +515,45 @@ export function TokenReviewDialog({
         throw new Error("A mnemonic-backed wallet login is required for payment")
       }
 
+      if (activeInvoice.paymentKind === "token") {
+        if (
+          !activeInvoice.paymentTokenId ||
+          !activeInvoice.paymentTokenSymbol ||
+          !activeInvoice.expectedPaidAtoms
+        ) {
+          throw new Error("Token payment invoice is missing payment details")
+        }
+
+        const expectedPaidAtoms = BigInt(activeInvoice.expectedPaidAtoms)
+        const walletAtoms = getReviewTokenBalanceAtoms(
+          activeInvoice.paymentTokenSymbol,
+          userTokens,
+        )
+
+        if (walletAtoms < expectedPaidAtoms) {
+          throw new Error(
+            `Insufficient ${activeInvoice.paymentTokenSymbol} balance for this review invoice`,
+          )
+        }
+
+        const result = await quick.sendToken(
+          [
+            {
+              address: activeInvoice.paymentAddress,
+              amount: expectedPaidAtoms,
+            },
+          ],
+          {
+            tokenId: activeInvoice.paymentTokenId,
+            mnemonic,
+            feeStrategy: "minimal",
+            tokenStrategy: "minimal",
+          },
+        )
+
+        return result.txid
+      }
+
       const result = await quick.sendXec(
         [
           {
@@ -404,7 +569,7 @@ export function TokenReviewDialog({
 
       return result.txid
     },
-    [mnemonic],
+    [mnemonic, userTokens],
   )
 
   const settleResolvedInvoice = React.useCallback(
@@ -452,6 +617,7 @@ export function TokenReviewDialog({
         setInvoice(currentInvoice)
         setScore(session.score)
         setComment(session.comment)
+        setPaymentMethod(getInvoicePaymentSelection(currentInvoice))
 
         if (currentInvoice.status === "published") {
           await settleResolvedInvoice(currentInvoice)
@@ -474,6 +640,7 @@ export function TokenReviewDialog({
             score: submittedInvoice.score,
             comment: submittedInvoice.comment,
             txid: session.txid,
+            paymentMethod: getInvoicePaymentSelection(submittedInvoice),
           })
 
           if (mountedRef.current) {
@@ -545,38 +712,40 @@ export function TokenReviewDialog({
     )
 
     try {
+      const invoiceInput = getCreateReviewInvoiceInput({
+        authorAddress: ecashAddress,
+        score,
+        comment: sanitizedComment,
+        paymentMethod,
+      })
       const activeInvoice = isInvoiceStale
-        ? await createEtokenDbReviewInvoice(token.tokenId, {
-            authorAddress: ecashAddress,
-            score,
-            comment: sanitizedComment || undefined,
-          })
+        ? await createEtokenDbReviewInvoice(token.tokenId, invoiceInput)
         : invoice && (invoice.status === "pending" || invoice.status === "tx_submitted")
           ? invoice
-          : await createEtokenDbReviewInvoice(token.tokenId, {
-              authorAddress: ecashAddress,
-              score,
-              comment: sanitizedComment || undefined,
-            })
+          : await createEtokenDbReviewInvoice(token.tokenId, invoiceInput)
+      const activePaymentMethod = getInvoicePaymentSelection(activeInvoice)
 
       if (mountedRef.current) {
         setInvoice(activeInvoice)
+        setPaymentMethod(activePaymentMethod)
       }
       persistSessionForCurrentToken({
         invoiceId: activeInvoice.invoiceId,
         score: activeInvoice.score,
         comment: activeInvoice.comment,
         txid: activeInvoice.paymentTxid,
+        paymentMethod: activePaymentMethod,
       })
 
       if (activeInvoice.status === "pending") {
-        setStatusMessage(`Paying ${activeInvoice.expectedPaidXec} XEC`)
+        setStatusMessage(`Paying ${formatInvoicePaymentAmount(activeInvoice)}`)
         const txid = await payInvoice(activeInvoice)
         persistSessionForCurrentToken({
           invoiceId: activeInvoice.invoiceId,
           score: activeInvoice.score,
           comment: activeInvoice.comment,
           txid,
+          paymentMethod: activePaymentMethod,
         })
         if (mountedRef.current) {
           setStatusMessage("Submitting payment txid")
@@ -595,6 +764,7 @@ export function TokenReviewDialog({
           score: submittedInvoice.score,
           comment: submittedInvoice.comment,
           txid,
+          paymentMethod: getInvoicePaymentSelection(submittedInvoice),
         })
       } else if (mountedRef.current) {
         setStatusMessage("Waiting for backend verification")
@@ -656,6 +826,7 @@ export function TokenReviewDialog({
     isGuestMode,
     mnemonic,
     payInvoice,
+    paymentMethod,
     pollInvoiceUntilSettled,
     persistSessionForCurrentToken,
     sanitizedComment,
@@ -790,6 +961,67 @@ export function TokenReviewDialog({
                 </div>
               </div>
 
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label>Payment</Label>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Coins className="size-3.5" />
+                    <span>{selectedPaymentLabel}</span>
+                  </div>
+                </div>
+                <ToggleGroup
+                  type="single"
+                  value={paymentMethod}
+                  onValueChange={(value) => {
+                    if (
+                      value === XEC_PAYMENT_VALUE ||
+                      value === "SS" ||
+                      value === "SC"
+                    ) {
+                      setPaymentMethod(value)
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="grid grid-cols-3"
+                  aria-label="Select review payment method"
+                >
+                  <ToggleGroupItem value={XEC_PAYMENT_VALUE} aria-label="Pay with XEC">
+                    XEC
+                  </ToggleGroupItem>
+                  {REVIEW_PAYMENT_TOKEN_OPTIONS.map((option) => (
+                    <ToggleGroupItem
+                      key={option.symbol}
+                      value={option.symbol}
+                      aria-label={`Pay with ${option.symbol}`}
+                    >
+                      {option.symbol}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  {paymentMethod === XEC_PAYMENT_VALUE ? (
+                    <span>Invoice will request an exact XEC payment.</span>
+                  ) : (
+                    <>
+                      <span>
+                        Balance: {formatTokenAtoms(selectedTokenBalance)} {paymentMethod}
+                      </span>
+                      <span>•</span>
+                      <span>
+                        1 {paymentMethod} covers{" "}
+                        {formatServiceCreditXec(
+                          REVIEW_PAYMENT_TOKEN_OPTIONS.find(
+                            (option) => option.symbol === paymentMethod,
+                          )?.creditSats ?? 0n,
+                        )}{" "}
+                        XEC
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
                   <Label htmlFor="token-review-comment">Comment</Label>
@@ -843,8 +1075,13 @@ export function TokenReviewDialog({
                       Amount
                     </p>
                     <p className="mt-2 text-sm font-semibold">
-                      {invoice.expectedPaidXec} XEC
+                      {formatInvoicePaymentAmount(invoice)}
                     </p>
+                    {invoice.paymentKind === "token" ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Review value: {invoice.expectedPaidXec} XEC
+                      </p>
+                    ) : null}
                   </div>
                   <div className="rounded-xl border border-border/60 bg-white p-3 dark:bg-background/75">
                     <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -930,11 +1167,11 @@ export function TokenReviewDialog({
             ) : isAwaitingBackend ? (
               "Check publication status"
             ) : invoice && !isInvoiceStale && invoice.status === "pending" ? (
-              `Pay ${submitFeeLabel} XEC and submit`
+              `Pay ${submitFeeLabel} and submit`
             ) : invoice?.status === "published" ? (
               "Published"
             ) : (
-              `Pay ${submitFeeLabel} XEC fee and submit`
+              `Pay ${submitFeeLabel} fee and submit`
             )}
           </Button>
         </DialogFooter>
