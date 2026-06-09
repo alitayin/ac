@@ -18,8 +18,47 @@ const INVOICE_ID_PATTERN = /^[0-9a-f-]{16,}$/i
 const TXID_PATTERN = /^[a-f0-9]{64}$/i
 const NANOSATS_PER_XEC = 100_000_000_000
 const ETOKENDB_TOP_VOLUME_PAGE_SIZE = 100
+export const MAX_ETOKENDB_TOKEN_LIST_PAGE_SIZE = 200
+const ETOKENDB_TOKEN_LIST_SORT_FIELDS = [
+  "recent144VolumeSats",
+  "recent1008VolumeSats",
+  "recent4320VolumeSats",
+  "recent144TradeCount",
+  "recent1008TradeCount",
+  "recent4320TradeCount",
+  "lastTradeBlockHeight",
+  "lastTradeBlockTimestamp",
+  "lastSyncedAt",
+  "latestPriceNanosatsPerAtom",
+  "totalVolumeSats",
+  "totalTradeCount",
+  "reviewAverageScore",
+  "reviewScorerCount",
+  "reviewCountTotal",
+  "reviewCommentCountTotal",
+  "lastReviewAt",
+] as const
+const ETOKENDB_TOKEN_LIST_SORT_FIELD_SET = new Set<string>(
+  ETOKENDB_TOKEN_LIST_SORT_FIELDS,
+)
 
 type NumericLike = number | string | null | undefined
+type EtokenDbTokenListSort = (typeof ETOKENDB_TOKEN_LIST_SORT_FIELDS)[number]
+type EtokenDbTokenListOrder = "asc" | "desc"
+
+type EtokenDbTokenListQueryInput = {
+  sort?: unknown
+  order?: unknown
+  pageSize?: unknown
+  readyOnly?: unknown
+}
+
+export type EtokenDbTokenListQuery = {
+  sort: EtokenDbTokenListSort
+  order: EtokenDbTokenListOrder
+  pageSize: number
+  readyOnly: boolean
+}
 
 export type EtokenDbTokenSummaryRecord = {
   tokenId?: string
@@ -358,6 +397,83 @@ const coerceCount = (value: NumericLike): number => {
   return Math.max(0, Math.trunc(coerceFiniteNumber(value)))
 }
 
+const getTokenListQueryInputValue = (
+  input: EtokenDbTokenListQueryInput | URLSearchParams | undefined,
+  key: keyof EtokenDbTokenListQueryInput,
+): unknown => {
+  if (!input) {
+    return undefined
+  }
+
+  if (input instanceof URLSearchParams) {
+    return input.get(key)
+  }
+
+  return input[key]
+}
+
+const parseTokenListPageSize = (value: unknown): number => {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim().length > 0
+        ? Number(value)
+        : ETOKENDB_TOP_VOLUME_PAGE_SIZE
+
+  const finiteValue = Number.isFinite(parsed) ? parsed : ETOKENDB_TOP_VOLUME_PAGE_SIZE
+  return Math.min(
+    MAX_ETOKENDB_TOKEN_LIST_PAGE_SIZE,
+    Math.max(1, Math.trunc(finiteValue)),
+  )
+}
+
+const parseTokenListSort = (value: unknown): EtokenDbTokenListSort => {
+  return typeof value === "string" && ETOKENDB_TOKEN_LIST_SORT_FIELD_SET.has(value)
+    ? (value as EtokenDbTokenListSort)
+    : "recent1008VolumeSats"
+}
+
+const parseTokenListOrder = (value: unknown): EtokenDbTokenListOrder => {
+  return value === "asc" ? "asc" : "desc"
+}
+
+const parseTokenListReadyOnly = (value: unknown): boolean => {
+  if (typeof value === "boolean") {
+    return value
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === "false" || normalized === "0") {
+      return false
+    }
+    if (normalized === "true" || normalized === "1") {
+      return true
+    }
+  }
+
+  return true
+}
+
+export const normalizeEtokenDbTokenListQuery = (
+  input?: EtokenDbTokenListQueryInput | URLSearchParams,
+): EtokenDbTokenListQuery => ({
+  sort: parseTokenListSort(getTokenListQueryInputValue(input, "sort")),
+  order: parseTokenListOrder(getTokenListQueryInputValue(input, "order")),
+  pageSize: parseTokenListPageSize(getTokenListQueryInputValue(input, "pageSize")),
+  readyOnly: parseTokenListReadyOnly(getTokenListQueryInputValue(input, "readyOnly")),
+})
+
+export const createEtokenDbTokenListSearchParams = (
+  query: EtokenDbTokenListQuery,
+): URLSearchParams =>
+  new URLSearchParams({
+    sort: query.sort,
+    order: query.order,
+    pageSize: `${query.pageSize}`,
+    readyOnly: query.readyOnly ? "true" : "false",
+  })
+
 const coerceNullableFiniteNumber = (value: NumericLike): number | null => {
   if (value === null || value === undefined) {
     return null
@@ -639,16 +755,9 @@ export const fetchEtokenDbTopVolumeTokenIds = async (
 export const fetchEtokenDbTopVolumeTokens = async (
   options?: { pageSize?: number },
 ): Promise<EtokenDbTopVolumeToken[]> => {
-  const pageSize = Math.max(
-    1,
-    Math.trunc(options?.pageSize ?? ETOKENDB_TOP_VOLUME_PAGE_SIZE),
+  const params = createEtokenDbTokenListSearchParams(
+    normalizeEtokenDbTokenListQuery(options),
   )
-  const params = new URLSearchParams({
-    sort: "recent1008VolumeSats",
-    order: "desc",
-    pageSize: `${pageSize}`,
-    readyOnly: "true",
-  })
 
   const payload = await fetchJsonWithTimeout<EtokenDbTokenListPayload>(
     `${ETOKENDB_TOKENS_API_BASE_PATH}?${params.toString()}`,

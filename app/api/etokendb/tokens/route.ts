@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 
-import { ETOKENDB_UPSTREAM_BASE_URL } from "@/lib/etokendb"
+import {
+  createEtokenDbTokenListSearchParams,
+  ETOKENDB_UPSTREAM_BASE_URL,
+  normalizeEtokenDbTokenListQuery,
+} from "@/lib/etokendb"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -18,10 +22,9 @@ export async function GET(request: Request) {
   try {
     const requestUrl = new URL(request.url)
     const upstreamUrl = new URL(`${ETOKENDB_UPSTREAM_BASE_URL}/tokens`)
-
-    requestUrl.searchParams.forEach((value, key) => {
-      upstreamUrl.searchParams.append(key, value)
-    })
+    upstreamUrl.search = createEtokenDbTokenListSearchParams(
+      normalizeEtokenDbTokenListQuery(requestUrl.searchParams),
+    ).toString()
 
     const response = await fetch(upstreamUrl.toString(), {
       cache: "no-store",
@@ -41,6 +44,19 @@ export async function GET(request: Request) {
             payload && typeof payload === "object" && typeof (payload as any).error === "string"
               ? (payload as any).error
               : `etokendb token list returned ${response.status}`,
+        },
+        {
+          status: 502,
+          headers: RESPONSE_HEADERS,
+        },
+      )
+    }
+
+    if (!payload || typeof payload !== "object") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Invalid etokendb token list JSON response",
         },
         {
           status: 502,

@@ -412,6 +412,27 @@ describe("etokendb", () => {
     ])
   })
 
+  it("clamps top-volume token page size before calling the local proxy", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: {
+          items: [],
+        },
+      }),
+    })
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(fetchEtokenDbTopVolumeTokens({ pageSize: 9999 })).resolves.toEqual([])
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/etokendb/tokens?sort=recent1008VolumeSats&order=desc&pageSize=200&readyOnly=true",
+      expect.any(Object),
+    )
+  })
+
   it("fetches token review summary through the local proxy", async () => {
     vi.stubGlobal(
       "fetch",
