@@ -42,8 +42,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: ogImagePath,
-        width: 1200,
-        height: 630,
+        width: 2700,
+        height: 1790,
         alt: "Agora Cash token table preview",
       },
     ],
