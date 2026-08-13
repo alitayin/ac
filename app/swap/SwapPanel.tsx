@@ -70,8 +70,12 @@ import {
 } from "@/lib/swap-order-utils";
 import { fetchTokenDetails, getCachedTokenDetails } from "@/lib/chronik";
 import { isBlockedTokenId } from "@/lib/blocked-tokens";
+import { FirmaXecCard } from "@/components/swap/FirmaXecCard";
+import { tokens } from "@/config/tokens";
 
 const MIN_ORDER_TOTAL_XEC = 100;
+const FIRMA_TOKEN_ID = tokens.firma.tokenId;
+const FIRMA_PRICE_USD = 0.996;
 const POLLING_INTERVAL_MS = 30000;
 const EMPTY_SELECTED_TOKEN = {
   id: "",
@@ -151,6 +155,8 @@ export function SwapPanel({
   const [sellAmount, setSellAmount] = useState<string>('');
   const [sellPrice, setSellPrice] = useState<string>('');
   const [isCreatingListing, setIsCreatingListing] = useState<boolean>(false);
+  const [xecTargetPriceUSD, setXecTargetPriceUSD] = useState<string>('');
+  const [firmaSpendAmount, setFirmaSpendAmount] = useState<string>('');
   const { executeOrders } = useAutoExecution();
   const initialQueryTokenAppliedRef = useRef(false);
   const hasInitialQueryToken =
@@ -1288,6 +1294,110 @@ export function SwapPanel({
     }
   };
 
+  const calculateFirmaXecReceive = (targetPriceUSD: string, firmaSpend: string): string => {
+    const priceNum = parseFloat(targetPriceUSD);
+    const spendNum = parseFloat(firmaSpend);
+
+    if (isNaN(priceNum) || isNaN(spendNum) || priceNum <= 0 || spendNum <= 0) {
+      return '0';
+    }
+
+    const firmaValueUSD = spendNum * FIRMA_PRICE_USD;
+    const xecReceive = firmaValueUSD / priceNum;
+
+    return xecReceive.toFixed(2);
+  };
+
+  const firmaBalance = parseFloat(userTokens[FIRMA_TOKEN_ID] || '0');
+  const firmaXecReceive = calculateFirmaXecReceive(xecTargetPriceUSD, firmaSpendAmount);
+
+  const handleFirmaXecConfirm = async () => {
+    if (!isWalletConnected || !mnemonic) {
+      toast({
+        title: "Wallet not connected",
+        description: "Please connect your wallet with recovery phrase",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const priceNum = parseFloat(xecTargetPriceUSD);
+    const spendNum = parseFloat(firmaSpendAmount);
+    const receiveNum = parseFloat(firmaXecReceive);
+
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast({
+        title: "Invalid XEC price",
+        description: "Please enter a valid XEC target price",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isNaN(spendNum) || spendNum <= 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid Firma amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (spendNum > firmaBalance) {
+      toast({
+        title: "Insufficient balance",
+        description: `You only have ${firmaBalance.toLocaleString()} Firma`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingListing(true);
+
+    try {
+      // Calculate Agora price: XEC per Firma atom
+      const agoraPrice = receiveNum / spendNum;
+      const firmaDecimals = 2; // Firma has 2 decimals
+      const tokenAmountBigInt = BigInt(Math.floor(spendNum * Math.pow(10, firmaDecimals)));
+      const pricePerAtom = agoraPrice / Math.pow(10, firmaDecimals);
+
+      const result = await createAgoraOffer({
+        tokenId: FIRMA_TOKEN_ID,
+        tokenAmount: tokenAmountBigInt,
+        pricePerToken: pricePerAtom,
+        mnemonic: mnemonic,
+        offerType: 'PARTIAL'
+      });
+
+      if (result.success) {
+        toast({
+          title: "✅ Firma sell order created",
+          description: `Listed ${spendNum} Firma to buy ${receiveNum.toLocaleString()} XEC at $${priceNum}/XEC`,
+        });
+
+        setFirmaSpendAmount('');
+        setXecTargetPriceUSD('');
+
+        window.dispatchEvent(new Event('listings-updated'));
+      } else {
+        toast({
+          title: "Failed to create order",
+          description: result.message || "Unknown error occurred",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error creating Firma/XEC order:', error);
+      toast({
+        title: "Error creating order",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingListing(false);
+    }
+  };
+
 
   return (
     <>
@@ -1308,6 +1418,12 @@ export function SwapPanel({
                 className="rounded-full px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-muted-foreground data-[state=active]:shadow-none shadow-none"
               >
                 Sell
+              </TabsTrigger>
+              <TabsTrigger
+                value="firma-xec"
+                className="rounded-full px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-muted-foreground data-[state=active]:shadow-none shadow-none"
+              >
+                Firma/XEC
               </TabsTrigger>
               <TabsTrigger
                 value="orders"
@@ -1666,6 +1782,24 @@ export function SwapPanel({
                     {isCreatingListing ? "Creating..." : isWalletConnected ? "Create Listing" : "Connect wallet"}
                   </Button>
                 </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="firma-xec" className="mt-0">
+            <div className="p-4 pt-2">
+              <div className="space-y-2 max-w-xl mx-auto">
+                <FirmaXecCard
+                  xecPriceUSD={xecTargetPriceUSD}
+                  onXecPriceChange={setXecTargetPriceUSD}
+                  firmaSpend={firmaSpendAmount}
+                  onFirmaSpendChange={setFirmaSpendAmount}
+                  firmaBalance={firmaBalance}
+                  xecReceive={firmaXecReceive}
+                  currentXecPrice={xecPrice || 0}
+                  onConfirm={handleFirmaXecConfirm}
+                  isWalletConnected={isWalletConnected}
+                />
               </div>
             </div>
           </TabsContent>
