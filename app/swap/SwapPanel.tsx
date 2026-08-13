@@ -70,11 +70,11 @@ import {
 } from "@/lib/swap-order-utils";
 import { fetchTokenDetails, getCachedTokenDetails } from "@/lib/chronik";
 import { isBlockedTokenId } from "@/lib/blocked-tokens";
-import { FirmaXecCard } from "@/components/swap/FirmaXecCard";
 import { tokens } from "@/config/tokens";
 
 const MIN_ORDER_TOTAL_XEC = 100;
 const FIRMA_TOKEN_ID = tokens.firma.tokenId;
+const FIRMA_DECIMALS = tokens.firma.decimals ?? 0;
 const FIRMA_PRICE_USD = 0.996;
 const POLLING_INTERVAL_MS = 30000;
 const EMPTY_SELECTED_TOKEN = {
@@ -1308,8 +1308,23 @@ export function SwapPanel({
     return xecReceive.toFixed(2);
   };
 
-  const firmaBalance = parseFloat(userTokens[FIRMA_TOKEN_ID] || '0');
+  const firmaBalance = parseFloat(userTokens[FIRMA_TOKEN_ID] || '0') / Math.pow(10, FIRMA_DECIMALS);
   const firmaXecReceive = calculateFirmaXecReceive(xecTargetPriceUSD, firmaSpendAmount);
+
+  const handleXecPriceInputChange = (value: string) => {
+    if (value === '' || /^[0-9]*\.?[0-9]*$/.test(value)) {
+      setXecTargetPriceUSD(value);
+    }
+  };
+
+  const handleXecPriceBlur = () => {
+    const newPrice = parseFloat(xecTargetPriceUSD);
+    if (isNaN(newPrice)) {
+      setXecTargetPriceUSD('');
+    } else {
+      setXecTargetPriceUSD(newPrice.toString());
+    }
+  };
 
   const handleFirmaXecConfirm = async () => {
     if (!isWalletConnected || !mnemonic) {
@@ -1355,11 +1370,10 @@ export function SwapPanel({
     setIsCreatingListing(true);
 
     try {
-      // Calculate Agora price: XEC per Firma atom
+      // Agora price is XEC per whole Firma; convert to XEC per Firma atom using real decimals
       const agoraPrice = receiveNum / spendNum;
-      const firmaDecimals = 2; // Firma has 2 decimals
-      const tokenAmountBigInt = BigInt(Math.floor(spendNum * Math.pow(10, firmaDecimals)));
-      const pricePerAtom = agoraPrice / Math.pow(10, firmaDecimals);
+      const tokenAmountBigInt = BigInt(Math.round(spendNum * Math.pow(10, FIRMA_DECIMALS)));
+      const pricePerAtom = agoraPrice / Math.pow(10, FIRMA_DECIMALS);
 
       const result = await createAgoraOffer({
         tokenId: FIRMA_TOKEN_ID,
@@ -1789,17 +1803,81 @@ export function SwapPanel({
           <TabsContent value="firma-xec" className="mt-0">
             <div className="p-4 pt-2">
               <div className="space-y-2 max-w-xl mx-auto">
-                <FirmaXecCard
-                  xecPriceUSD={xecTargetPriceUSD}
-                  onXecPriceChange={setXecTargetPriceUSD}
-                  firmaSpend={firmaSpendAmount}
-                  onFirmaSpendChange={setFirmaSpendAmount}
-                  firmaBalance={firmaBalance}
-                  xecReceive={firmaXecReceive}
-                  currentXecPrice={xecPrice || 0}
-                  onConfirm={handleFirmaXecConfirm}
-                  isWalletConnected={isWalletConnected}
+                <PriceCard
+                  selectedToken={{ id: FIRMA_TOKEN_ID, name: "Firma" }}
+                  userTokens={userTokens}
+                  tokenPriceInput={xecTargetPriceUSD}
+                  onTokenPriceInputChange={handleXecPriceInputChange}
+                  onTokenPriceBlur={handleXecPriceBlur}
+                  useBestOrderPrice={useBestOrderPrice}
+                  setUseBestOrderPrice={setUseBestOrderPrice}
+                  showUsdPrice={showUsdPrice}
+                  setShowUsdPrice={setShowUsdPrice}
+                  onMarketClick={() => {}}
+                  onTokenSelect={() => {}}
+                  onTokenMetaChange={() => {}}
+                  showTokenSelector={false}
+                  title="Set price for 1 XEC (USD)"
+                  showMarketButton={false}
+                  showOneDollarButton={false}
+                  showSettings={false}
+                  showUsdPriceValue={(xecPrice || 0) > 0}
+                  usdPriceText={(xecPrice || 0) > 0 ? xecPrice.toFixed(8) : ''}
                 />
+
+                <BuyCard
+                  receiveAmount={firmaSpendAmount}
+                  setReceiveAmount={setFirmaSpendAmount}
+                  calculateSpendAmount={() => {}}
+                  selectedToken={{ id: FIRMA_TOKEN_ID, name: "Firma" }}
+                  userTokens={userTokens}
+                  onTokenSelect={() => {}}
+                  onTokenMetaChange={() => {}}
+                  selectedTokenDecimals={FIRMA_DECIMALS}
+                  label="Sell (Firma)"
+                  showTokenSelector={false}
+                  showMaxBalance={true}
+                  showExplorerLink={false}
+                />
+
+                <BuyCard
+                  receiveAmount={firmaXecReceive}
+                  setReceiveAmount={() => {}}
+                  calculateSpendAmount={() => {}}
+                  selectedToken={{ id: "", name: "XEC" }}
+                  userTokens={userTokens}
+                  onTokenSelect={() => {}}
+                  onTokenMetaChange={() => {}}
+                  selectedTokenDecimals={2}
+                  label="Receive (XEC)"
+                  showTokenSelector={false}
+                  readOnly={true}
+                  showExplorerLink={false}
+                />
+
+                <div className="space-y-2 mt-2">
+                  <Button
+                    className="w-full text-md rounded-xl h-12"
+                    variant="default"
+                    onClick={handleFirmaXecConfirm}
+                    disabled={isCreatingListing || !isWalletConnected}
+                  >
+                    {isCreatingListing ? "Creating..." : isWalletConnected ? "Create Sell Order" : "Connect wallet"}
+                  </Button>
+
+                  <Accordion type="single" collapsible className="w-full rounded-xl border px-4">
+                    <AccordionItem value="firma-xec-tip" className="border-b-0">
+                      <AccordionTrigger className="py-3 text-left text-sm text-muted-foreground hover:no-underline">
+                        How does Firma/XEC work?
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-3 text-sm text-muted-foreground">
+                        Firma is treated as a stable asset (${FIRMA_PRICE_USD}). Set the USD price you want
+                        to buy XEC at, and this creates a Firma sell order on Agora priced to match that
+                        target — effectively swapping Firma for XEC once it fills.
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                </div>
               </div>
             </div>
           </TabsContent>

@@ -89,6 +89,7 @@ export const tokens: Record<string, TokenConfig> = {
     tokenId: "0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0",
     telegramUrl: "https://t.me/firmadotcash",
     feature: "Yield-bearing Stablecoin",
+    decimals: 4,
     description: {
       title: "",
       content: "",

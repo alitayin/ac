@@ -39,6 +39,8 @@ interface PriceCardProps {
   transientHintText?: string;
   transientHintKey?: number;
   transientHintDurationMs?: number;
+  showMarketButton?: boolean;
+  showSettings?: boolean;
 }
 
 export const PriceCard: React.FC<PriceCardProps> = ({
@@ -69,6 +71,8 @@ export const PriceCard: React.FC<PriceCardProps> = ({
   transientHintText,
   transientHintKey = 0,
   transientHintDurationMs = 10000,
+  showMarketButton = true,
+  showSettings = true,
 }) => {
   const [typedHintText, setTypedHintText] = useState("");
   const [showTransientHint, setShowTransientHint] = useState(false);
@@ -159,6 +163,7 @@ export const PriceCard: React.FC<PriceCardProps> = ({
               {sweepModeEnabled ? "Market Buy" : "Limit Buy"}
             </Button>
           ) : null}
+          {showSettings ? (
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -206,6 +211,7 @@ export const PriceCard: React.FC<PriceCardProps> = ({
               </div>
             </PopoverContent>
           </Popover>
+          ) : null}
         </div>
       </div>
 
@@ -252,15 +258,18 @@ export const PriceCard: React.FC<PriceCardProps> = ({
         )}
       </div>
 
+      {(showMarketButton || showUsdPriceValue) && (
       <div className="flex mt-4 justify-between items-center">
         <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            className="p-2 h-8 text-sm"
-            onClick={onMarketClick}
-          >
-            Market
-          </Button>
+          {showMarketButton && (
+            <Button
+              variant="outline"
+              className="p-2 h-8 text-sm"
+              onClick={onMarketClick}
+            >
+              Market
+            </Button>
+          )}
           {!onSweepModeToggle && showOneDollarButton && onOneDollarClick ? (
             <Button
               variant="outline"
@@ -277,6 +286,7 @@ export const PriceCard: React.FC<PriceCardProps> = ({
           </div>
         )}
       </div>
+      )}
       </div>
     </Card>
   );

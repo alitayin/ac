@@ -18,6 +18,7 @@ interface BuyCardProps {
   showTokenSelector?: boolean;
   showMaxBalance?: boolean;
   readOnly?: boolean;
+  showExplorerLink?: boolean;
 }
 
 export const BuyCard: React.FC<BuyCardProps> = ({
@@ -33,6 +34,7 @@ export const BuyCard: React.FC<BuyCardProps> = ({
   showTokenSelector = true,
   showMaxBalance = false,
   readOnly = false,
+  showExplorerLink = true,
 }) => {
   const rawAmount = userTokens[selectedToken.id] || "0";
   const maxBalance = Number(rawAmount) / Math.pow(10, selectedTokenDecimals);
@@ -112,21 +114,23 @@ export const BuyCard: React.FC<BuyCardProps> = ({
           </div>
         )}
 
-        <div className="text-muted-foreground text-sm text-right">
-          {selectedToken.id ? (
-            <a
-              href={`https://explorer.e.cash/tx/${selectedToken.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-primary transition-colors"
-            >
-              {selectedToken.id.substring(0, 4)}...
-              {selectedToken.id.substring(selectedToken.id.length - 4)}
-            </a>
-          ) : (
-            <span>No token selected</span>
-          )}
-        </div>
+        {showExplorerLink && (
+          <div className="text-muted-foreground text-sm text-right">
+            {selectedToken.id ? (
+              <a
+                href={`https://explorer.e.cash/tx/${selectedToken.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-primary transition-colors"
+              >
+                {selectedToken.id.substring(0, 4)}...
+                {selectedToken.id.substring(selectedToken.id.length - 4)}
+              </a>
+            ) : (
+              <span>No token selected</span>
+            )}
+          </div>
+        )}
       </div>
     </Card>
   );
