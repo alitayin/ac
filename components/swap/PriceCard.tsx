@@ -42,6 +42,10 @@ interface PriceCardProps {
   showMarketButton?: boolean;
   showSettings?: boolean;
   marketButtonDisabled?: boolean;
+  marketButtonLabel?: string;
+  onSecondaryMarketClick?: () => void;
+  secondaryMarketButtonLabel?: string;
+  secondaryMarketButtonDisabled?: boolean;
   inputUnitLabel?: string;
   referencePrices?: Array<{
     label: string;
@@ -81,6 +85,10 @@ export const PriceCard: React.FC<PriceCardProps> = ({
   showMarketButton = true,
   showSettings = true,
   marketButtonDisabled = false,
+  marketButtonLabel = "Market",
+  onSecondaryMarketClick,
+  secondaryMarketButtonLabel,
+  secondaryMarketButtonDisabled = false,
   inputUnitLabel,
   referencePrices = [],
 }) => {
@@ -275,8 +283,11 @@ export const PriceCard: React.FC<PriceCardProps> = ({
       </div>
 
       {(showMarketButton || showUsdPriceValue || referencePrices.length > 0) && (
-      <div className="flex mt-4 justify-between items-end gap-3">
-        <div className="flex shrink-0 space-x-2">
+      <div className={referencePrices.length > 0
+        ? "flex mt-4 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+        : "flex mt-4 items-center justify-between gap-3"}
+      >
+        <div className="flex shrink-0 flex-wrap gap-2">
           {showMarketButton && (
             <Button
               variant="outline"
@@ -284,9 +295,19 @@ export const PriceCard: React.FC<PriceCardProps> = ({
               onClick={onMarketClick}
               disabled={marketButtonDisabled}
             >
-              Market
+              {marketButtonLabel}
             </Button>
           )}
+          {onSecondaryMarketClick && secondaryMarketButtonLabel ? (
+            <Button
+              variant="outline"
+              className="p-2 h-8 text-sm"
+              onClick={onSecondaryMarketClick}
+              disabled={secondaryMarketButtonDisabled}
+            >
+              {secondaryMarketButtonLabel}
+            </Button>
+          ) : null}
           {!onSweepModeToggle && showOneDollarButton && onOneDollarClick ? (
             <Button
               variant="outline"
@@ -298,7 +319,7 @@ export const PriceCard: React.FC<PriceCardProps> = ({
           ) : null}
         </div>
         {referencePrices.length > 0 ? (
-          <div className="min-w-0 space-y-1 text-right text-xs text-muted-foreground sm:text-sm">
+          <div className="min-w-0 space-y-1 text-left text-xs text-muted-foreground sm:text-right sm:text-sm">
             {referencePrices.map((reference) => (
               <div
                 key={reference.label}

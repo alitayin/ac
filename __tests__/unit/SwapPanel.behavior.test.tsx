@@ -58,7 +58,7 @@ vi.mock("@/lib/context/AutoExecutionContext", () => ({
 }));
 
 vi.mock("@/lib/price", () => ({
-  useXECPrice: () => 0.00003,
+  useXECPrice: () => 0.00000681,
 }));
 
 vi.mock("@/hooks/use-firma-bid", () => ({
@@ -88,7 +88,9 @@ vi.mock("@/lib/chronik", () => ({
 }));
 
 vi.mock("@/components/ui/OrderBook", () => ({
-  default: () => <div data-testid="order-book" />,
+  default: ({ tokenId }: { tokenId: string }) => (
+    <div data-testid="order-book" data-token-id={tokenId} />
+  ),
 }));
 
 vi.mock("@/components/ui/orderlist", () => ({
@@ -127,11 +129,26 @@ vi.mock("@/components/swap/PriceCard", () => {
       ) : null}
       <button
         type="button"
-        aria-label={props.title ? `${props.title} Market` : "Market"}
+        aria-label={props.title
+          ? `${props.title} ${props.marketButtonLabel || "Market"}`
+          : props.marketButtonLabel || "Market"}
         onClick={props.onMarketClick}
+        disabled={props.marketButtonDisabled}
       >
-        Market
+        {props.marketButtonLabel || "Market"}
       </button>
+      {props.onSecondaryMarketClick && props.secondaryMarketButtonLabel ? (
+        <button
+          type="button"
+          aria-label={props.title
+            ? `${props.title} ${props.secondaryMarketButtonLabel}`
+            : props.secondaryMarketButtonLabel}
+          onClick={props.onSecondaryMarketClick}
+          disabled={props.secondaryMarketButtonDisabled}
+        >
+          {props.secondaryMarketButtonLabel}
+        </button>
+      ) : null}
     </div>
   );
 
@@ -219,6 +236,22 @@ const orderBookResponse = {
   },
 };
 
+const firmaTokenId =
+  "0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0";
+const firmaOrderBookResponse = {
+  success: true,
+  data: {
+    orders: [
+      { price: 156_534.955134, amount: 5_000 },
+      { price: 160_000, amount: 1_000 },
+    ],
+    stats: {
+      min_price: 156_534.955134,
+      total_value: 942_674_775.67,
+    },
+  },
+};
+
 const flushAsyncWork = async () => {
   await Promise.resolve();
   await Promise.resolve();
@@ -238,7 +271,11 @@ describe("SwapPanel current behavior", () => {
     walletState.isGuestMode = false;
     walletState.mnemonic = "test mnemonic";
 
-    fetchAgoraOrderBookMock.mockResolvedValue(orderBookResponse);
+    fetchAgoraOrderBookMock.mockImplementation((tokenId: string) =>
+      Promise.resolve(
+        tokenId === firmaTokenId ? firmaOrderBookResponse : orderBookResponse,
+      ),
+    );
     fetchAgoraTransactionsMock.mockResolvedValue([{ price: 0.18 }]);
     estimateNetworkFeeMock.mockResolvedValue({
       fee: 19,
@@ -375,9 +412,7 @@ describe("SwapPanel current behavior", () => {
     ).toBeInTheDocument();
   });
 
-  it("uses the Firma bid for Market and caps above-market limits", async () => {
-    const firmaTokenId =
-      "0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0";
+  it("shows both Firma price sources and caps orders at the lowest Agora ask", async () => {
     walletState.userTokens = {
       "token-1": "1234500",
       [firmaTokenId]: "1000000",
@@ -393,19 +428,58 @@ describe("SwapPanel current behavior", () => {
       await flushAsyncWork();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Set max price for 1 XEC Market" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Set max price for 1 XEC Binance Price",
+      }),
+    );
 
-    expect(screen.getByLabelText("Set max price for 1 XEC")).toHaveValue("0.00003000");
-    expect(screen.getByText(/Firma buyback: \$0.00000684\/XEC/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Set max price for 1 XEC")).toHaveValue("0.00000681");
+    expect(screen.getByText(/Firma buyback: \$0.996$/)).toBeInTheDocument();
+    expect(screen.getByText(/Agora lowest ask: \$1.066\/Firma/)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Set max price for 1 XEC Agora Price",
+      }),
+    );
+    expect(screen.getByLabelText("Set max price for 1 XEC")).toHaveValue(
+      "0.000006388349",
+    );
 
     fireEvent.change(screen.getByLabelText("Set max price for 1 XEC"), {
-      target: { value: "0.00004" },
+      target: { value: "0.0000075" },
     });
     fireEvent.change(screen.getByLabelText("Spend amount"), {
       target: { value: "10" },
     });
 
-    expect(screen.getByText(/cannot fill at a worse price/)).toBeInTheDocument();
+    expect(screen.getByText(/capped by the lowest Agora ask/)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Toggle order book panel" }),
+    );
+    expect(screen.getByTestId("order-book")).toHaveAttribute(
+      "data-token-id",
+      firmaTokenId,
+    );
+
+    fetchAgoraOrderBookMock.mockImplementation((tokenId: string) =>
+      Promise.resolve(
+        tokenId === firmaTokenId
+          ? {
+              ...firmaOrderBookResponse,
+              data: {
+                ...firmaOrderBookResponse.data,
+                stats: {
+                  ...firmaOrderBookResponse.data.stats,
+                  min_price: 160_000,
+                },
+              },
+            }
+          : orderBookResponse,
+      ),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Create Firma/XEC Order" }));
 
@@ -416,7 +490,8 @@ describe("SwapPanel current behavior", () => {
     expect(createAgoraOfferMock).toHaveBeenCalledWith(expect.objectContaining({
       tokenId: firmaTokenId,
       tokenAmount: 100000n,
-      pricePerToken: 14.620544,
+      pricePerToken: 16,
     }));
+    expect(fetchAgoraOrderBookMock).toHaveBeenLastCalledWith(firmaTokenId);
   });
 });

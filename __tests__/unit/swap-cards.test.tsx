@@ -55,6 +55,24 @@ describe('Swap Cards', () => {
       expect(mockProps.onMarketClick).toHaveBeenCalled()
     })
 
+    it('should support separately labeled Binance and Agora price buttons', () => {
+      const onAgoraPriceClick = vi.fn()
+      render(
+        <PriceCard
+          {...mockProps}
+          marketButtonLabel="Binance Price"
+          onSecondaryMarketClick={onAgoraPriceClick}
+          secondaryMarketButtonLabel="Agora Price"
+        />,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Binance Price' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Agora Price' }))
+
+      expect(mockProps.onMarketClick).toHaveBeenCalled()
+      expect(onAgoraPriceClick).toHaveBeenCalled()
+    })
+
     it('should call onOneDollarClick when 1.00 $ button is clicked', () => {
       render(<PriceCard {...mockProps} />)
       const dollarButton = screen.getByText('1.00 $')
@@ -79,15 +97,17 @@ describe('Swap Cards', () => {
           showTokenSelector={false}
           inputUnitLabel="$/XEC"
           referencePrices={[
-            { label: 'XEC market:', value: '$0.00000681/XEC' },
-            { label: 'Firma buyback:', value: '$0.00000684/XEC' },
+            { label: 'Binance XEC:', value: '$0.00000681/XEC' },
+            { label: 'Firma buyback:', value: '$0.996' },
+            { label: 'Agora lowest ask:', value: '$1.066/Firma' },
           ]}
         />,
       )
 
       expect(screen.getByText('$/XEC')).toBeInTheDocument()
       expect(screen.getByText('$0.00000681/XEC')).toBeInTheDocument()
-      expect(screen.getByText('$0.00000684/XEC')).toBeInTheDocument()
+      expect(screen.getByText('$0.996')).toBeInTheDocument()
+      expect(screen.getByText('$1.066/Firma')).toBeInTheDocument()
     })
   })
 

@@ -75,8 +75,9 @@ import { tokens } from "@/config/tokens";
 import { parseDecimalToAtoms } from "@/lib/decimal";
 import {
   calculateFirmaXecQuote,
+  formatFirmaPriceInput,
+  formatFirmaUsd,
   formatUsdPerXec,
-  getFirmaBidImpliedXecUsd,
 } from "@/lib/firma";
 
 const MIN_ORDER_TOTAL_XEC = 100;
@@ -88,6 +89,7 @@ const EMPTY_SELECTED_TOKEN = {
   name: "Select token",
 };
 type BuyMode = "limit" | "sweep";
+type SwapTab = "swap" | "sell" | "firma-xec" | "orders";
 
 type SwapPanelProps = {
   initialTokenId?: string;
@@ -158,7 +160,14 @@ export function SwapPanel({
   const [sweepQuoteVersion, setSweepQuoteVersion] = useState<number>(0);
   const [totalTokensBought, setTotalTokensBought] = useState<number>(0);
   const [showProPanel, setShowProPanel] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<SwapTab>("swap");
   const [orderBook, setOrderBook] = useState<{ orders: any[] }>({ orders: [] });
+  const [firmaOrderBook, setFirmaOrderBook] = useState<{
+    orders: any[];
+    stats?: { min_price?: number };
+  }>({ orders: [] });
+  const [isFirmaOrderBookLoading, setIsFirmaOrderBookLoading] = useState(false);
+  const [firmaOrderBookError, setFirmaOrderBookError] = useState<string | null>(null);
   const [selectedTokenDecimals, setSelectedTokenDecimals] = useState<number>(0);
   const [ordersView, setOrdersView] = useState<'buy' | 'sell'>('buy');
   const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC); // Network fee estimated from wallet UTXO count
@@ -195,7 +204,10 @@ export function SwapPanel({
   };
 
   // Cached order book fetch with 10 second TTL
-  const fetchOrderBookCached = useCallback(async (tokenId: string) => {
+  const fetchOrderBookCached = useCallback(async (
+    tokenId: string,
+    forceRefresh = false,
+  ) => {
     if (!tokenId || isBlockedTokenId(tokenId)) {
       return { orders: [] };
     }
@@ -204,7 +216,7 @@ export function SwapPanel({
     const now = Date.now();
 
     // Return cached data if still valid
-    if (cached && now - cached.timestamp < ORDERBOOK_CACHE_TTL_MS) {
+    if (!forceRefresh && cached && now - cached.timestamp < ORDERBOOK_CACHE_TTL_MS) {
       return cached.data;
     }
 
@@ -250,14 +262,47 @@ export function SwapPanel({
     }
   }, [selectedToken.id, fetchOrderBookCached]);
 
+  const fetchFirmaOrderBook = useCallback(async () => {
+    setIsFirmaOrderBookLoading(true);
+
+    try {
+      const data = await fetchOrderBookCached(FIRMA_TOKEN_ID);
+      const minPrice = Number(data?.stats?.min_price);
+
+      if (!Number.isFinite(minPrice) || minPrice <= 0) {
+        throw new Error("No active Firma sell orders are available");
+      }
+
+      setFirmaOrderBook(data);
+      setFirmaOrderBookError(null);
+    } catch (error) {
+      setFirmaOrderBook({ orders: [] });
+      setFirmaOrderBookError(
+        error instanceof Error ? error.message : "Failed to load the Firma order book",
+      );
+    } finally {
+      setIsFirmaOrderBookLoading(false);
+    }
+  }, [fetchOrderBookCached]);
+
   // Fetch order book when token changes or PRO panel is shown
   useEffect(() => {
-    if (showProPanel && selectedToken.id) {
+    if (showProPanel && activeTab !== "firma-xec" && selectedToken.id) {
       fetchOrderBook();
       const interval = setInterval(fetchOrderBook, POLLING_INTERVAL_MS);
       return () => clearInterval(interval);
     }
-  }, [fetchOrderBook, showProPanel, selectedToken.id]);
+  }, [activeTab, fetchOrderBook, showProPanel, selectedToken.id]);
+
+  useEffect(() => {
+    if (activeTab !== "firma-xec") {
+      return;
+    }
+
+    void fetchFirmaOrderBook();
+    const intervalId = setInterval(fetchFirmaOrderBook, POLLING_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [activeTab, fetchFirmaOrderBook]);
 
   const handleSaveMnemonic = async () => {
     const fullMnemonic = mnemonicWords.join(' ').trim();
@@ -1306,22 +1351,43 @@ export function SwapPanel({
   };
 
   const firmaBalance = parseFloat(userTokens[FIRMA_TOKEN_ID] || '0') / Math.pow(10, FIRMA_DECIMALS);
+  const firmaLowestAskXecPerFirma = Number(firmaOrderBook.stats?.min_price || 0);
   const firmaQuote = useMemo(
     () => calculateFirmaXecQuote({
       firmaAmount: parseFloat(firmaSpendAmount),
       requestedXecUsd: parseFloat(xecTargetPriceUSD),
       marketXecUsd: xecPrice,
       firmaBidXec,
+      agoraLowestAskXecPerFirma: firmaLowestAskXecPerFirma,
     }),
-    [firmaBidXec, firmaSpendAmount, xecPrice, xecTargetPriceUSD],
+    [
+      firmaBidXec,
+      firmaLowestAskXecPerFirma,
+      firmaSpendAmount,
+      xecPrice,
+      xecTargetPriceUSD,
+    ],
   );
   const firmaXecReceive = firmaQuote ? firmaQuote.xecReceive.toFixed(2) : '0';
-  const firmaBidImpliedXecUsd = getFirmaBidImpliedXecUsd(firmaBidXec);
-  const isFirmaPriceAboveMarket =
-    Number.isFinite(parseFloat(xecTargetPriceUSD)) &&
-    parseFloat(xecTargetPriceUSD) > 0 &&
-    xecPrice > 0 &&
-    parseFloat(xecTargetPriceUSD) > xecPrice;
+  const firmaBuybackUsd = firmaBidXec > 0 && xecPrice > 0
+    ? firmaBidXec * xecPrice
+    : 0;
+  const firmaLowestAskUsd = firmaLowestAskXecPerFirma > 0 && xecPrice > 0
+    ? firmaLowestAskXecPerFirma * xecPrice
+    : 0;
+  const firmaAgoraXecUsd = firmaLowestAskXecPerFirma > 0
+    ? 1 / firmaLowestAskXecPerFirma
+    : 0;
+  const requestedFirmaXecUsd = parseFloat(xecTargetPriceUSD);
+  const firmaBidXecUsd = firmaBidXec > 0 ? 1 / firmaBidXec : 0;
+  const firmaMaximumXecUsd = firmaBidXecUsd > 0 && firmaAgoraXecUsd > 0
+    ? Math.min(firmaBidXecUsd, firmaAgoraXecUsd)
+    : 0;
+  const isFirmaPriceCapped =
+    Number.isFinite(requestedFirmaXecUsd) &&
+    requestedFirmaXecUsd > 0 &&
+    firmaMaximumXecUsd > 0 &&
+    requestedFirmaXecUsd > firmaMaximumXecUsd;
 
   const handleXecPriceInputChange = (value: string) => {
     if (value === '' || /^[0-9]*\.?[0-9]*$/.test(value)) {
@@ -1338,7 +1404,7 @@ export function SwapPanel({
     }
   };
 
-  const handleFirmaMarketClick = () => {
+  const handleFirmaBinancePriceClick = () => {
     if (xecPrice <= 0) {
       toast({
         title: "Market price unavailable",
@@ -1349,6 +1415,19 @@ export function SwapPanel({
     }
 
     setXecTargetPriceUSD(xecPrice.toFixed(8));
+  };
+
+  const handleFirmaAgoraPriceClick = () => {
+    if (firmaAgoraXecUsd <= 0) {
+      toast({
+        title: "Agora price unavailable",
+        description: "Unable to load the lowest Firma sell price. Please try again later.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setXecTargetPriceUSD(formatFirmaPriceInput(firmaAgoraXecUsd));
   };
 
   const handleFirmaXecConfirm = async () => {
@@ -1412,25 +1491,43 @@ export function SwapPanel({
       return;
     }
 
-    const latestQuote = calculateFirmaXecQuote({
-      firmaAmount: spendNum,
-      requestedXecUsd: priceNum,
-      marketXecUsd: xecPrice,
-      firmaBidXec,
-    });
-
-    if (!latestQuote) {
-      toast({
-        title: "Price unavailable",
-        description: "The latest XEC market price or Firma buyback price is unavailable",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsCreatingListing(true);
 
     try {
+      const latestFirmaOrderBook = await fetchOrderBookCached(FIRMA_TOKEN_ID, true);
+      const latestLowestAskXecPerFirma = Number(
+        latestFirmaOrderBook?.stats?.min_price,
+      );
+
+      if (!Number.isFinite(latestLowestAskXecPerFirma) || latestLowestAskXecPerFirma <= 0) {
+        toast({
+          title: "Agora price unavailable",
+          description: "Unable to confirm the latest Firma sell price. No order was created.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setFirmaOrderBook(latestFirmaOrderBook);
+      setFirmaOrderBookError(null);
+
+      const latestQuote = calculateFirmaXecQuote({
+        firmaAmount: spendNum,
+        requestedXecUsd: priceNum,
+        marketXecUsd: xecPrice,
+        firmaBidXec,
+        agoraLowestAskXecPerFirma: latestLowestAskXecPerFirma,
+      });
+
+      if (!latestQuote) {
+        toast({
+          title: "Price unavailable",
+          description: "The latest XEC market, Firma bid, or Agora price is unavailable",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const pricePerAtom = latestQuote.xecPerFirma / Math.pow(10, FIRMA_DECIMALS);
 
       const result = await createAgoraOffer({
@@ -1476,7 +1573,11 @@ export function SwapPanel({
       <div className="flex-1 flex justify-center px-4">
         <div className={`flex gap-6 pt-2 sm:p-8 transition-all duration-300 ${showProPanel ? 'lg:max-w-[1400px] w-full' : 'max-w-xl w-full mx-auto'}`}>
           <main className={`${showProPanel ? 'lg:w-[600px] w-full' : 'w-full'} transition-all duration-300`}>
-          <Tabs defaultValue="swap" className="w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as SwapTab)}
+            className="w-full"
+          >
           <TabsList className="flex justify-between px-4 bg-transparent">
             <div className="flex space-x-2">
               <TabsTrigger
@@ -1871,7 +1972,7 @@ export function SwapPanel({
                   setUseBestOrderPrice={setUseBestOrderPrice}
                   showUsdPrice={showUsdPrice}
                   setShowUsdPrice={setShowUsdPrice}
-                  onMarketClick={handleFirmaMarketClick}
+                  onMarketClick={handleFirmaBinancePriceClick}
                   onTokenSelect={() => {}}
                   onTokenMetaChange={() => {}}
                   showTokenSelector={false}
@@ -1880,33 +1981,46 @@ export function SwapPanel({
                   showOneDollarButton={false}
                   showSettings={false}
                   marketButtonDisabled={xecPrice <= 0}
+                  marketButtonLabel="Binance Price"
+                  onSecondaryMarketClick={handleFirmaAgoraPriceClick}
+                  secondaryMarketButtonLabel="Agora Price"
+                  secondaryMarketButtonDisabled={isFirmaOrderBookLoading || firmaAgoraXecUsd <= 0}
                   inputUnitLabel="$/XEC"
                   showUsdPriceValue={false}
                   usdPriceText=""
                   referencePrices={[
                     {
-                      label: "XEC market:",
+                      label: "Binance XEC:",
                       value: xecPrice > 0 ? `$${formatUsdPerXec(xecPrice)}/XEC` : "--",
                     },
                     {
                       label: "Firma buyback:",
-                      value: firmaBidImpliedXecUsd
-                        ? `$${formatUsdPerXec(firmaBidImpliedXecUsd)}/XEC`
+                      value: firmaBuybackUsd > 0
+                        ? `$${formatFirmaUsd(firmaBuybackUsd)}`
                         : isFirmaBidLoading ? "Loading..." : "--",
                       title: firmaBidXec > 0
                         ? `Based on 1 Firma = ${firmaBidXec.toLocaleString(undefined, { maximumFractionDigits: 2 })} XEC from stakedxec.com`
                         : "Firma buyback price from stakedxec.com",
                     },
+                    {
+                      label: "Agora lowest ask:",
+                      value: firmaLowestAskUsd > 0
+                        ? `$${formatFirmaUsd(firmaLowestAskUsd)}/Firma`
+                        : isFirmaOrderBookLoading ? "Loading..." : "--",
+                      title: firmaLowestAskXecPerFirma > 0
+                        ? `${firmaLowestAskXecPerFirma.toLocaleString(undefined, { maximumFractionDigits: 6 })} XEC/Firma`
+                        : "Lowest active Firma sell order on Agora",
+                    },
                   ]}
                 />
 
-                {isFirmaPriceAboveMarket ? (
+                {isFirmaPriceCapped && firmaQuote ? (
                   <Alert>
                     <CircleAlert className="h-4 w-4" />
                     <AlertDescription>
-                      Your limit is above the current market. This order uses the current
-                      market price of ${formatUsdPerXec(xecPrice)}/XEC, so it cannot fill at
-                      a worse price.
+                      Your limit is above the available Firma market. This order uses
+                      ${formatUsdPerXec(firmaQuote.effectiveXecUsd)}/XEC, capped by the
+                      {firmaQuote.limitSource === "agora" ? " lowest Agora ask" : " Firma buyback bid"}.
                     </AlertDescription>
                   </Alert>
                 ) : null}
@@ -1916,6 +2030,15 @@ export function SwapPanel({
                     <CircleAlert className="h-4 w-4" />
                     <AlertDescription>
                       Firma buyback price is unavailable. Order creation is disabled until it refreshes.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {firmaOrderBookError ? (
+                  <Alert variant="destructive">
+                    <CircleAlert className="h-4 w-4" />
+                    <AlertDescription>
+                      Firma order book is unavailable. Order creation is disabled until it refreshes.
                     </AlertDescription>
                   </Alert>
                 ) : null}
@@ -1959,7 +2082,7 @@ export function SwapPanel({
                     className="w-full text-md rounded-xl h-12"
                     variant="default"
                     onClick={handleFirmaXecConfirm}
-                    disabled={isCreatingListing || !isWalletConnected || !firmaQuote || !!firmaBidError}
+                    disabled={isCreatingListing || !isWalletConnected || !firmaQuote || !!firmaBidError || !!firmaOrderBookError}
                   >
                     {isCreatingListing ? "Creating..." : isWalletConnected ? "Create Firma/XEC Order" : "Connect wallet"}
                   </Button>
@@ -1973,7 +2096,8 @@ export function SwapPanel({
                         The live Firma bid is {firmaBidXec > 0
                           ? `${firmaBidXec.toLocaleString(undefined, { maximumFractionDigits: 2 })} XEC/Firma`
                           : "unavailable"}. Your USD limit is converted to an Agora Firma sell price;
-                        limits above the XEC market price use the current market price instead.
+                        the final price cannot exceed either the Firma buyback bid or the lowest
+                        active Firma ask on Agora.
                       </AccordionContent>
                     </AccordionItem>
                   </Accordion>
@@ -2042,9 +2166,9 @@ export function SwapPanel({
           {showProPanel && (
             <aside className="hidden lg:block lg:w-[700px] lg:min-w-[700px] transition-all duration-300" style={{ paddingTop: '45px' }}>
               <OrderBook 
-                orderBook={orderBook} 
-                tokenId={selectedToken.id}
-                latestPrice={tokenPrice}
+                orderBook={activeTab === "firma-xec" ? firmaOrderBook : orderBook}
+                tokenId={activeTab === "firma-xec" ? FIRMA_TOKEN_ID : selectedToken.id}
+                latestPrice={activeTab === "firma-xec" ? firmaLowestAskXecPerFirma : tokenPrice}
                 className="w-full h-fit"
               />
             </aside>

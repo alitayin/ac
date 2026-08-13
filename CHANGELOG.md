@@ -6,6 +6,23 @@
 
 ## 2026-08-14
 
+### Firma/XEC 市场价格与最低卖价保护
+
+**主要改动：**
+- Firma 回购价改为显示 1 Firma 的实时美元价值，例如 `$0.996`
+- 原 Market 按钮更名为 Binance Price，继续填入 Binance XEC 美元价
+- 新增 Agora Price 按钮，按 Firma 最低卖单换算并填入 XEC 美元价
+- 显示 Agora 当前最低 Firma 卖价对应的美元价值
+- 下单价格同时受 Firma 回购 bid 与 Agora 最低卖价约束，不会高于两者中更严格的上限
+- 创建订单前强制刷新 Firma 最低卖价，并按最新值重新计算最终限价
+- Firma/XEC 标签页的 Order Book 自动切换为 Firma 订单簿
+
+**验证：**
+- 47 个测试文件、487 项测试全部通过
+- `pnpm build` 构建成功
+
+---
+
 ### Firma/XEC 报价与交易保护改进
 
 **主要改动：**
