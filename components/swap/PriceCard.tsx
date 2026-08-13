@@ -41,6 +41,13 @@ interface PriceCardProps {
   transientHintDurationMs?: number;
   showMarketButton?: boolean;
   showSettings?: boolean;
+  marketButtonDisabled?: boolean;
+  inputUnitLabel?: string;
+  referencePrices?: Array<{
+    label: string;
+    value: string;
+    title?: string;
+  }>;
 }
 
 export const PriceCard: React.FC<PriceCardProps> = ({
@@ -73,6 +80,9 @@ export const PriceCard: React.FC<PriceCardProps> = ({
   transientHintDurationMs = 10000,
   showMarketButton = true,
   showSettings = true,
+  marketButtonDisabled = false,
+  inputUnitLabel,
+  referencePrices = [],
 }) => {
   const [typedHintText, setTypedHintText] = useState("");
   const [showTransientHint, setShowTransientHint] = useState(false);
@@ -215,12 +225,13 @@ export const PriceCard: React.FC<PriceCardProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center justify-between my-2">
+      <div className="flex items-center justify-between gap-3 my-2">
         <div className="min-w-0 flex-1">
           {showPriceInput ? (
             <span className="font-medium text-lg">
               <input
                 type="text"
+                aria-label={title || `Set price for 1 ${selectedToken.name}/XEC`}
                 className="font-medium bg-transparent outline-none w-full text-lg"
                 placeholder="0.00"
                 value={tokenPriceInput}
@@ -256,16 +267,22 @@ export const PriceCard: React.FC<PriceCardProps> = ({
             className="px-2"
           />
         )}
+        {!showTokenSelector && inputUnitLabel ? (
+          <div className="shrink-0 text-sm font-medium text-foreground/80">
+            {inputUnitLabel}
+          </div>
+        ) : null}
       </div>
 
-      {(showMarketButton || showUsdPriceValue) && (
-      <div className="flex mt-4 justify-between items-center">
-        <div className="flex space-x-2">
+      {(showMarketButton || showUsdPriceValue || referencePrices.length > 0) && (
+      <div className="flex mt-4 justify-between items-end gap-3">
+        <div className="flex shrink-0 space-x-2">
           {showMarketButton && (
             <Button
               variant="outline"
               className="p-2 h-8 text-sm"
               onClick={onMarketClick}
+              disabled={marketButtonDisabled}
             >
               Market
             </Button>
@@ -280,11 +297,26 @@ export const PriceCard: React.FC<PriceCardProps> = ({
             </Button>
           ) : null}
         </div>
-        {showUsdPriceValue && (
+        {referencePrices.length > 0 ? (
+          <div className="min-w-0 space-y-1 text-right text-xs text-muted-foreground sm:text-sm">
+            {referencePrices.map((reference) => (
+              <div
+                key={reference.label}
+                className="break-words"
+                title={reference.title}
+              >
+                <span>{reference.label}</span>{" "}
+                <span className="font-mono tabular-nums text-foreground/80">
+                  {reference.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : showUsdPriceValue ? (
           <div className="text-sm text-muted-foreground">
             ${usdPriceText}
           </div>
-        )}
+        ) : null}
       </div>
       )}
       </div>

@@ -4,6 +4,7 @@ import type React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TokenSelector } from "@/components/ui/token-selector";
+import Image from "next/image";
 
 interface BuyCardProps {
   receiveAmount: string;
@@ -19,6 +20,8 @@ interface BuyCardProps {
   showMaxBalance?: boolean;
   readOnly?: boolean;
   showExplorerLink?: boolean;
+  staticTokenLabel?: string;
+  staticTokenIconSrc?: string;
 }
 
 export const BuyCard: React.FC<BuyCardProps> = ({
@@ -35,6 +38,8 @@ export const BuyCard: React.FC<BuyCardProps> = ({
   showMaxBalance = false,
   readOnly = false,
   showExplorerLink = true,
+  staticTokenLabel,
+  staticTokenIconSrc,
 }) => {
   const rawAmount = userTokens[selectedToken.id] || "0";
   const maxBalance = Number(rawAmount) / Math.pow(10, selectedTokenDecimals);
@@ -54,10 +59,11 @@ export const BuyCard: React.FC<BuyCardProps> = ({
         <div className="flex items-center justify-between">
           <div className="text-muted-foreground text-sm">{label}</div>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <input
             type="text"
-            className={`text-lg font-medium bg-transparent outline-none w-3/4 ${readOnly ? "cursor-default text-muted-foreground" : ""}`}
+            aria-label={`${label} amount`}
+            className={`min-w-0 flex-1 text-lg font-medium bg-transparent outline-none ${readOnly ? "cursor-default text-muted-foreground" : ""}`}
             placeholder="0"
             value={receiveAmount}
             readOnly={readOnly}
@@ -98,13 +104,27 @@ export const BuyCard: React.FC<BuyCardProps> = ({
               className="bg-background hover:bg-muted border text-foreground rounded-full px-2 py-2 flex items-center gap-2"
             />
           )}
+          {!showTokenSelector && staticTokenLabel ? (
+            <div className="flex shrink-0 items-center gap-2 text-sm font-medium text-foreground/80 select-none">
+              {staticTokenIconSrc ? (
+                <Image
+                  src={staticTokenIconSrc}
+                  alt=""
+                  width={16}
+                  height={16}
+                />
+              ) : null}
+              <span>{staticTokenLabel}</span>
+            </div>
+          ) : null}
         </div>
-        {showMaxBalance && maxBalance > 0 && (
+        {showMaxBalance && (
           <div className="flex items-center mt-2">
             <Button
               variant="outline"
               className="p-2 h-8 mr-2"
               onClick={handleMaxClick}
+              disabled={maxBalance <= 0}
             >
               Max
             </Button>

@@ -12,6 +12,7 @@ const {
   estimateNetworkFeeMock,
   getCachedTokenDetailsMock,
   fetchTokenDetailsMock,
+  createAgoraOfferMock,
 } = vi.hoisted(() => ({
   walletState: {
     isWalletConnected: true,
@@ -19,7 +20,7 @@ const {
     balance: "1000",
     userTokens: {
       "token-1": "1234500",
-    },
+    } as Record<string, string>,
     connectWallet: vi.fn(),
     connectWithCashtab: vi.fn(),
     disconnectWallet: vi.fn(),
@@ -33,6 +34,11 @@ const {
   estimateNetworkFeeMock: vi.fn(),
   getCachedTokenDetailsMock: vi.fn(),
   fetchTokenDetailsMock: vi.fn(),
+  createAgoraOfferMock: vi.fn(),
+}));
+
+vi.mock("ecash-quicksend", () => ({
+  createAgoraOffer: createAgoraOfferMock,
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -53,6 +59,14 @@ vi.mock("@/lib/context/AutoExecutionContext", () => ({
 
 vi.mock("@/lib/price", () => ({
   useXECPrice: () => 0.00003,
+}));
+
+vi.mock("@/hooks/use-firma-bid", () => ({
+  useFirmaBid: () => ({
+    bid: 146205.44,
+    isLoading: false,
+    error: null,
+  }),
 }));
 
 vi.mock("@/lib/agora-orders", () => ({
@@ -95,15 +109,27 @@ vi.mock("@/components/swap/ConfirmOrderDialog", () => ({
 
 vi.mock("@/components/swap/PriceCard", () => {
   const PriceCard = (props: any) => (
-    <div data-testid="price-card">
+    <div data-testid="price-card" data-title={props.title}>
       <div data-testid="selected-token">{props.selectedToken.name}</div>
       <div data-testid="price-input">{props.tokenPriceInput}</div>
+      <input
+        aria-label={props.title || "Token price"}
+        value={props.tokenPriceInput}
+        onChange={(event) => props.onTokenPriceInputChange(event.target.value)}
+      />
+      {props.referencePrices?.map((reference: any) => (
+        <div key={reference.label}>{reference.label} {reference.value}</div>
+      ))}
       {props.onSweepModeToggle ? (
         <button type="button" onClick={props.onSweepModeToggle}>
           {props.sweepModeEnabled ? "Market Buy" : "Limit Buy"}
         </button>
       ) : null}
-      <button type="button" onClick={props.onMarketClick}>
+      <button
+        type="button"
+        aria-label={props.title ? `${props.title} Market` : "Market"}
+        onClick={props.onMarketClick}
+      >
         Market
       </button>
     </div>
@@ -138,7 +164,15 @@ vi.mock("@/components/swap/SpendCard", () => {
 
 vi.mock("@/components/swap/BuyCard", () => {
   const BuyCard = (props: any) => (
-    <div data-testid="buy-card">{props.receiveAmount || "0"}</div>
+    <div data-testid="buy-card">
+      <input
+        aria-label={`${props.label} amount`}
+        value={props.receiveAmount}
+        readOnly={props.readOnly}
+        onChange={(event) => props.setReceiveAmount(event.target.value)}
+      />
+      <span>{props.staticTokenLabel}</span>
+    </div>
   );
 
   return {
@@ -222,6 +256,7 @@ describe("SwapPanel current behavior", () => {
       },
     });
     executeOrdersMock.mockResolvedValue(undefined);
+    createAgoraOfferMock.mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -338,5 +373,50 @@ describe("SwapPanel current behavior", () => {
         "Amount must be greater than 24.46 XEC to cover the estimated swap and network fees",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("uses the Firma bid for Market and caps above-market limits", async () => {
+    const firmaTokenId =
+      "0387947fd575db4fb19a3e322f635dec37fd192b5941625b66bc4b2c3008cbf0";
+    walletState.userTokens = {
+      "token-1": "1234500",
+      [firmaTokenId]: "1000000",
+    };
+
+    render(<SwapPanel />);
+
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "Firma/XEC" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      await flushAsyncWork();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Set max price for 1 XEC Market" }));
+
+    expect(screen.getByLabelText("Set max price for 1 XEC")).toHaveValue("0.00003000");
+    expect(screen.getByText(/Firma buyback: \$0.00000684\/XEC/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Set max price for 1 XEC"), {
+      target: { value: "0.00004" },
+    });
+    fireEvent.change(screen.getByLabelText("Spend amount"), {
+      target: { value: "10" },
+    });
+
+    expect(screen.getByText(/cannot fill at a worse price/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Firma/XEC Order" }));
+
+    await act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(createAgoraOfferMock).toHaveBeenCalledWith(expect.objectContaining({
+      tokenId: firmaTokenId,
+      tokenAmount: 100000n,
+      pricePerToken: 14.620544,
+    }));
   });
 });

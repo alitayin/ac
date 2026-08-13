@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-08-14
+
+### Firma/XEC 报价与交易保护改进
+
+**主要改动：**
+- Firma/XEC 报价卡与 Buy 页统一为 Price / Spend / Buy 结构
+- 增加 Market 按钮，一键填入当前 XEC 美元市场价
+- 接入 `stakedxec.com/api/bid` 实时 Firma 回购价，不再写死 `$0.996`
+- 同时显示 XEC 市场价与 Firma 回购折算的单 XEC 价格
+- 用户限价高于市场价时，订单使用较低的当前市场价，避免按更差价格成交
+- Firma 回购价或 XEC 市场价不可用时禁止创建订单
+- Firma 数量按 4 位精度转换为 atoms，避免浮点数量误差
+
+**验证：**
+- 39 个 Firma 报价、API、卡片与下单行为测试通过
+- `npm run build` 构建成功
+
+---
+
 ## 2026-08-13
 
 ### 🎉 新功能：Firma/XEC 交易专区
@@ -11,7 +30,7 @@
 **主要改动：**
 - 新增 "Firma/XEC" 标签页，专门用于用 Firma 买 XEC
 - 支持以美元价格设置 XEC 目标价（例如 $0.000005/XEC）
-- Firma 作为稳定币处理（$0.996/Firma）
+- Firma 美元价值按实时 XEC 市场价与回购汇率计算
 - 输入 Firma 数量，自动计算能买到多少 XEC
 - 本质上创建 Agora 卖单（卖 Firma 换 XEC）
 - 显示有效的 Agora 汇率转换（XEC/Firma）

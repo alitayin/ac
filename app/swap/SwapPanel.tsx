@@ -27,6 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useXECPrice } from '@/lib/price';
+import { useFirmaBid } from '@/hooks/use-firma-bid';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,11 +72,16 @@ import {
 import { fetchTokenDetails, getCachedTokenDetails } from "@/lib/chronik";
 import { isBlockedTokenId } from "@/lib/blocked-tokens";
 import { tokens } from "@/config/tokens";
+import { parseDecimalToAtoms } from "@/lib/decimal";
+import {
+  calculateFirmaXecQuote,
+  formatUsdPerXec,
+  getFirmaBidImpliedXecUsd,
+} from "@/lib/firma";
 
 const MIN_ORDER_TOTAL_XEC = 100;
 const FIRMA_TOKEN_ID = tokens.firma.tokenId;
 const FIRMA_DECIMALS = tokens.firma.decimals ?? 0;
-const FIRMA_PRICE_USD = 0.996;
 const POLLING_INTERVAL_MS = 30000;
 const EMPTY_SELECTED_TOKEN = {
   id: "",
@@ -140,6 +146,11 @@ export function SwapPanel({
   const [showUsdPrice, setShowUsdPrice] = useState<boolean>(false);
   const [useBestOrderPrice, setUseBestOrderPrice] = useState<boolean>(true);
   const xecPrice = useXECPrice();
+  const {
+    bid: firmaBidXec,
+    isLoading: isFirmaBidLoading,
+    error: firmaBidError,
+  } = useFirmaBid();
   const [marketPrice, setMarketPrice] = useState<number>(0);
   const [sweepMarketPrice, setSweepMarketPrice] = useState<number>(0);
   const [sweepMaxPrice, setSweepMaxPrice] = useState<number>(0);
@@ -1294,22 +1305,23 @@ export function SwapPanel({
     }
   };
 
-  const calculateFirmaXecReceive = (targetPriceUSD: string, firmaSpend: string): string => {
-    const priceNum = parseFloat(targetPriceUSD);
-    const spendNum = parseFloat(firmaSpend);
-
-    if (isNaN(priceNum) || isNaN(spendNum) || priceNum <= 0 || spendNum <= 0) {
-      return '0';
-    }
-
-    const firmaValueUSD = spendNum * FIRMA_PRICE_USD;
-    const xecReceive = firmaValueUSD / priceNum;
-
-    return xecReceive.toFixed(2);
-  };
-
   const firmaBalance = parseFloat(userTokens[FIRMA_TOKEN_ID] || '0') / Math.pow(10, FIRMA_DECIMALS);
-  const firmaXecReceive = calculateFirmaXecReceive(xecTargetPriceUSD, firmaSpendAmount);
+  const firmaQuote = useMemo(
+    () => calculateFirmaXecQuote({
+      firmaAmount: parseFloat(firmaSpendAmount),
+      requestedXecUsd: parseFloat(xecTargetPriceUSD),
+      marketXecUsd: xecPrice,
+      firmaBidXec,
+    }),
+    [firmaBidXec, firmaSpendAmount, xecPrice, xecTargetPriceUSD],
+  );
+  const firmaXecReceive = firmaQuote ? firmaQuote.xecReceive.toFixed(2) : '0';
+  const firmaBidImpliedXecUsd = getFirmaBidImpliedXecUsd(firmaBidXec);
+  const isFirmaPriceAboveMarket =
+    Number.isFinite(parseFloat(xecTargetPriceUSD)) &&
+    parseFloat(xecTargetPriceUSD) > 0 &&
+    xecPrice > 0 &&
+    parseFloat(xecTargetPriceUSD) > xecPrice;
 
   const handleXecPriceInputChange = (value: string) => {
     if (value === '' || /^[0-9]*\.?[0-9]*$/.test(value)) {
@@ -1326,6 +1338,19 @@ export function SwapPanel({
     }
   };
 
+  const handleFirmaMarketClick = () => {
+    if (xecPrice <= 0) {
+      toast({
+        title: "Market price unavailable",
+        description: "Unable to load the latest XEC market price. Please try again later.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setXecTargetPriceUSD(xecPrice.toFixed(8));
+  };
+
   const handleFirmaXecConfirm = async () => {
     if (!isWalletConnected || !mnemonic) {
       toast({
@@ -1336,9 +1361,17 @@ export function SwapPanel({
       return;
     }
 
+    if (firmaBidError) {
+      toast({
+        title: "Firma buyback price unavailable",
+        description: "Please wait for the live buyback price to refresh before creating an order",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const priceNum = parseFloat(xecTargetPriceUSD);
     const spendNum = parseFloat(firmaSpendAmount);
-    const receiveNum = parseFloat(firmaXecReceive);
 
     if (isNaN(priceNum) || priceNum <= 0) {
       toast({
@@ -1358,7 +1391,19 @@ export function SwapPanel({
       return;
     }
 
-    if (spendNum > firmaBalance) {
+    const tokenAmountBigInt = parseDecimalToAtoms(firmaSpendAmount, FIRMA_DECIMALS);
+    const rawFirmaBalance = BigInt(userTokens[FIRMA_TOKEN_ID] || '0');
+
+    if (tokenAmountBigInt === null || tokenAmountBigInt <= 0n) {
+      toast({
+        title: "Invalid amount precision",
+        description: `Firma supports up to ${FIRMA_DECIMALS} decimal places`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (tokenAmountBigInt > rawFirmaBalance) {
       toast({
         title: "Insufficient balance",
         description: `You only have ${firmaBalance.toLocaleString()} Firma`,
@@ -1367,13 +1412,26 @@ export function SwapPanel({
       return;
     }
 
+    const latestQuote = calculateFirmaXecQuote({
+      firmaAmount: spendNum,
+      requestedXecUsd: priceNum,
+      marketXecUsd: xecPrice,
+      firmaBidXec,
+    });
+
+    if (!latestQuote) {
+      toast({
+        title: "Price unavailable",
+        description: "The latest XEC market price or Firma buyback price is unavailable",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsCreatingListing(true);
 
     try {
-      // Agora price is XEC per whole Firma; convert to XEC per Firma atom using real decimals
-      const agoraPrice = receiveNum / spendNum;
-      const tokenAmountBigInt = BigInt(Math.round(spendNum * Math.pow(10, FIRMA_DECIMALS)));
-      const pricePerAtom = agoraPrice / Math.pow(10, FIRMA_DECIMALS);
+      const pricePerAtom = latestQuote.xecPerFirma / Math.pow(10, FIRMA_DECIMALS);
 
       const result = await createAgoraOffer({
         tokenId: FIRMA_TOKEN_ID,
@@ -1386,7 +1444,7 @@ export function SwapPanel({
       if (result.success) {
         toast({
           title: "✅ Firma sell order created",
-          description: `Listed ${spendNum} Firma to buy ${receiveNum.toLocaleString()} XEC at $${priceNum}/XEC`,
+          description: `Listed ${spendNum} Firma to buy ${latestQuote.xecReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} XEC at up to $${formatUsdPerXec(latestQuote.effectiveXecUsd)}/XEC`,
         });
 
         setFirmaSpendAmount('');
@@ -1418,7 +1476,7 @@ export function SwapPanel({
       <div className="flex-1 flex justify-center px-4">
         <div className={`flex gap-6 pt-2 sm:p-8 transition-all duration-300 ${showProPanel ? 'lg:max-w-[1400px] w-full' : 'max-w-xl w-full mx-auto'}`}>
           <main className={`${showProPanel ? 'lg:w-[600px] w-full' : 'w-full'} transition-all duration-300`}>
-            <Tabs defaultValue="swap" className="w-full">
+          <Tabs defaultValue="swap" className="w-full">
           <TabsList className="flex justify-between px-4 bg-transparent">
             <div className="flex space-x-2">
               <TabsTrigger
@@ -1813,17 +1871,54 @@ export function SwapPanel({
                   setUseBestOrderPrice={setUseBestOrderPrice}
                   showUsdPrice={showUsdPrice}
                   setShowUsdPrice={setShowUsdPrice}
-                  onMarketClick={() => {}}
+                  onMarketClick={handleFirmaMarketClick}
                   onTokenSelect={() => {}}
                   onTokenMetaChange={() => {}}
                   showTokenSelector={false}
-                  title="Set price for 1 XEC (USD)"
-                  showMarketButton={false}
+                  title="Set max price for 1 XEC"
+                  showMarketButton={true}
                   showOneDollarButton={false}
                   showSettings={false}
-                  showUsdPriceValue={(xecPrice || 0) > 0}
-                  usdPriceText={(xecPrice || 0) > 0 ? xecPrice.toFixed(8) : ''}
+                  marketButtonDisabled={xecPrice <= 0}
+                  inputUnitLabel="$/XEC"
+                  showUsdPriceValue={false}
+                  usdPriceText=""
+                  referencePrices={[
+                    {
+                      label: "XEC market:",
+                      value: xecPrice > 0 ? `$${formatUsdPerXec(xecPrice)}/XEC` : "--",
+                    },
+                    {
+                      label: "Firma buyback:",
+                      value: firmaBidImpliedXecUsd
+                        ? `$${formatUsdPerXec(firmaBidImpliedXecUsd)}/XEC`
+                        : isFirmaBidLoading ? "Loading..." : "--",
+                      title: firmaBidXec > 0
+                        ? `Based on 1 Firma = ${firmaBidXec.toLocaleString(undefined, { maximumFractionDigits: 2 })} XEC from stakedxec.com`
+                        : "Firma buyback price from stakedxec.com",
+                    },
+                  ]}
                 />
+
+                {isFirmaPriceAboveMarket ? (
+                  <Alert>
+                    <CircleAlert className="h-4 w-4" />
+                    <AlertDescription>
+                      Your limit is above the current market. This order uses the current
+                      market price of ${formatUsdPerXec(xecPrice)}/XEC, so it cannot fill at
+                      a worse price.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {firmaBidError ? (
+                  <Alert variant="destructive">
+                    <CircleAlert className="h-4 w-4" />
+                    <AlertDescription>
+                      Firma buyback price is unavailable. Order creation is disabled until it refreshes.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
 
                 <BuyCard
                   receiveAmount={firmaSpendAmount}
@@ -1834,10 +1929,12 @@ export function SwapPanel({
                   onTokenSelect={() => {}}
                   onTokenMetaChange={() => {}}
                   selectedTokenDecimals={FIRMA_DECIMALS}
-                  label="Sell (Firma)"
+                  label="Spend"
                   showTokenSelector={false}
                   showMaxBalance={true}
                   showExplorerLink={false}
+                  staticTokenLabel="FIRMA"
+                  staticTokenIconSrc={`https://icons.etokens.cash/32/${FIRMA_TOKEN_ID}.png`}
                 />
 
                 <BuyCard
@@ -1849,10 +1946,12 @@ export function SwapPanel({
                   onTokenSelect={() => {}}
                   onTokenMetaChange={() => {}}
                   selectedTokenDecimals={2}
-                  label="Receive (XEC)"
+                  label="Buy"
                   showTokenSelector={false}
                   readOnly={true}
                   showExplorerLink={false}
+                  staticTokenLabel="XEC"
+                  staticTokenIconSrc="/ecash.svg"
                 />
 
                 <div className="space-y-2 mt-2">
@@ -1860,9 +1959,9 @@ export function SwapPanel({
                     className="w-full text-md rounded-xl h-12"
                     variant="default"
                     onClick={handleFirmaXecConfirm}
-                    disabled={isCreatingListing || !isWalletConnected}
+                    disabled={isCreatingListing || !isWalletConnected || !firmaQuote || !!firmaBidError}
                   >
-                    {isCreatingListing ? "Creating..." : isWalletConnected ? "Create Sell Order" : "Connect wallet"}
+                    {isCreatingListing ? "Creating..." : isWalletConnected ? "Create Firma/XEC Order" : "Connect wallet"}
                   </Button>
 
                   <Accordion type="single" collapsible className="w-full rounded-xl border px-4">
@@ -1871,9 +1970,10 @@ export function SwapPanel({
                         How does Firma/XEC work?
                       </AccordionTrigger>
                       <AccordionContent className="pb-3 text-sm text-muted-foreground">
-                        Firma is treated as a stable asset (${FIRMA_PRICE_USD}). Set the USD price you want
-                        to buy XEC at, and this creates a Firma sell order on Agora priced to match that
-                        target — effectively swapping Firma for XEC once it fills.
+                        The live Firma bid is {firmaBidXec > 0
+                          ? `${firmaBidXec.toLocaleString(undefined, { maximumFractionDigits: 2 })} XEC/Firma`
+                          : "unavailable"}. Your USD limit is converted to an Agora Firma sell price;
+                        limits above the XEC market price use the current market price instead.
                       </AccordionContent>
                     </AccordionItem>
                   </Accordion>

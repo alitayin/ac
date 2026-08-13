@@ -71,6 +71,24 @@ describe('Swap Cards', () => {
       render(<PriceCard {...mockProps} showTokenSelector={false} />)
       expect(screen.queryByTestId('token-selector')).not.toBeInTheDocument()
     })
+
+    it('should show stacked reference prices and a static input unit', () => {
+      render(
+        <PriceCard
+          {...mockProps}
+          showTokenSelector={false}
+          inputUnitLabel="$/XEC"
+          referencePrices={[
+            { label: 'XEC market:', value: '$0.00000681/XEC' },
+            { label: 'Firma buyback:', value: '$0.00000684/XEC' },
+          ]}
+        />,
+      )
+
+      expect(screen.getByText('$/XEC')).toBeInTheDocument()
+      expect(screen.getByText('$0.00000681/XEC')).toBeInTheDocument()
+      expect(screen.getByText('$0.00000684/XEC')).toBeInTheDocument()
+    })
   })
 
   describe('SpendCard', () => {
@@ -218,6 +236,19 @@ describe('Swap Cards', () => {
       expect(mockProps.setReceiveAmount).toHaveBeenCalledWith('100000.00')
     })
 
+    it('should keep the balance row visible when the balance is zero', () => {
+      render(
+        <BuyCard
+          {...mockProps}
+          userTokens={{}}
+          showMaxBalance={true}
+        />,
+      )
+
+      expect(screen.getByText('Balance: 0')).toBeInTheDocument()
+      expect(screen.getByText('Max')).toBeDisabled()
+    })
+
     it('should use custom label when provided', () => {
       render(<BuyCard {...mockProps} label="Sell Amount" />)
       expect(screen.getByText('Sell Amount')).toBeInTheDocument()
@@ -237,6 +268,20 @@ describe('Swap Cards', () => {
 
       expect(mockProps.setReceiveAmount).not.toHaveBeenCalled()
       expect(mockProps.calculateSpendAmount).not.toHaveBeenCalled()
+    })
+
+    it('should show a static asset label when the selector is hidden', () => {
+      render(
+        <BuyCard
+          {...mockProps}
+          label="Spend"
+          showTokenSelector={false}
+          staticTokenLabel="FIRMA"
+        />,
+      )
+
+      expect(screen.getByText('FIRMA')).toBeInTheDocument()
+      expect(screen.getByLabelText('Spend amount')).toBeInTheDocument()
     })
   })
 })
