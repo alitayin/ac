@@ -145,6 +145,7 @@ export function SwapPanel({
   const [showProPanel, setShowProPanel] = useState<boolean>(false);
   const [orderBook, setOrderBook] = useState<{ orders: any[] }>({ orders: [] });
   const [selectedTokenDecimals, setSelectedTokenDecimals] = useState<number>(0);
+  const [ordersView, setOrdersView] = useState<'buy' | 'sell'>('buy');
   const [networkFee, setNetworkFee] = useState<number>(DEFAULT_BASE_NETWORK_FEE_XEC); // Network fee estimated from wallet UTXO count
   const [useServiceCredit, setUseServiceCredit] = useState<boolean>(false);
   const [sellAmount, setSellAmount] = useState<string>('');
@@ -1309,23 +1310,17 @@ export function SwapPanel({
                 Sell
               </TabsTrigger>
               <TabsTrigger
-                value="limit"
+                value="orders"
                 className="relative rounded-full px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-muted-foreground data-[state=active]:shadow-none shadow-none"
               >
                                   <span className="flex items-center gap-2">
-                    Buy orders
+                    Orders
                     {showOrdersRainbow && (
                       <Badge variant="secondary" className="h-5 min-w-5 animate-rainbow bg-gradient-to-r from-pink-500 via-red-500 via-yellow-500 via-green-500 via-blue-500 via-indigo-500 to-purple-500 bg-[length:200%] rounded-full px-1 font-mono tabular-nums text-white">
                         +1
                       </Badge>
                     )}
                   </span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="listing"
-                className="rounded-full px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:text-muted-foreground data-[state=active]:shadow-none shadow-none"
-              >
-                My listing
               </TabsTrigger>
             </div>
             <div className="flex items-center space-x-2">
@@ -1675,38 +1670,40 @@ export function SwapPanel({
             </div>
           </TabsContent>
 
-          <TabsContent value="limit" className="mt-0">
+          <TabsContent value="orders" className="mt-0">
             {isWalletConnected ? (
-              <OrderList ecashAddress={ecashAddress} balance={parseFloat(balance)} />
+              <div>
+                <div className="flex gap-2 p-4 pb-2">
+                  <Button
+                    variant={ordersView === 'buy' ? 'default' : 'outline'}
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setOrdersView('buy')}
+                    aria-pressed={ordersView === 'buy'}
+                    aria-label="View buy orders"
+                  >
+                    Buy Orders
+                  </Button>
+                  <Button
+                    variant={ordersView === 'sell' ? 'default' : 'outline'}
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setOrdersView('sell')}
+                    aria-pressed={ordersView === 'sell'}
+                    aria-label="View my listings"
+                  >
+                    My Listings
+                  </Button>
+                </div>
+                {ordersView === 'buy' ? (
+                  <OrderList ecashAddress={ecashAddress || ''} balance={parseFloat(balance) || 0} />
+                ) : (
+                  <ListingList ecashAddress={ecashAddress || ''} mnemonic={mnemonic || ''} />
+                )}
+              </div>
             ) : (
               <div className="p-8 text-center">
                 <div className="text-muted-foreground mb-4">Please connect your wallet to view your orders</div>
-                <Drawer>
-                  <DrawerTrigger asChild>
-                    <Button>Connect Wallet</Button>
-                  </DrawerTrigger>
-                  <DrawerContent>
-                    <WalletConnectDrawerInner
-                      mnemonicWords={mnemonicWords}
-                      setMnemonicWords={setMnemonicWords}
-                      mnemonicError={mnemonicError}
-                      setMnemonicError={setMnemonicError}
-                      handlePaste={handlePaste}
-                      handleGenerateMnemonic={handleGenerateMnemonic}
-                      handleSaveMnemonic={handleSaveMnemonic}
-                    />
-                  </DrawerContent>
-                </Drawer>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="listing" className="mt-0">
-            {isWalletConnected ? (
-              <ListingList ecashAddress={ecashAddress} mnemonic={mnemonic} />
-            ) : (
-              <div className="p-8 text-center">
-                <div className="text-muted-foreground mb-4">Please connect your wallet to view your listings</div>
                 <Drawer>
                   <DrawerTrigger asChild>
                     <Button>Connect Wallet</Button>
