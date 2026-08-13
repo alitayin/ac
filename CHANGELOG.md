@@ -14,6 +14,7 @@
 - 减少顶层标签页数量，界面更简洁
 - 添加无障碍属性（aria-pressed, aria-label）提升可访问性
 - 添加空值检查避免潜在的运行时错误
+- My Listings 现在只在有卖单时才显示筛选器（与 Buy Orders 行为一致）
 
 **验证：**
 - ✅ `npm run build` 构建成功
