@@ -170,6 +170,22 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center">
+        <div className="text-muted-foreground">Loading listings...</div>
+      </div>
+    );
+  }
+
+  if (listings.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <div className="text-muted-foreground mb-4">You haven't created any listings yet</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -198,7 +214,7 @@ export function ListingList({ ecashAddress, mnemonic }: ListingListProps) {
         </Button>
       </div>
 
-      {isLoading ? (
+      {filteredListings.length === 0 ? (
         <div className="p-8 text-center">
           <div className="text-muted-foreground">Loading listings...</div>
         </div>
