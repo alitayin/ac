@@ -8,7 +8,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { processOrders } from "@/lib/Auto.js";
 import { useWallet } from "./WalletContext";
 import { watchOrderTokens } from "../swap-ws";
 import {
@@ -45,6 +44,7 @@ export const AutoExecutionProvider = ({
 
   const executeOrders = useCallback(async () => {
     try {
+      const { processOrders } = await import("@/lib/Auto.js");
       await processOrders();
     } catch (error) {
       console.error("Failed to process orders:", error);

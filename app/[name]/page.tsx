@@ -25,7 +25,6 @@ import TokenProjectInfoCard from "@/components/ui/TokenProjectInfoCard"
 import { formatNumber } from "@/lib/formatters"
 import { getTokenSupply } from "@/lib/tokenSupply"
 import { fetchTokenDetails, getTokenDecimalsFromDetails } from "@/lib/chronik"
-import { fetchAgoraOrderBook } from "@/lib/agora-orders"
 import { isEtokenDbAvailable } from "@/lib/etokendb"
 import {
   getCachedTokenSummary,
@@ -247,6 +246,7 @@ export default function TokenPage() {
 
   const fetchOrderBook = useCallback(async () => {
     try {
+      const { fetchAgoraOrderBook } = await import("@/lib/agora-orders")
       const data = await fetchAgoraOrderBook(tokenData.tokenId)
       if (data.success && data.data) {
         setOrderBook(data.data)

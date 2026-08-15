@@ -391,6 +391,68 @@ describe('chronik-transactions', () => {
       expect(mockChronik.history).toHaveBeenCalledTimes(1)
     })
 
+    it('should stop at the last page reported by Chronik even when it is full', async () => {
+      const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
+      const firstTx = cloneChronikTx(chronikTxAgoraSale, {
+        txid: 'reported-page-1',
+        block: { height: 800002, timestamp: 1700000000 },
+      })
+      const secondTx = cloneChronikTx(chronikTxAgoraSale, {
+        txid: 'reported-page-2',
+        block: { height: 800001, timestamp: 1699999999 },
+      })
+      const mockChronik = {
+        tokenId: vi.fn().mockReturnThis(),
+        history: vi.fn()
+          .mockResolvedValueOnce({ txs: [firstTx], numPages: 2 })
+          .mockResolvedValueOnce({ txs: [secondTx], numPages: 2 })
+          .mockRejectedValueOnce(new Error('unexpected page request')),
+      }
+
+      const result = await fetchAgoraTransactionsFromChronik(
+        'test-token',
+        undefined,
+        { targetCount: 100, pageSize: 1, failOnError: true },
+        mockChronik as any,
+      )
+
+      expect(result).toHaveLength(2)
+      expect(mockChronik.history).toHaveBeenCalledTimes(2)
+      expect(mockChronik.history).toHaveBeenNthCalledWith(1, 0, 1)
+      expect(mockChronik.history).toHaveBeenNthCalledWith(2, 1, 1)
+    })
+
+    it('should stop on a raw block cutoff even when the old transaction is not an Agora match', async () => {
+      const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
+      const recentTx = cloneChronikTx(chronikTxAgoraSale, {
+        txid: 'raw-cutoff-recent',
+        block: { height: 900000, timestamp: 1700000000 },
+      })
+      const oldNonAgoraTx = cloneChronikTx(chronikTxAgoraSale, {
+        txid: 'raw-cutoff-old',
+        block: { height: 800000, timestamp: 1600000000 },
+        inputs: [{ inputScript: 'invalid' }],
+      })
+      const mockChronik = {
+        tokenId: vi.fn().mockReturnThis(),
+        history: vi.fn()
+          .mockResolvedValueOnce({ txs: [recentTx], numPages: 3 })
+          .mockResolvedValueOnce({ txs: [oldNonAgoraTx], numPages: 3 })
+          .mockRejectedValueOnce(new Error('unexpected page request')),
+      }
+
+      const result = await fetchAgoraTransactionsFromChronik(
+        'test-token',
+        undefined,
+        { stopBelowHeight: 850000, pageSize: 1, failOnError: true },
+        mockChronik as any,
+      )
+
+      expect(result).toHaveLength(1)
+      expect(result[0].txid).toBe('raw-cutoff-recent')
+      expect(mockChronik.history).toHaveBeenCalledTimes(2)
+    })
+
     it('should stop when maxBlocksBack threshold is reached', async () => {
       const { fetchAgoraTransactionsFromChronik } = await import('@/lib/chronik-transactions')
       const mockChronik = {

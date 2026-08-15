@@ -89,6 +89,40 @@ describe("AutoExecutionProvider", () => {
     expect(processOrdersMock).toHaveBeenCalledTimes(2);
   });
 
+  it("contains failures from the lazy auto-execution module", async () => {
+    localStorage.setItem(
+      "swap_orders",
+      JSON.stringify({
+        "token-1|ecash:addr|100|chunk-failure": {
+          remainingAmount: 10,
+          maxPrice: 100,
+          status: "pending",
+          orderType: "online",
+          transactions: [],
+        },
+      }),
+    );
+    processOrdersMock.mockRejectedValueOnce(new Error("chunk load failed"));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    render(
+      <AutoExecutionProvider>
+        <div>child</div>
+      </AutoExecutionProvider>,
+    );
+
+    await flushEffects();
+
+    expect(processOrdersMock).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to process orders:",
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
+
   it("ignores offline-only orders for auto execution", async () => {
     localStorage.setItem(
       "swap_orders",

@@ -308,4 +308,14 @@ describe("TokenPage", () => {
 
     expect(screen.getByTestId("order-book")).toBeInTheDocument()
   })
+
+  it("keeps the page available when the lazy order-book module fails", async () => {
+    mockFetchAgoraOrderBook.mockRejectedValueOnce(new Error("chunk load failed"))
+
+    renderTokenPage()
+    await waitForOrderBook()
+
+    expect(screen.getAllByTestId("token-project-info-card")).toHaveLength(2)
+    expect(screen.getByTestId("order-book")).toBeInTheDocument()
+  })
 })

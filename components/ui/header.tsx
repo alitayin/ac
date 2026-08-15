@@ -58,6 +58,7 @@ interface HeaderProps {
   isOnline?: boolean;
 }
 
+const TOKEN_DETAILS_CONCURRENCY = 3;
 
 export default function Header({ 
   isOnline
@@ -176,30 +177,51 @@ export default function Header({
   
   
   useEffect(() => {
+    let cancelled = false;
+
     const loadTokenDetails = async () => {
       if (!isWalletConnected || Object.keys(visibleUserTokens).length === 0) return;
 
-      for (const tokenId of Object.keys(visibleUserTokens)) {
+      const pendingTokenIds = Object.keys(visibleUserTokens).filter(
+        (tokenId) => !tokenDetailsRef.current[tokenId],
+      );
 
-        if (tokenDetailsRef.current[tokenId]) continue;
+      let nextTokenIndex = 0;
+      const loadNextToken = async () => {
+        while (!cancelled) {
+          const tokenId = pendingTokenIds[nextTokenIndex];
+          nextTokenIndex += 1;
 
-        try {
-       
-          const tokenData = await fetchTokenDetails(tokenId);
-          if (tokenData) {
-            setTokenDetails(prev => ({
-              ...prev,
-              [tokenId]: tokenData,
-            }));
+          if (!tokenId) return;
+
+          try {
+            const tokenData = await fetchTokenDetails(tokenId);
+            if (tokenData && !cancelled) {
+              setTokenDetails((previous) => ({
+                ...previous,
+                [tokenId]: tokenData,
+              }));
+            }
+          } catch (error) {
+            console.error(`Failed to fetch token details: ${tokenId}`, error);
           }
-        } catch (error) {
-          console.error(`Failed to fetch token details: ${tokenId}`, error);
         }
-      }
+      };
+
+      const workerCount = Math.min(
+        TOKEN_DETAILS_CONCURRENCY,
+        pendingTokenIds.length,
+      );
+      await Promise.all(
+        Array.from({ length: workerCount }, () => loadNextToken()),
+      );
     };
 
-    loadTokenDetails();
+    void loadTokenDetails();
 
+    return () => {
+      cancelled = true;
+    };
   }, [isWalletConnected, visibleUserTokens]);
   useEffect(() => {
 
