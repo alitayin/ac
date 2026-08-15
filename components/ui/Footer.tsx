@@ -1,8 +1,58 @@
 "use client"
 
+import { useEffect, useRef, type RefObject } from "react"
 import { ExternalLink } from "lucide-react"
 
+type PayButtonRenderer = {
+  render: (_target: HTMLElement, _options: Record<string, unknown>) => void
+}
+
 export default function Footer() {
+  const ecoRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let retryId: ReturnType<typeof setTimeout> | undefined
+    let cancelled = false
+
+    const tryRender = () => {
+      const payButton =
+        typeof window !== "undefined"
+          ? (window as Window & { PayButton?: PayButtonRenderer }).PayButton
+          : undefined
+
+      if (payButton && ecoRef.current) {
+        payButton.render(ecoRef.current, {
+          to: "ecash:qpaw7v7sfvlsm4px33saggr63jgsalsx4q49m7n6v4",
+          text: "Support eCash Ecosystem",
+          hoverText: "Support eCash Development",
+          animation: "invert",
+          theme: {
+            palette: {
+              primary: "#18181b",
+              secondary: "#fafafa",
+              tertiary: "#3f3f46",
+            },
+          },
+        })
+      } else if (!cancelled) {
+        retryId = setTimeout(tryRender, 300)
+      }
+    }
+
+    tryRender()
+
+    return () => {
+      cancelled = true
+      if (retryId) {
+        clearTimeout(retryId)
+      }
+    }
+  }, [])
+
+  const openHiddenPayButton = (ref: RefObject<HTMLDivElement>) => {
+    ref.current?.querySelector("button")?.click()
+  }
+
   const textButtonClass =
     "cursor-pointer text-center text-sm font-normal tracking-tight text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
 
@@ -32,9 +82,19 @@ export default function Footer() {
               © eCash Ecosystem Hub
               <ExternalLink className="size-3.5" aria-hidden="true" />
             </a>
+            <button
+              type="button"
+              className={textButtonClass}
+              onClick={() => openHiddenPayButton(ecoRef)}
+            >
+              Support Us
+            </button>
           </div>
         </div>
       </footer>
+      <div aria-hidden className="sr-only">
+        <div ref={ecoRef} />
+      </div>
     </>
   )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import quick from "ecash-quicksend"
 import {
   CheckCircle2,
   Coins,
@@ -514,7 +515,6 @@ export function TokenReviewDialog({
         throw new Error("A mnemonic-backed wallet login is required for payment")
       }
 
-      const { default: quick } = await import("ecash-quicksend")
       if (activeInvoice.paymentKind === "token") {
         if (
           !activeInvoice.paymentTokenId ||

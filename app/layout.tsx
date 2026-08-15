@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import Script from "next/script";
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "../components/ui/theme-provider"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
@@ -68,6 +69,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased">
+        <Script src="https://unpkg.com/@paybutton/paybutton/dist/paybutton.js" strategy="lazyOnload" />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

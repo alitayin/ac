@@ -13,7 +13,6 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 const CHARTS_BASE_URL = "https://charts.e.cash/api/charts"
-const UPSTREAM_TIMEOUT_MS = 8_000
 const RESPONSE_HEADERS = {
   "Cache-Control": "no-store, max-age=0",
 }
@@ -21,7 +20,6 @@ const RESPONSE_HEADERS = {
 async function fetchChartSeries<T>(path: string, dateParams: string): Promise<T[]> {
   const response = await fetch(`${CHARTS_BASE_URL}/${path}?${dateParams}`, {
     cache: "no-store",
-    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   })
 
   if (!response.ok) {

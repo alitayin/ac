@@ -279,35 +279,38 @@ export const fetchAgoraTransactionsFromChronik = async (
 
       const batch: TransactionWithStatus[] = []
       let shouldStop = false
-      for (const tx of txs) {
-        // Chronik history is returned newest-first. Read the raw block height
-        // before parsing so sparse histories can honor the requested cutoff
-        // even when the intervening transactions are not Agora matches.
-        const rawBlockHeight =
-          typeof tx?.block?.height === "number" ? tx.block.height : null
-
-        if (latestBlockHeight === null && rawBlockHeight !== null) {
-          latestBlockHeight = rawBlockHeight
-        }
-
-        if (
-          rawBlockHeight !== null &&
-          ((maxBlocksBack &&
-            latestBlockHeight !== null &&
-            rawBlockHeight < latestBlockHeight - maxBlocksBack) ||
-            (typeof stopBelowHeight === "number" &&
-              rawBlockHeight <= stopBelowHeight))
-        ) {
-          shouldStop = true
-          break
-        }
-
+      txs.forEach((tx: any) => {
         const matchedTx = processMatchedTransaction(tx, divisor)
         if (matchedTx) {
+          if (!latestBlockHeight && typeof matchedTx.blockHeight === "number") {
+            latestBlockHeight = matchedTx.blockHeight
+          }
+
+          if (
+            maxBlocksBack &&
+            latestBlockHeight &&
+            typeof matchedTx.blockHeight === "number"
+          ) {
+            const cutoffHeight = latestBlockHeight - maxBlocksBack
+            if (matchedTx.blockHeight < cutoffHeight) {
+              shouldStop = true
+              return
+            }
+          }
+
+          if (
+            typeof stopBelowHeight === "number" &&
+            typeof matchedTx.blockHeight === "number" &&
+            matchedTx.blockHeight <= stopBelowHeight
+          ) {
+            shouldStop = true
+            return
+          }
+
           batch.push(matchedTx)
           result.push(matchedTx)
         }
-      }
+      })
 
       // 每页都调用 onBatch，即使 batch 为空
       if (onBatch) {
@@ -318,12 +321,7 @@ export const fetchAgoraTransactionsFromChronik = async (
       }
 
       const reachedTarget = result.length >= targetCount
-      const reportedNumPages = Number(history?.numPages)
-      const reachedReportedEnd =
-        Number.isFinite(reportedNumPages) && page + 1 >= reportedNumPages
-      // Keep the short-page check for older/mocked Chronik responses that do
-      // not include numPages.
-      const noMorePages = reachedReportedEnd || txs.length < pageSize
+      const noMorePages = txs.length < pageSize
       if (reachedTarget || noMorePages || shouldStop) {
         break
       }

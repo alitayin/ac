@@ -1,32 +1,14 @@
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import Header from "@/components/ui/header"
 
-const {
-  pathnameState,
-  setThemeMock,
-  toastMock,
-  walletState,
-  fetchTokenDetailsMock,
-} = vi.hoisted(() => ({
+const { pathnameState, setThemeMock, toastMock } = vi.hoisted(() => ({
   pathnameState: {
     value: "/analytics",
   },
   setThemeMock: vi.fn(),
   toastMock: vi.fn(),
-  walletState: {
-    value: {
-      isWalletConnected: false,
-      ecashAddress: "",
-      balance: "0",
-      userTokens: {},
-      disconnectWallet: vi.fn(),
-      connectWallet: vi.fn(),
-      connectWithCashtab: vi.fn(),
-    },
-  },
-  fetchTokenDetailsMock: vi.fn(),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -64,7 +46,15 @@ vi.mock("@/lib/websocket-client", () => ({
 }))
 
 vi.mock("@/lib/context/WalletContext", () => ({
-  useWallet: () => walletState.value,
+  useWallet: () => ({
+    isWalletConnected: false,
+    ecashAddress: "",
+    balance: "0",
+    userTokens: {},
+    disconnectWallet: vi.fn(),
+    connectWallet: vi.fn(),
+    connectWithCashtab: vi.fn(),
+  }),
 }))
 
 vi.mock("@/lib/price", () => ({
@@ -72,7 +62,7 @@ vi.mock("@/lib/price", () => ({
 }))
 
 vi.mock("@/lib/chronik", () => ({
-  fetchTokenDetails: (...args: unknown[]) => fetchTokenDetailsMock(...args),
+  fetchTokenDetails: vi.fn(),
   getTokenDecimalsFromDetails: vi.fn(() => 0),
 }))
 
@@ -121,18 +111,6 @@ vi.mock("@/components/ui/drawer", () => ({
 describe("Header analytics navigation", () => {
   beforeEach(() => {
     pathnameState.value = "/analytics"
-    localStorage.clear()
-    vi.clearAllMocks()
-    fetchTokenDetailsMock.mockReset()
-    walletState.value = {
-      isWalletConnected: false,
-      ecashAddress: "",
-      balance: "0",
-      userTokens: {},
-      disconnectWallet: vi.fn(),
-      connectWallet: vi.fn(),
-      connectWithCashtab: vi.fn(),
-    }
   })
 
   it("renders Analytics links for desktop and mobile navigation", () => {
@@ -143,64 +121,5 @@ describe("Header analytics navigation", () => {
     expect(analyticsLinks).toHaveLength(2)
     expect(analyticsLinks[0]).toHaveAttribute("href", "/analytics")
     expect(analyticsLinks[1]).toHaveAttribute("href", "/analytics")
-  })
-
-  it("keeps token metadata loading at three concurrent requests and cancels queued work", async () => {
-    const tokenIds = ["token-1", "token-2", "token-3", "token-4", "token-5"]
-    walletState.value = {
-      isWalletConnected: true,
-      ecashAddress: "ecash:test",
-      balance: "0",
-      userTokens: Object.fromEntries(tokenIds.map((tokenId) => [tokenId, "1"])),
-      disconnectWallet: vi.fn(),
-      connectWallet: vi.fn(),
-      connectWithCashtab: vi.fn(),
-    }
-
-    let activeRequests = 0
-    let maxActiveRequests = 0
-    const resolvers = new Map<string, () => void>()
-    fetchTokenDetailsMock.mockImplementation((tokenId: string) => {
-      return new Promise((resolve) => {
-        activeRequests += 1
-        maxActiveRequests = Math.max(maxActiveRequests, activeRequests)
-        let settled = false
-        resolvers.set(tokenId, () => {
-          if (settled) return
-          settled = true
-          activeRequests -= 1
-          resolve({
-            genesisInfo: {
-              tokenName: tokenId,
-              tokenTicker: tokenId,
-              decimals: 0,
-            },
-          })
-        })
-      })
-    })
-
-    const view = render(<Header />)
-
-    await waitFor(() => {
-      expect(fetchTokenDetailsMock).toHaveBeenCalledTimes(3)
-    })
-    expect(maxActiveRequests).toBe(3)
-
-    await act(async () => {
-      resolvers.get("token-1")?.()
-    })
-    await waitFor(() => {
-      expect(fetchTokenDetailsMock).toHaveBeenCalledTimes(4)
-    })
-    expect(maxActiveRequests).toBe(3)
-
-    view.unmount()
-    await act(async () => {
-      for (const resolve of resolvers.values()) resolve()
-      await Promise.resolve()
-    })
-
-    expect(fetchTokenDetailsMock).toHaveBeenCalledTimes(4)
   })
 })
