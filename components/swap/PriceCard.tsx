@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { AuroraText } from "@/components/magicui/aurora-text";
-import { Settings } from "lucide-react";
+import { Settings, TrendingDown, TrendingUp } from "lucide-react";
 import { TokenSelector } from "@/components/ui/token-selector";
 
 interface PriceCardProps {
@@ -47,10 +47,13 @@ interface PriceCardProps {
   secondaryMarketButtonLabel?: string;
   secondaryMarketButtonDisabled?: boolean;
   inputUnitLabel?: string;
+  priceInputHint?: string;
   referencePrices?: Array<{
     label: string;
     value: string;
     title?: string;
+    indicator?: "down" | "up";
+    indicatorTitle?: string;
   }>;
 }
 
@@ -90,6 +93,7 @@ export const PriceCard: React.FC<PriceCardProps> = ({
   secondaryMarketButtonLabel,
   secondaryMarketButtonDisabled = false,
   inputUnitLabel,
+  priceInputHint,
   referencePrices = [],
 }) => {
   const [typedHintText, setTypedHintText] = useState("");
@@ -236,17 +240,24 @@ export const PriceCard: React.FC<PriceCardProps> = ({
       <div className="flex items-center justify-between gap-3 my-2">
         <div className="min-w-0 flex-1">
           {showPriceInput ? (
-            <span className="font-medium text-lg">
-              <input
-                type="text"
-                aria-label={title || `Set price for 1 ${selectedToken.name}/XEC`}
-                className="font-medium bg-transparent outline-none w-full text-lg"
-                placeholder="0.00"
-                value={tokenPriceInput}
-                onChange={(e) => onTokenPriceInputChange(e.target.value)}
-                onBlur={onTokenPriceBlur}
-              />
-            </span>
+            <div>
+              <span className="font-medium text-lg">
+                <input
+                  type="text"
+                  aria-label={title || `Set price for 1 ${selectedToken.name}/XEC`}
+                  className="font-medium bg-transparent outline-none w-full text-lg"
+                  placeholder="0.00"
+                  value={tokenPriceInput}
+                  onChange={(e) => onTokenPriceInputChange(e.target.value)}
+                  onBlur={onTokenPriceBlur}
+                />
+              </span>
+              {priceInputHint ? (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {priceInputHint}
+                </div>
+              ) : null}
+            </div>
           ) : showTransientHint ? (
             <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
               <div className="text-[11px] uppercase tracking-[0.18em] text-primary/70">
@@ -330,6 +341,19 @@ export const PriceCard: React.FC<PriceCardProps> = ({
                 <span className="font-mono tabular-nums text-foreground/80">
                   {reference.value}
                 </span>
+                {reference.indicator ? (
+                  <span
+                    className="ml-1 inline-flex align-middle text-destructive"
+                    title={reference.indicatorTitle}
+                    aria-label={reference.indicatorTitle}
+                  >
+                    {reference.indicator === "down" ? (
+                      <TrendingDown width={14} height={14} strokeWidth={2.5} aria-hidden="true" />
+                    ) : (
+                      <TrendingUp width={14} height={14} strokeWidth={2.5} aria-hidden="true" />
+                    )}
+                  </span>
+                ) : null}
               </div>
             ))}
           </div>

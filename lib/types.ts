@@ -38,6 +38,8 @@ export interface Transaction {
   time: string;
   timestamp: number;
   blockHeight?: number;
+  buyerAddress?: string;
+  sellerAddress?: string;
   status?: 'sold';
 }
 
@@ -71,6 +73,7 @@ export type SortType = '24h' | '7d' | 'history' | 'score';
 export interface TokenComponentProps {
   tokenId: string;
   className?: string;
+  address?: string;
 }
 
 export interface TokenListComponentProps {
@@ -112,6 +115,8 @@ export interface OrderBookProps {
   className?: string;
   tokenId: string;
   latestPrice?: number;
+  /** Optional live Firma bid in XEC per Firma; used for the synthetic Firma buy row. */
+  firmaBidXec?: number;
 }
 
 export interface BuyOrderResponse {

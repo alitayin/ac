@@ -1,4 +1,5 @@
 import { ChronikClient } from "chronik-client"
+import { encodeOutputScript } from "ecashaddrjs"
 import { tokens } from "@/config/tokens"
 import {
   chronik,
@@ -22,6 +23,26 @@ const toNumber = (value: any): number => {
   if (typeof value === "bigint") return Number(value)
   const num = Number(value)
   return Number.isFinite(num) ? num : 0
+}
+
+const getOutputAddress = (output?: any): string | null => {
+  if (!output) return null
+
+  // Chronik normally exposes outputScript. Keep the direct address fallback
+  // for alternate Chronik adapters and fixtures that already decoded it.
+  if (typeof output.address === "string" && output.address.trim()) {
+    return output.address.trim()
+  }
+
+  const outputScript =
+    output.outputScript || output.scriptPubKey || output.script || null
+  if (typeof outputScript !== "string" || !outputScript) return null
+
+  try {
+    return encodeOutputScript(outputScript, "ecash")
+  } catch (_error) {
+    return null
+  }
 }
 
 const getTokenDecimals = async (tokenId: string, client?: ChronikClient): Promise<number> => {
@@ -111,10 +132,12 @@ export const detectAgoraTokenId = (tx: any): string | null => {
     return null
   }
 
-  const tokenOutput =
-    outputs[3]?.token || outputs[2]?.token
-      ? outputs[3]?.token ?? outputs[2]?.token
+  const tokenOutputContainer = outputs[3]?.token
+    ? outputs[3]
+    : outputs[2]?.token
+      ? outputs[2]
       : null
+  const tokenOutput = tokenOutputContainer?.token ?? null
   if (!tokenOutput) return null
 
   const tokenId =
@@ -167,10 +190,12 @@ const processMatchedTransaction = (
     return null
   }
 
-  const tokenOutput =
-    outputs[3]?.token || outputs[2]?.token
-      ? outputs[3]?.token ?? outputs[2]?.token
+  const tokenOutputContainer = outputs[3]?.token
+    ? outputs[3]
+    : outputs[2]?.token
+      ? outputs[2]
       : null
+  const tokenOutput = tokenOutputContainer?.token ?? null
   if (!tokenOutput) return null
 
   const xecOutput = outputs[1]
@@ -210,6 +235,13 @@ const processMatchedTransaction = (
   const txid = tx.txid || tx.hash
   if (!txid) return null
 
+  // Agora partial accept outputs pay XEC to the maker (the seller) at
+  // output[1], while the token output pays Firma to the taker (the buyer).
+  // Full accepts use output[2] for the token and partial accepts output[3],
+  // which is why tokenOutputContainer was selected above.
+  const buyerAddress = getOutputAddress(tokenOutputContainer)
+  const sellerAddress = getOutputAddress(xecOutput)
+
   return {
     txid,
     price,
@@ -218,12 +250,16 @@ const processMatchedTransaction = (
     timestamp,
     blockHeight,
     status: "sold",
+    ...(buyerAddress ? { buyerAddress } : {}),
+    ...(sellerAddress ? { sellerAddress } : {}),
   }
 }
 
 export { processMatchedTransaction }
 
 type BatchHandler = (batch: Transaction[], meta: { page: number; rawPage: number }) => void | boolean
+
+export type AgoraAddressRole = "buyer" | "seller" | "either"
 
 interface FetchOptions {
   pageSize?: number
@@ -232,6 +268,9 @@ interface FetchOptions {
   stopBelowHeight?: number
   failOnError?: boolean
   signal?: AbortSignal
+  address?: string
+  /** Which side of a matched trade should `address` match? Defaults to buyer. */
+  addressRole?: AgoraAddressRole
 }
 
 
@@ -249,6 +288,8 @@ export const fetchAgoraTransactionsFromChronik = async (
   const stopBelowHeight = options.stopBelowHeight
   const failOnError = options.failOnError ?? false
   const signal = options.signal
+  const normalizedAddress = options.address?.trim().toLowerCase() || null
+  const addressRole = options.addressRole ?? "buyer"
   const throwIfAborted = () => {
     if (signal?.aborted) {
       const error = new Error("Aborted")
@@ -279,38 +320,49 @@ export const fetchAgoraTransactionsFromChronik = async (
 
       const batch: TransactionWithStatus[] = []
       let shouldStop = false
-      txs.forEach((tx: any) => {
+      for (const tx of txs) {
+        // Chronik history is returned newest-first. Read the raw block height
+        // before parsing so sparse histories can honor the requested cutoff
+        // even when the intervening transactions are not Agora matches.
+        const rawBlockHeight =
+          typeof tx?.block?.height === "number" ? tx.block.height : null
+
+        if (latestBlockHeight === null && rawBlockHeight !== null) {
+          latestBlockHeight = rawBlockHeight
+        }
+
+        if (
+          rawBlockHeight !== null &&
+          ((maxBlocksBack &&
+            latestBlockHeight !== null &&
+            rawBlockHeight < latestBlockHeight - maxBlocksBack) ||
+            (typeof stopBelowHeight === "number" &&
+              rawBlockHeight <= stopBelowHeight))
+        ) {
+          shouldStop = true
+          break
+        }
+
         const matchedTx = processMatchedTransaction(tx, divisor)
-        if (matchedTx) {
-          if (!latestBlockHeight && typeof matchedTx.blockHeight === "number") {
-            latestBlockHeight = matchedTx.blockHeight
-          }
+        const buyerMatches = Boolean(
+          normalizedAddress &&
+            matchedTx?.buyerAddress?.trim().toLowerCase() === normalizedAddress,
+        )
+        const sellerMatches = Boolean(
+          normalizedAddress &&
+            matchedTx?.sellerAddress?.trim().toLowerCase() === normalizedAddress,
+        )
+        const addressMatches =
+          !normalizedAddress ||
+          (addressRole === "seller" && sellerMatches) ||
+          (addressRole === "either" && (buyerMatches || sellerMatches)) ||
+          (addressRole === "buyer" && buyerMatches)
 
-          if (
-            maxBlocksBack &&
-            latestBlockHeight &&
-            typeof matchedTx.blockHeight === "number"
-          ) {
-            const cutoffHeight = latestBlockHeight - maxBlocksBack
-            if (matchedTx.blockHeight < cutoffHeight) {
-              shouldStop = true
-              return
-            }
-          }
-
-          if (
-            typeof stopBelowHeight === "number" &&
-            typeof matchedTx.blockHeight === "number" &&
-            matchedTx.blockHeight <= stopBelowHeight
-          ) {
-            shouldStop = true
-            return
-          }
-
+        if (matchedTx && addressMatches) {
           batch.push(matchedTx)
           result.push(matchedTx)
         }
-      })
+      }
 
       // 每页都调用 onBatch，即使 batch 为空
       if (onBatch) {
@@ -321,7 +373,12 @@ export const fetchAgoraTransactionsFromChronik = async (
       }
 
       const reachedTarget = result.length >= targetCount
-      const noMorePages = txs.length < pageSize
+      const reportedNumPages = Number(history?.numPages)
+      const reachedReportedEnd =
+        Number.isFinite(reportedNumPages) && page + 1 >= reportedNumPages
+      // Keep the short-page check for older/mocked Chronik responses that do
+      // not include numPages.
+      const noMorePages = reachedReportedEnd || txs.length < pageSize
       if (reachedTarget || noMorePages || shouldStop) {
         break
       }

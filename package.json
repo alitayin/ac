@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "clean:build": "node scripts/clean-build.mjs",
+    "prebuild": "pnpm clean:build",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

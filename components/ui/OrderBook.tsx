@@ -6,10 +6,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Maximize2, Minimize2, DollarSign } from "lucide-react";
+import { Maximize2, Minimize2, DollarSign, TrendingDown } from "lucide-react";
 import { useXECPrice } from "@/lib/price"
 import { fetchTokenOrders } from "@/lib/api"
 import { formatNumber, convertPrice } from "@/lib/formatters"
+import { cn } from "@/lib/utils"
+import { tokens } from "@/config/tokens"
 import { 
   TOKEN_IDS, 
   ORDERBOOK_CONSTANTS, 
@@ -21,8 +23,19 @@ import type { Order, OrderBookProps, BuyOrderResponse } from "@/lib/types"
 const BUY_ORDER_REQUEST_TIMEOUT_MS = 7000;
 const BUY_ORDER_INITIAL_BACKOFF_MS = 15000;
 const BUY_ORDER_MAX_BACKOFF_MS = 60000;
+const FIRMA_BID_ALERT_USDT = 0.998;
 
-export default function OrderBook({ orderBook, className = "", tokenId, latestPrice = 0 }: OrderBookProps) {
+type DisplayBuyOrder = Order & {
+  isFirmaBid?: boolean;
+};
+
+export default function OrderBook({
+  orderBook,
+  className = "",
+  tokenId,
+  latestPrice = 0,
+  firmaBidXec,
+}: OrderBookProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showZoomButton, setShowZoomButton] = useState(false);
   const [showUSD, setShowUSD] = useState(false);
@@ -31,6 +44,12 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
   const collapsedAskRef = useRef<HTMLDivElement>(null);
   const collapsedBidRef = useRef<HTMLDivElement>(null);
   const xecPrice = useXECPrice();
+  const isFirmaOrderBook = tokenId === tokens.firma.tokenId;
+  const hasFirmaBid = isFirmaOrderBook && Number.isFinite(firmaBidXec) && (firmaBidXec ?? 0) > 0;
+  const firmaBidUsd = hasFirmaBid && xecPrice > 0
+    ? (firmaBidXec as number) * xecPrice
+    : 0;
+  const isFirmaBidBelowAlert = firmaBidUsd > 0 && firmaBidUsd < FIRMA_BID_ALERT_USDT;
   const mountedRef = useRef(true);
   const inFlightBuyOrdersRef = useRef<Promise<void> | null>(null);
   const activeBuyOrdersAbortRef = useRef<AbortController | null>(null);
@@ -169,7 +188,7 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
     if (collapsedBidRef.current) {
       collapsedBidRef.current.scrollTop = collapsedBidRef.current.scrollHeight;
     }
-  }, [isExpanded, orderBook?.orders?.length, buyOrders.length]);
+  }, [isExpanded, orderBook?.orders?.length, buyOrders.length, hasFirmaBid]);
 
   // Initialize expanded state
   useEffect(() => {
@@ -234,6 +253,19 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
     [buyOrders]
   );
 
+  const displayBuyOrders = useMemo<DisplayBuyOrder[]>(() => {
+    const orders: DisplayBuyOrder[] = [...buyOrders];
+    if (hasFirmaBid) {
+      orders.push({
+        price: firmaBidXec as number,
+        amount: 0,
+        total: 0,
+        isFirmaBid: true,
+      });
+    }
+    return orders.sort((a, b) => b.price - a.price);
+  }, [buyOrders, firmaBidXec, hasFirmaBid]);
+
   const lowestAsk = useMemo(
     () => orderBook?.orders?.length ? Math.min(...orderBook.orders.map((o) => o.price)) : Infinity,
     [orderBook?.orders]
@@ -293,7 +325,10 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                     <Popover key={index}>
                       <PopoverTrigger asChild>
                         <div 
-                          className="flex justify-between items-center text-sm group relative h-6 cursor-pointer"
+                          className={cn(
+                            "flex justify-between items-center text-sm group relative cursor-pointer",
+                            "h-6",
+                          )}
                           onMouseEnter={(e) => {
                             const trigger = e.currentTarget;
                             trigger.click();
@@ -359,19 +394,24 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
 
             <div className="relative">
               <div className="space-y-1 max-h-96 overflow-y-auto pr-1" ref={collapsedBidRef}>
-                {buyOrders.length > 0 ? (
-                  buyOrders
-                    .sort((a, b) => b.price - a.price)
+                {displayBuyOrders.length > 0 ? (
+                  displayBuyOrders
                     .slice(0, ORDERBOOK_CONSTANTS.COLLAPSED_ORDERS_COUNT)
                     .map((order, index) => {
-                      const barWidth = (order.amount / buyOrderMaxAmount) * 100 * UI_CONSTANTS.ORDERBOOK_BAR_MULTIPLIER;
+                      const barWidth = order.isFirmaBid || buyOrderMaxAmount <= 0
+                        ? 0
+                        : (order.amount / buyOrderMaxAmount) * 100 * UI_CONSTANTS.ORDERBOOK_BAR_MULTIPLIER;
                       const isAbnormalPrice = order.price >= lowestAsk;
+                      const isSpecialFirmaBid = order.isFirmaBid === true;
 
                       return (
                         <Popover key={index}>
                           <PopoverTrigger asChild>
                             <div 
-                              className="flex justify-between items-center text-sm group relative h-6 cursor-pointer"
+                              className={cn(
+                                "flex justify-between items-center text-sm group relative cursor-pointer",
+                                "h-6",
+                              )}
                               onMouseEnter={(e) => {
                                 const trigger = e.currentTarget;
                                 trigger.click();
@@ -383,7 +423,11 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                             >
                               <div 
                                 className={`absolute left-0 top-0 bottom-0 ${
-                                  isAbnormalPrice ? 'bg-blue-500/20 group-hover:bg-blue-200/40' : 'bg-green-500/10 group-hover:bg-green-200/30'
+                                  isSpecialFirmaBid
+                                    ? 'bg-red-500/10 group-hover:bg-red-200/30'
+                                    : isAbnormalPrice
+                                      ? 'bg-blue-500/20 group-hover:bg-blue-200/40'
+                                      : 'bg-green-500/10 group-hover:bg-green-200/30'
                                 } transition-all`}
                                 style={{
                                   width: `${barWidth}%`,
@@ -391,12 +435,26 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                                 }}
                               />
                               <div className="flex justify-between w-full relative z-10 px-6">
-                                <span className={`${
-                                  isAbnormalPrice ? 'text-blue-500' : 'text-green-500'
-                                } font-medium tabular-nums`}>
-                                  {priceDisplay(order.price)}
+                                <div className="flex items-center gap-1 leading-tight">
+                                  <span className={`${
+                                    isSpecialFirmaBid
+                                      ? (isFirmaBidBelowAlert ? 'text-red-500' : 'text-green-500')
+                                      : isAbnormalPrice ? 'text-blue-500' : 'text-green-500'
+                                  } font-medium tabular-nums`}>
+                                    {priceDisplay(order.price)}
+                                  </span>
+                                  {isSpecialFirmaBid && isFirmaBidBelowAlert ? (
+                                    <span title="Firma bid is below 0.998 USDT">
+                                      <TrendingDown
+                                        className="h-3.5 w-3.5 text-red-500"
+                                        aria-label="Firma bid is below 0.998 USDT"
+                                      />
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <span className={`tabular-nums ${isSpecialFirmaBid ? 'text-muted-foreground' : 'text-foreground'}`}>
+                                  {isSpecialFirmaBid ? 'unknown' : formatNumber(order.amount)}
                                 </span>
-                                <span className="text-foreground tabular-nums">{formatNumber(order.amount)}</span>
                               </div>
                             </div>
                           </PopoverTrigger>
@@ -406,12 +464,12 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                                 Price: {priceDisplay(order.price)}
                               </div>
                               <div className="text-sm text-muted-foreground font-medium">
-                                Amount: {formatNumber(order.amount)}
+                                Amount: {isSpecialFirmaBid ? 'unknown' : formatNumber(order.amount)}
                               </div>
                               <div className="text-sm text-muted-foreground font-medium">
-                                Total（XEC）: {formatNumber(order.total)}
+                                Total（XEC）: {isSpecialFirmaBid ? '--' : formatNumber(order.total)}
                               </div>
-                              {isAbnormalPrice && (
+                              {isAbnormalPrice && !isSpecialFirmaBid && (
                                 <div className="text-sm text-blue-600 font-medium">
                                   This order may not be executed due to minimum buy price or other conditions
                                 </div>
@@ -451,19 +509,24 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                 <span className="text-right">TOTAL</span>
               </div>
               <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
-                {buyOrders.length > 0 ? (
-                  buyOrders
-                    .sort((a, b) => b.price - a.price)
+                {displayBuyOrders.length > 0 ? (
+                  displayBuyOrders
                     .slice(0, ORDERBOOK_CONSTANTS.EXPANDED_ORDERS_COUNT)
                     .map((order, index) => {
-                      const barWidth = (order.amount / buyOrderMaxAmount) * 100;
+                      const barWidth = order.isFirmaBid || buyOrderMaxAmount <= 0
+                        ? 0
+                        : (order.amount / buyOrderMaxAmount) * 100;
                       const isAbnormalPrice = order.price >= lowestAsk;
+                      const isSpecialFirmaBid = order.isFirmaBid === true;
 
                       return (
                         <Popover key={index}>
                           <PopoverTrigger asChild>
                             <div
-                              className="grid grid-cols-3 text-sm relative h-6 cursor-pointer"
+                              className={cn(
+                                "grid grid-cols-3 text-sm relative cursor-pointer",
+                                "h-6",
+                              )}
                               onMouseEnter={(e) => {
                                 const trigger = e.currentTarget;
                                 trigger.click();
@@ -473,14 +536,33 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                                 trigger.click();
                               }}
                             >
-                              <div className="absolute left-0 top-0 bottom-0 bg-green-500/10" style={{ width: `${barWidth}%` }} />
-                              <span className={`${
-                                isAbnormalPrice ? 'text-yellow-600' : 'text-green-500'
-                              } font-medium tabular-nums relative z-10`}>
-                                {priceDisplay(order.price)}
+                              <div
+                                className={`absolute left-0 top-0 bottom-0 ${isSpecialFirmaBid ? 'bg-red-500/10' : 'bg-green-500/10'}`}
+                                style={{ width: `${barWidth}%` }}
+                              />
+                              <div className="flex items-center gap-1 leading-tight">
+                                <span className={`${
+                                  isSpecialFirmaBid
+                                    ? (isFirmaBidBelowAlert ? 'text-red-500' : 'text-green-500')
+                                    : isAbnormalPrice ? 'text-yellow-600' : 'text-green-500'
+                                } font-medium tabular-nums relative z-10`}>
+                                  {priceDisplay(order.price)}
+                                </span>
+                                {isSpecialFirmaBid && isFirmaBidBelowAlert ? (
+                                  <span title="Firma bid is below 0.998 USDT">
+                                    <TrendingDown
+                                      className="h-3.5 w-3.5 text-red-500"
+                                      aria-label="Firma bid is below 0.998 USDT"
+                                    />
+                                  </span>
+                                ) : null}
+                              </div>
+                              <span className={`tabular-nums text-right relative z-10 ${isSpecialFirmaBid ? 'text-muted-foreground' : 'text-foreground'}`}>
+                                {isSpecialFirmaBid ? 'unknown' : formatNumber(order.amount)}
                               </span>
-                              <span className="text-foreground tabular-nums text-right relative z-10">{formatNumber(order.amount)}</span>
-                              <span className="text-muted-foreground tabular-nums text-right relative z-10">{formatNumber(order.total)}</span>
+                              <span className="text-muted-foreground tabular-nums text-right relative z-10">
+                                {isSpecialFirmaBid ? '--' : formatNumber(order.total)}
+                              </span>
                             </div>
                           </PopoverTrigger>
                           <PopoverContent className="w-fit">
@@ -489,10 +571,10 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                                 Price: {priceDisplay(order.price)}
                               </div>
                               <div className="text-sm text-muted-foreground font-medium">
-                                Amount: {formatNumber(order.amount)}
+                                Amount: {isSpecialFirmaBid ? 'unknown' : formatNumber(order.amount)}
                               </div>
                               <div className="text-sm text-muted-foreground font-medium">
-                                Total（XEC）: {formatNumber(order.total)}
+                                Total（XEC）: {isSpecialFirmaBid ? '--' : formatNumber(order.total)}
                               </div>
                             </div>
                           </PopoverContent>
@@ -533,7 +615,10 @@ export default function OrderBook({ orderBook, className = "", tokenId, latestPr
                       <Popover key={index}>
                         <PopoverTrigger asChild>
                           <div 
-                            className="grid grid-cols-3 text-sm relative h-6 cursor-pointer"
+                            className={cn(
+                              "grid grid-cols-3 text-sm relative cursor-pointer",
+                              "h-6",
+                            )}
                             onMouseEnter={(e) => {
                               const trigger = e.currentTarget;
                               trigger.click();

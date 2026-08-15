@@ -55,22 +55,22 @@ describe('Swap Cards', () => {
       expect(mockProps.onMarketClick).toHaveBeenCalled()
     })
 
-    it('should support separately labeled Binance and Agora price buttons', () => {
-      const onAgoraPriceClick = vi.fn()
+    it('should support separately labeled Binance and Firma buyback price buttons', () => {
+      const onFirmaBuybackPriceClick = vi.fn()
       render(
         <PriceCard
           {...mockProps}
           marketButtonLabel="Binance Price"
-          onSecondaryMarketClick={onAgoraPriceClick}
-          secondaryMarketButtonLabel="Agora Price"
+          onSecondaryMarketClick={onFirmaBuybackPriceClick}
+          secondaryMarketButtonLabel="Firma buyback price"
         />,
       )
 
       fireEvent.click(screen.getByRole('button', { name: 'Binance Price' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Agora Price' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Firma buyback price' }))
 
       expect(mockProps.onMarketClick).toHaveBeenCalled()
-      expect(onAgoraPriceClick).toHaveBeenCalled()
+      expect(onFirmaBuybackPriceClick).toHaveBeenCalled()
     })
 
     it('should call onOneDollarClick when 1.00 $ button is clicked', () => {
@@ -98,16 +98,28 @@ describe('Swap Cards', () => {
           inputUnitLabel="$/XEC"
           referencePrices={[
             { label: 'Binance XEC:', value: '$0.00000681/XEC' },
-            { label: 'Firma buyback:', value: '$0.996' },
-            { label: 'Agora lowest ask:', value: '$1.066/Firma' },
+            {
+              label: '= Firma/USDT:',
+              value: '0.996',
+              indicator: 'down',
+              indicatorTitle: 'Firma/USDT is below 0.997',
+            },
+            {
+              label: 'Lowest Firma ask:',
+              value: '1.066/USDT',
+              indicator: 'up',
+              indicatorTitle: 'Lowest Firma ask is above 1.010 USDT',
+            },
           ]}
         />,
       )
 
       expect(screen.getByText('$/XEC')).toBeInTheDocument()
       expect(screen.getByText('$0.00000681/XEC')).toBeInTheDocument()
-      expect(screen.getByText('$0.996')).toBeInTheDocument()
-      expect(screen.getByText('$1.066/Firma')).toBeInTheDocument()
+      expect(screen.getByText('0.996')).toBeInTheDocument()
+      expect(screen.getByText('1.066/USDT')).toBeInTheDocument()
+      expect(screen.getByLabelText('Firma/USDT is below 0.997')).toBeInTheDocument()
+      expect(screen.getByLabelText('Lowest Firma ask is above 1.010 USDT')).toBeInTheDocument()
     })
   })
 
@@ -245,6 +257,11 @@ describe('Swap Cards', () => {
       render(<BuyCard {...mockProps} showMaxBalance={true} />)
       expect(screen.getByText('Max')).toBeInTheDocument()
       expect(screen.getByText(/Balance:\s*100,000/)).toBeInTheDocument()
+    })
+
+    it('should show the optional USD balance value in smaller text', () => {
+      render(<BuyCard {...mockProps} showMaxBalance={true} balanceUsd={0.973} />)
+      expect(screen.getByText('(0.973$)')).toBeInTheDocument()
     })
 
     it('should set max balance when Max button is clicked', () => {

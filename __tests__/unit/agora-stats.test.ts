@@ -172,7 +172,10 @@ describe("agora-stats", () => {
       expect(fetchMock).toHaveBeenCalledTimes(4)
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("/daily-agora-volume?"),
-        expect.objectContaining({ cache: "no-store" }),
+        expect.objectContaining({
+          cache: "no-store",
+          signal: expect.any(AbortSignal),
+        }),
       )
     })
 

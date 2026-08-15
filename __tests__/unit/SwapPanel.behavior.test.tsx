@@ -88,8 +88,22 @@ vi.mock("@/lib/chronik", () => ({
 }));
 
 vi.mock("@/components/ui/OrderBook", () => ({
-  default: ({ tokenId }: { tokenId: string }) => (
-    <div data-testid="order-book" data-token-id={tokenId} />
+  default: ({ tokenId, firmaBidXec }: { tokenId: string; firmaBidXec?: number }) => (
+    <div
+      data-testid="order-book"
+      data-token-id={tokenId}
+      data-firma-bid={firmaBidXec === undefined ? "" : String(firmaBidXec)}
+    />
+  ),
+}));
+
+vi.mock("@/components/swap/MyFirmaHistory", () => ({
+  default: ({ tokenId, address }: { tokenId: string; address?: string }) => (
+    <div
+      data-testid="firma-history"
+      data-token-id={tokenId}
+      data-address={address || ""}
+    />
   ),
 }));
 
@@ -119,6 +133,8 @@ vi.mock("@/components/swap/PriceCard", () => {
         value={props.tokenPriceInput}
         onChange={(event) => props.onTokenPriceInputChange(event.target.value)}
       />
+      {props.inputUnitLabel ? <span>{props.inputUnitLabel}</span> : null}
+      {props.priceInputHint ? <div>{props.priceInputHint}</div> : null}
       {props.referencePrices?.map((reference: any) => (
         <div key={reference.label}>{reference.label} {reference.value}</div>
       ))}
@@ -304,6 +320,8 @@ describe("SwapPanel current behavior", () => {
   it("auto-selects the first wallet token and hydrates the live price", async () => {
     render(<SwapPanel />);
 
+    expect(screen.queryByTestId("firma-history")).not.toBeInTheDocument();
+
     await act(async () => {
       await flushAsyncWork();
     });
@@ -412,7 +430,7 @@ describe("SwapPanel current behavior", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows both Firma price sources and caps orders at the lowest Agora ask", async () => {
+  it("shows the Binance and Firma buyback prices and blocks limits above the Firma bid", async () => {
     walletState.userTokens = {
       "token-1": "1234500",
       [firmaTokenId]: "1000000",
@@ -435,33 +453,57 @@ describe("SwapPanel current behavior", () => {
     );
 
     expect(screen.getByLabelText("Set max price for 1 XEC")).toHaveValue("0.00000681");
-    expect(screen.getByText(/Firma buyback: \$0.996$/)).toBeInTheDocument();
-    expect(screen.getByText(/Agora lowest ask: \$1.066\/Firma/)).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Set max price for 1 XEC Agora Price",
-      }),
-    );
-    expect(screen.getByLabelText("Set max price for 1 XEC")).toHaveValue(
-      "0.000006388349",
-    );
+    expect(screen.getByText("USDT/XEC")).toBeInTheDocument();
+    expect(screen.getByText("Price cannot exceed the live Firma buyback limit.")).toBeInTheDocument();
+    expect(screen.queryByText(/Firma\/XEC \(live bid basis\)/)).not.toBeInTheDocument();
+    expect(screen.getByText(/= Firma\/USDT: 0.996$/)).toBeInTheDocument();
+    expect(screen.getByText(/Lowest Firma ask: 1.066\/USDT/)).toBeInTheDocument();
+    expect(screen.queryByText(/Buyback XEC price:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Firma buyback price" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Set max price for 1 XEC"), {
-      target: { value: "0.0000075" },
+      target: { value: "0.0000067" },
     });
     fireEvent.change(screen.getByLabelText("Spend amount"), {
       target: { value: "10" },
     });
 
-    expect(screen.getByText(/capped by the lowest Agora ask/)).toBeInTheDocument();
+    expect(screen.getByText(/within the Firma buyback range/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Set max price for 1 XEC"), {
+      target: { value: "0.0000075" },
+    });
+    expect(
+      screen.getByText(
+        "Price cannot exceed the live Firma buyback limit because a higher price would cross the buyback bid.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Firma/XEC Order" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Set max price for 1 XEC"), {
+      target: { value: "0.00000625" },
+    });
+    expect(screen.getByText(/within the Firma buyback range/)).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Toggle order book panel" }),
     );
+    expect(screen.getByRole("main")).toHaveClass("lg:max-w-[512px]");
+    expect(screen.getByTestId("firma-history")).toHaveAttribute(
+      "data-token-id",
+      firmaTokenId,
+    );
+    expect(screen.getByTestId("firma-history")).toHaveAttribute(
+      "data-address",
+      "ecash:qp-test-wallet",
+    );
     expect(screen.getByTestId("order-book")).toHaveAttribute(
       "data-token-id",
       firmaTokenId,
+    );
+    expect(screen.getByTestId("order-book")).toHaveAttribute(
+      "data-firma-bid",
+      "146205.44",
     );
 
     fetchAgoraOrderBookMock.mockImplementation((tokenId: string) =>

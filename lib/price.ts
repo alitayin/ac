@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
 let cachedPrice: number | null = null;
 let lastFetchTime: number = 0;
+let inFlightPriceRequest: Promise<number> | null = null;
 const CACHE_DURATION = 60000;
 const MAX_RETRIES = 6;
+const PRICE_REQUEST_TIMEOUT_MS = 5_000;
 
 interface BinanceResponse {
   symbol: string;
@@ -15,35 +17,46 @@ interface CoingeckoResponse {
   };
 }
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchPriceJson<T>(url: string): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PRICE_REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Price endpoint returned ${response.status}`);
+    }
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function fetchBinancePrice(): Promise<number> {
-  const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=XECUSDT');
-  const data: BinanceResponse = await response.json();
+  const data = await fetchPriceJson<BinanceResponse>(
+    'https://api.binance.com/api/v3/ticker/price?symbol=XECUSDT',
+  );
   if (!data.price) throw new Error('Invalid Binance response');
   return parseFloat(data.price);
 }
 
 async function fetchCoingeckoPrice(): Promise<number> {
-  const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ecash&vs_currencies=usd');
-  const data: CoingeckoResponse = await response.json();
+  const data = await fetchPriceJson<CoingeckoResponse>(
+    'https://api.coingecko.com/api/v3/simple/price?ids=ecash&vs_currencies=usd',
+  );
   if (!data?.ecash?.usd) throw new Error('Invalid Coingecko response');
   return data.ecash.usd;
 }
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-export async function getXECPrice(): Promise<number> {
-  const now = Date.now();
-
-  if (cachedPrice && (now - lastFetchTime) < CACHE_DURATION) {
-    return cachedPrice;
-  }
-
+async function fetchXECPriceWithRetries(): Promise<number> {
   for (let i = 0; i < MAX_RETRIES; i++) {
     try {
       const price = await fetchBinancePrice();
       if (price > 0) {
         cachedPrice = price;
-        lastFetchTime = now;
+        lastFetchTime = Date.now();
         return price;
       }
     } catch (_error) {
@@ -51,7 +64,7 @@ export async function getXECPrice(): Promise<number> {
         const price = await fetchCoingeckoPrice();
         if (price > 0) {
           cachedPrice = price;
-          lastFetchTime = now;
+          lastFetchTime = Date.now();
           return price;
         }
       } catch (_coingeckoError) {}
@@ -71,6 +84,22 @@ export async function getXECPrice(): Promise<number> {
   return 0;
 }
 
+export function getXECPrice(): Promise<number> {
+  const now = Date.now();
+
+  if (cachedPrice !== null && (now - lastFetchTime) < CACHE_DURATION) {
+    return Promise.resolve(cachedPrice);
+  }
+
+  if (!inFlightPriceRequest) {
+    inFlightPriceRequest = fetchXECPriceWithRetries().finally(() => {
+      inFlightPriceRequest = null;
+    });
+  }
+
+  return inFlightPriceRequest;
+}
+
 export function useXECPrice() {
   const [price, setPrice] = useState<number>(0);
 
@@ -86,4 +115,4 @@ export function useXECPrice() {
   }, []);
 
   return price;
-} 
+}

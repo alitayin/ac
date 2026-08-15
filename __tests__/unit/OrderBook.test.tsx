@@ -12,6 +12,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 import { fetchTokenOrders } from '@/lib/api'
+import { tokens } from '@/config/tokens'
 
 describe('OrderBook Performance Optimization', () => {
   const mockOrderBook = {
@@ -85,6 +86,41 @@ describe('OrderBook Performance Optimization', () => {
     await waitFor(() => {
       const priceElements = screen.getAllByText(/95|90|85/)
       expect(priceElements.length).toBeGreaterThan(0)
+    })
+  })
+
+  it('keeps derived buyback USD prices out of the order book rows', async () => {
+    render(
+      <OrderBook
+        orderBook={{
+          orders: [{ price: 200000, amount: 1000, total: 200000000 }],
+        }}
+        tokenId="firma-token-id"
+        latestPrice={200000}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('$0.00002193/XEC')).not.toBeInTheDocument()
+    })
+  })
+
+  it('inserts the Firma bid as an unknown-size buy row without changing normal bids', async () => {
+    render(
+      <OrderBook
+        orderBook={mockOrderBook}
+        tokenId={tokens.firma.tokenId}
+        latestPrice={100}
+        firmaBidXec={30_000}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('30000.00')).toBeInTheDocument()
+      expect(screen.getByText('unknown')).toBeInTheDocument()
+      expect(screen.getByLabelText('Firma bid is below 0.998 USDT')).toBeInTheDocument()
+      expect(screen.getByText('95.00')).toBeInTheDocument()
+      expect(screen.getByText(/5\.00 \(5\.00%\)/)).toBeInTheDocument()
     })
   })
 

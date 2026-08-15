@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-08-16
+
+### Firma 实时回购报价与 Agora 成交历史
+
+**主要改动：**
+- Firma 卡片仅保留 `Binance Price` 按钮，移除容易混淆的 Agora/Firma buyback 快捷按钮
+- Firma/XEC 下单换算和 bid/Agora 限价保护统一使用实时回购价值
+- Firma 专区宽屏左侧新增 Firma 专属 Agora 链上成交历史
+- 成交历史仅在宽屏桌面显示，复用 Chronik Agora 成交记录并支持实时刷新
+
+---
+
 ## 2026-08-14
 
 ### Firma/XEC 市场价格与最低卖价保护
@@ -11,9 +23,9 @@
 **主要改动：**
 - Firma 回购价改为显示 1 Firma 的实时美元价值，例如 `$0.996`
 - 原 Market 按钮更名为 Binance Price，继续填入 Binance XEC 美元价
-- 新增 Agora Price 按钮，按 Firma 最低卖单换算并填入 XEC 美元价
+- Agora 最低 Firma 卖价仅作为市场参考，不再提供快捷填价按钮
 - 显示 Agora 当前最低 Firma 卖价对应的美元价值
-- 下单价格同时受 Firma 回购 bid 与 Agora 最低卖价约束，不会高于两者中更严格的上限
+- 下单价格以实时 Firma 回购 bid 为硬上限，Agora 最低卖价仅作为市场参考
 - 创建订单前强制刷新 Firma 最低卖价，并按最新值重新计算最终限价
 - Firma/XEC 标签页的 Order Book 自动切换为 Firma 订单簿
 

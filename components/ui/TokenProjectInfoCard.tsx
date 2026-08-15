@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import Link from "next/link"
-import quick from "ecash-quicksend"
 import {
   CheckCircle2,
   Clock3,
@@ -651,6 +650,7 @@ export function TokenProjectInfoCard({
         throw new Error("A mnemonic-backed wallet login is required for payment")
       }
 
+      const { default: quick } = await import("ecash-quicksend")
       const result = await quick.sendXec(
         [
           {

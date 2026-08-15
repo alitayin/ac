@@ -22,6 +22,7 @@ interface BuyCardProps {
   showExplorerLink?: boolean;
   staticTokenLabel?: string;
   staticTokenIconSrc?: string;
+  balanceUsd?: number | null;
 }
 
 export const BuyCard: React.FC<BuyCardProps> = ({
@@ -40,6 +41,7 @@ export const BuyCard: React.FC<BuyCardProps> = ({
   showExplorerLink = true,
   staticTokenLabel,
   staticTokenIconSrc,
+  balanceUsd,
 }) => {
   const rawAmount = userTokens[selectedToken.id] || "0";
   const maxBalance = Number(rawAmount) / Math.pow(10, selectedTokenDecimals);
@@ -130,6 +132,11 @@ export const BuyCard: React.FC<BuyCardProps> = ({
             </Button>
             <span className="ml-auto text-sm text-muted-foreground">
               Balance: {formattedMaxBalance}
+              {typeof balanceUsd === "number" && Number.isFinite(balanceUsd) && balanceUsd >= 0 ? (
+                <span className="ml-1 text-xs text-muted-foreground/80">
+                  ({balanceUsd.toFixed(3)}$)
+                </span>
+              ) : null}
             </span>
           </div>
         )}

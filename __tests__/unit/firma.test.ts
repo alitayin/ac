@@ -5,7 +5,10 @@ import {
   formatFirmaPriceInput,
   formatFirmaUsd,
   formatUsdPerXec,
-  getFirmaBidImpliedXecUsd,
+  getFirmaBuybackFirmaPerXec,
+  getFirmaBuybackXecUsd,
+  getFirmaAgoraXecUsd,
+  getFirmaBuybackUsd,
 } from "@/lib/firma";
 
 describe("Firma/XEC quotes", () => {
@@ -13,7 +16,7 @@ describe("Firma/XEC quotes", () => {
   const agoraLowestAskXecPerFirma = 156_534.955134;
   const marketXecUsd = 0.00000681;
 
-  it("uses the requested limit when it is below both Firma limits", () => {
+  it("uses the requested limit when it is within the Firma buyback range", () => {
     const quote = calculateFirmaXecQuote({
       firmaAmount: 10,
       requestedXecUsd: 0.0000061,
@@ -24,13 +27,14 @@ describe("Firma/XEC quotes", () => {
 
     expect(quote).not.toBeNull();
     expect(quote?.effectiveXecUsd).toBe(0.0000061);
+    expect(quote?.isWithinBuybackRange).toBe(true);
     expect(quote?.isLimitCapped).toBe(false);
     expect(quote?.firmaBuybackUsd).toBeCloseTo(0.995659, 6);
     expect(quote?.agoraLowestAskUsd).toBeCloseTo(1.066003, 6);
     expect(quote?.xecPerFirma).toBeCloseTo(163_934.43, 2);
   });
 
-  it("caps an above-market limit at the lowest Agora ask", () => {
+  it("caps an above-market limit at the Firma buyback bid", () => {
     const quote = calculateFirmaXecQuote({
       firmaAmount: 10,
       requestedXecUsd: 0.0000075,
@@ -39,11 +43,12 @@ describe("Firma/XEC quotes", () => {
       agoraLowestAskXecPerFirma,
     });
 
-    expect(quote?.effectiveXecUsd).toBeCloseTo(1 / agoraLowestAskXecPerFirma, 14);
+    expect(quote?.effectiveXecUsd).toBeCloseTo(1 / firmaBidXec, 14);
+    expect(quote?.isWithinBuybackRange).toBe(false);
     expect(quote?.isLimitCapped).toBe(true);
-    expect(quote?.limitSource).toBe("agora");
-    expect(quote?.xecPerFirma).toBeCloseTo(agoraLowestAskXecPerFirma, 6);
-    expect(quote?.xecReceive).toBeCloseTo(1_565_349.55134, 6);
+    expect(quote?.limitSource).toBe("bid");
+    expect(quote?.xecPerFirma).toBeCloseTo(firmaBidXec, 6);
+    expect(quote?.xecReceive).toBeCloseTo(1_462_054.4, 6);
   });
 
   it("uses the Firma bid when it is the tighter limit", () => {
@@ -57,18 +62,36 @@ describe("Firma/XEC quotes", () => {
     });
 
     expect(quote?.effectiveXecUsd).toBeCloseTo(1 / tighterBidXec, 14);
+    expect(quote?.isWithinBuybackRange).toBe(false);
     expect(quote?.limitSource).toBe("bid");
     expect(quote?.xecPerFirma).toBe(tighterBidXec);
   });
 
-  it("converts the Firma bid into the face-value USD price for one XEC", () => {
-    expect(getFirmaBidImpliedXecUsd(firmaBidXec)).toBeCloseTo(
-      1 / firmaBidXec,
-      12,
-    );
-    expect(formatUsdPerXec(1 / firmaBidXec)).toBe("0.00000684");
+  it("converts live Firma bid and Agora ask into USD prices", () => {
+    const firmaBuybackUsd = getFirmaBuybackUsd(firmaBidXec, marketXecUsd);
+
+    expect(firmaBuybackUsd).toBeCloseTo(0.995659, 6);
+    expect(getFirmaBuybackXecUsd(firmaBidXec, marketXecUsd)).toBeCloseTo(1 / firmaBidXec, 14);
+    expect(getFirmaBuybackFirmaPerXec(firmaBidXec)).toBeCloseTo(1 / firmaBidXec, 14);
+    expect(formatUsdPerXec(firmaBuybackUsd! / firmaBidXec)).toBe("0.00000681");
     expect(formatFirmaUsd(firmaBidXec * marketXecUsd)).toBe("0.996");
-    expect(formatFirmaPriceInput(1 / agoraLowestAskXecPerFirma)).toBe("0.000006388349");
+    expect(formatFirmaPriceInput(firmaBuybackUsd! / agoraLowestAskXecPerFirma)).toBe("0.000006360617");
+    expect(getFirmaAgoraXecUsd(firmaBuybackUsd!, agoraLowestAskXecPerFirma)).toBeCloseTo(
+      0.000006360617,
+      11,
+    );
+  });
+
+  it("does not require an Agora ask to evaluate the buyback range", () => {
+    const quote = calculateFirmaXecQuote({
+      firmaAmount: 1,
+      requestedXecUsd: 0.0000061,
+      marketXecUsd,
+      firmaBidXec,
+    });
+
+    expect(quote?.isWithinBuybackRange).toBe(true);
+    expect(quote?.agoraLowestAskUsd).toBe(0);
   });
 
   it("rejects incomplete or non-positive quotes", () => {
@@ -79,7 +102,7 @@ describe("Firma/XEC quotes", () => {
       firmaBidXec,
       agoraLowestAskXecPerFirma,
     })).toBeNull();
-    expect(getFirmaBidImpliedXecUsd(0)).toBeNull();
+    expect(getFirmaBuybackUsd(0, marketXecUsd)).toBeNull();
     expect(formatUsdPerXec(Number.NaN)).toBe("--");
   });
 });

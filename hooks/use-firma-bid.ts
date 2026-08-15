@@ -10,7 +10,7 @@ type FirmaBidState = {
   error: string | null;
 };
 
-export const useFirmaBid = (): FirmaBidState => {
+export const useFirmaBid = (enabled = true): FirmaBidState => {
   const [state, setState] = useState<FirmaBidState>({
     bid: 0,
     isLoading: true,
@@ -18,6 +18,11 @@ export const useFirmaBid = (): FirmaBidState => {
   });
 
   useEffect(() => {
+    if (!enabled) {
+      setState({ bid: 0, isLoading: false, error: null });
+      return undefined;
+    }
+
     let cancelled = false;
 
     const fetchBid = async () => {
@@ -51,7 +56,7 @@ export const useFirmaBid = (): FirmaBidState => {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [enabled]);
 
   return state;
 };

@@ -36,7 +36,7 @@ const getMaxAmount = (data: Transaction[]): number => {
   return Math.max(...data.map(t => t.amount))
 }
 
-export default function Component({ tokenId, className }: TokenComponentProps) {
+export default function Component({ tokenId, className, address }: TokenComponentProps) {
   const [data, setData] = React.useState<Transaction[]>([])
   const [lastUpdate, setLastUpdate] = React.useState<string>("")
   const [showUSD, setShowUSD] = React.useState(false)
@@ -179,7 +179,7 @@ export default function Component({ tokenId, className }: TokenComponentProps) {
             setData([...collected])
             setLastUpdate(new Date().toLocaleString())
           },
-          { pageSize: 100 },
+          { pageSize: 100, address },
         )
 
         if (fetchIdRef.current !== fetchId || isCancelled) return
@@ -216,7 +216,7 @@ export default function Component({ tokenId, className }: TokenComponentProps) {
       unwatch()
       clearInterval(interval)
     }
-  }, [tokenId])
+  }, [address, tokenId])
 
   const table = useReactTable({
     data,
