@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/tabs";
 import { createAgoraOffer } from "ecash-quicksend";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
-import { Power, CircleAlert, ArrowDownUp, ShieldAlert, Layout, Info } from "lucide-react";
+import { Power, CircleAlert, ArrowDownUp, ShieldAlert, Layout } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OrderList } from "@/components/ui/orderlist";
 import { ListingList } from "@/components/ui/listinglist";
@@ -2034,13 +2034,6 @@ export function SwapPanel({
                     <CircleAlert className="h-4 w-4" />
                     <AlertDescription>
                       Price cannot exceed the live Firma buyback limit because a higher price would cross the buyback bid.
-                    </AlertDescription>
-                  </Alert>
-                ) : firmaQuote?.isWithinBuybackRange ? (
-                  <Alert>
-                    <Info className="h-4 w-4" />
-                    <AlertDescription>
-                      This price is within the Firma buyback range.
                     </AlertDescription>
                   </Alert>
                 ) : null}

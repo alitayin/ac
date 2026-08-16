@@ -468,7 +468,7 @@ describe("SwapPanel current behavior", () => {
       target: { value: "10" },
     });
 
-    expect(screen.getByText(/within the Firma buyback range/)).toBeInTheDocument();
+    expect(screen.queryByText(/within the Firma buyback range/)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Set max price for 1 XEC"), {
       target: { value: "0.0000075" },
@@ -483,7 +483,7 @@ describe("SwapPanel current behavior", () => {
     fireEvent.change(screen.getByLabelText("Set max price for 1 XEC"), {
       target: { value: "0.00000625" },
     });
-    expect(screen.getByText(/within the Firma buyback range/)).toBeInTheDocument();
+    expect(screen.queryByText(/within the Firma buyback range/)).not.toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Toggle order book panel" }),

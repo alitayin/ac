@@ -244,11 +244,10 @@ export default function MyFirmaHistory({
         <table className="w-full table-fixed text-sm">
           <thead className="border-b text-sm text-muted-foreground">
             <tr>
-              <th className="w-[17%] px-6 py-2 text-left font-medium">Type</th>
-              <th className="w-[21%] px-1 py-2 text-left font-medium">Time</th>
-              <th className="w-[25%] px-1 py-2 text-right font-medium">Price</th>
-              <th className="w-[17%] px-1 py-2 text-right font-medium">Firma</th>
-              <th className="w-[20%] px-6 py-2 text-right font-medium">XEC</th>
+              <th className="w-[20%] px-6 py-2 text-left font-medium">Type</th>
+              <th className="w-[26%] px-1 py-2 text-left font-medium">Time</th>
+              <th className="w-[27%] px-1 py-2 text-right font-medium">Price</th>
+              <th className="w-[27%] px-6 py-2 text-right font-medium">Firma</th>
             </tr>
           </thead>
           <tbody>
@@ -285,11 +284,8 @@ export default function MyFirmaHistory({
                   >
                     {formatPrice(transaction.price)}
                   </td>
-                  <td className="whitespace-nowrap px-1 py-2 text-right font-mono">
-                    {formatNumber(transaction.amount)}
-                  </td>
                   <td className="whitespace-nowrap px-6 py-2 text-right font-mono">
-                    {formatNumber(transaction.price * transaction.amount)}
+                    {formatNumber(transaction.amount)}
                     <a
                       href={transactionLink(transaction.txid)}
                       target="_blank"

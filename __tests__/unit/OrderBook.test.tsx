@@ -105,7 +105,7 @@ describe('OrderBook Performance Optimization', () => {
     })
   })
 
-  it('inserts the Firma bid as an unknown-size buy row without changing normal bids', async () => {
+  it('inserts the Firma buyback row without changing normal bids', async () => {
     render(
       <OrderBook
         orderBook={mockOrderBook}
@@ -117,10 +117,26 @@ describe('OrderBook Performance Optimization', () => {
 
     await waitFor(() => {
       expect(screen.getByText('30000.00')).toBeInTheDocument()
-      expect(screen.getByText('unknown')).toBeInTheDocument()
+      expect(screen.getByText('Firma buyback')).toBeInTheDocument()
       expect(screen.getByLabelText('Firma bid is below 0.998 USDT')).toBeInTheDocument()
       expect(screen.getByText('95.00')).toBeInTheDocument()
       expect(screen.getByText(/5\.00 \(5\.00%\)/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows the Binance neutral Firma price between the sell and buy areas', async () => {
+    render(
+      <OrderBook
+        orderBook={mockOrderBook}
+        tokenId={tokens.firma.tokenId}
+        latestPrice={100}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('firma-binance-neutral-price')).toBeInTheDocument()
+      expect(screen.getByText('33333.33')).toBeInTheDocument()
+      expect(screen.getByText('Binance price')).toBeInTheDocument()
     })
   })
 

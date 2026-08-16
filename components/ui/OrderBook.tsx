@@ -24,6 +24,8 @@ const BUY_ORDER_REQUEST_TIMEOUT_MS = 7000;
 const BUY_ORDER_INITIAL_BACKOFF_MS = 15000;
 const BUY_ORDER_MAX_BACKOFF_MS = 60000;
 const FIRMA_BID_ALERT_USDT = 0.998;
+const FIRMA_BID_LABEL = "Firma buyback";
+const BINANCE_PRICE_LABEL = "Binance price";
 
 type DisplayBuyOrder = Order & {
   isFirmaBid?: boolean;
@@ -50,6 +52,9 @@ export default function OrderBook({
     ? (firmaBidXec as number) * xecPrice
     : 0;
   const isFirmaBidBelowAlert = firmaBidUsd > 0 && firmaBidUsd < FIRMA_BID_ALERT_USDT;
+  const firmaBinanceNeutralPrice = isFirmaOrderBook && xecPrice > 0
+    ? 1 / xecPrice
+    : 0;
   const mountedRef = useRef(true);
   const inFlightBuyOrdersRef = useRef<Promise<void> | null>(null);
   const activeBuyOrdersAbortRef = useRef<AbortController | null>(null);
@@ -378,6 +383,19 @@ export default function OrderBook({
             </div>
 
             <div className="my-3 py-2 border-y border-dashed">
+              {firmaBinanceNeutralPrice > 0 && (
+                <div
+                  className="mb-2 flex items-center justify-between rounded-md border border-border/60 bg-muted/50 px-6 py-2 text-sm"
+                  data-testid="firma-binance-neutral-price"
+                >
+                  <span className="font-medium tabular-nums text-muted-foreground">
+                    {priceDisplay(firmaBinanceNeutralPrice)}
+                  </span>
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">
+                    {BINANCE_PRICE_LABEL}
+                  </span>
+                </div>
+              )}
               {orderBook?.orders && orderBook.orders.length > 0 && buyOrders.length > 0 && (
                 <div className="flex justify-between text-sm px-6">
                   <span className="text-muted-foreground">Spread:</span>
@@ -453,7 +471,7 @@ export default function OrderBook({
                                   ) : null}
                                 </div>
                                 <span className={`tabular-nums ${isSpecialFirmaBid ? 'text-muted-foreground' : 'text-foreground'}`}>
-                                  {isSpecialFirmaBid ? 'unknown' : formatNumber(order.amount)}
+                                  {isSpecialFirmaBid ? FIRMA_BID_LABEL : formatNumber(order.amount)}
                                 </span>
                               </div>
                             </div>
@@ -464,7 +482,7 @@ export default function OrderBook({
                                 Price: {priceDisplay(order.price)}
                               </div>
                               <div className="text-sm text-muted-foreground font-medium">
-                                Amount: {isSpecialFirmaBid ? 'unknown' : formatNumber(order.amount)}
+                                Amount: {isSpecialFirmaBid ? FIRMA_BID_LABEL : formatNumber(order.amount)}
                               </div>
                               <div className="text-sm text-muted-foreground font-medium">
                                 Total（XEC）: {isSpecialFirmaBid ? '--' : formatNumber(order.total)}
@@ -558,7 +576,7 @@ export default function OrderBook({
                                 ) : null}
                               </div>
                               <span className={`tabular-nums text-right relative z-10 ${isSpecialFirmaBid ? 'text-muted-foreground' : 'text-foreground'}`}>
-                                {isSpecialFirmaBid ? 'unknown' : formatNumber(order.amount)}
+                                {isSpecialFirmaBid ? FIRMA_BID_LABEL : formatNumber(order.amount)}
                               </span>
                               <span className="text-muted-foreground tabular-nums text-right relative z-10">
                                 {isSpecialFirmaBid ? '--' : formatNumber(order.total)}
@@ -571,7 +589,7 @@ export default function OrderBook({
                                 Price: {priceDisplay(order.price)}
                               </div>
                               <div className="text-sm text-muted-foreground font-medium">
-                                Amount: {isSpecialFirmaBid ? 'unknown' : formatNumber(order.amount)}
+                                Amount: {isSpecialFirmaBid ? FIRMA_BID_LABEL : formatNumber(order.amount)}
                               </div>
                               <div className="text-sm text-muted-foreground font-medium">
                                 Total（XEC）: {isSpecialFirmaBid ? '--' : formatNumber(order.total)}

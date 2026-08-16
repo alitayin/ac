@@ -111,5 +111,6 @@ describe("MyFirmaHistory", () => {
 
     expect(screen.getByRole("row", { name: /Buy/ })).toBeInTheDocument()
     expect(screen.getByRole("row", { name: /Sell/ })).toBeInTheDocument()
+    expect(screen.queryByRole("columnheader", { name: "XEC" })).not.toBeInTheDocument()
   })
 })
