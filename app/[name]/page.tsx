@@ -34,6 +34,7 @@ import { watchAgoraTokens } from "@/lib/agora-ws"
 import { loadTokenPageStats } from "@/lib/token-page-stats"
 import { cn } from "@/lib/utils"
 import { isBlockedTokenId } from "@/lib/blocked-tokens"
+import FirmaDepegAlertDialog from "@/components/ui/FirmaDepegAlertDialog"
 
 interface TokenData {
   tokenId: string;
@@ -363,6 +364,15 @@ export default function TokenPage() {
       ? "74M SS frozed(belongs to GNC)"
       : null
   const swapHref = `/swap?tokenId=${encodeURIComponent(tokenData.tokenId)}&tokenName=${encodeURIComponent(tokenData.name)}`
+  const isFirmaToken = tokenData.tokenId === tokens.firma.tokenId
+  const firmaLowestSellPriceXec = isFirmaToken && Number(orderBook?.stats?.min_price) > 0
+    ? Number(orderBook.stats.min_price)
+    : isFirmaToken && displayLatestPrice > 0
+      ? displayLatestPrice
+      : null
+  const firmaSellPriceLabel = Number(orderBook?.stats?.min_price) > 0
+    ? "Agora lowest sell price"
+    : "Latest Firma sell price"
   const tokenPageStats = [
     {
       label: "MCAP",
@@ -417,6 +427,12 @@ export default function TokenPage() {
   return (
     <>
       <Header />
+      {isFirmaToken ? (
+        <FirmaDepegAlertDialog
+          sellPriceXec={firmaLowestSellPriceXec}
+          sellPriceLabel={firmaSellPriceLabel}
+        />
+      ) : null}
       <div className="container mx-auto max-w-7xl p-1 pt-0 sm:p-4 sm:pt-0">
         <div className="flex flex-col lg:flex-row gap-10 mt-10">
         <div className="w-full lg:hidden">
