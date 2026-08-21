@@ -42,11 +42,13 @@ describe("FirmaDepegAlertDialog", () => {
     expect(screen.getByText("-$0.030 (-3.00%) below $1")).toBeInTheDocument()
   })
 
-  it("does not show again after it has been shown today", () => {
+  it("still shows when it was already shown today", async () => {
     localStorage.setItem("firma-depeg-alert-last-shown", getLocalDateKey())
 
     render(<FirmaDepegAlertDialog sellPriceXec={160000} />)
 
-    expect(screen.queryByText("Firma depeg alert")).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText("Firma depeg alert")).toBeInTheDocument()
+    })
   })
 })

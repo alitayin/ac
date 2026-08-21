@@ -15,20 +15,12 @@ import {
 import { useFirmaBid } from "@/hooks/use-firma-bid"
 import { useXECPrice } from "@/lib/price"
 
-const STORAGE_KEY = "firma-depeg-alert-last-shown"
 const PEG_USD = 1
 
 type FirmaDepegAlertDialogProps = {
   /** Current Agora sell price in XEC per Firma. */
   sellPriceXec: number | null
   sellPriceLabel?: string
-}
-
-const getLocalDateKey = () => {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, "0")
-  const day = String(now.getDate()).padStart(2, "0")
-  return `${now.getFullYear()}-${month}-${day}`
 }
 
 const isPositiveFinite = (value: number | null | undefined): value is number =>
@@ -72,17 +64,7 @@ export default function FirmaDepegAlertDialog({
       return
     }
 
-    try {
-      if (window.localStorage.getItem(STORAGE_KEY) === getLocalDateKey()) {
-        return
-      }
-
-      window.localStorage.setItem(STORAGE_KEY, getLocalDateKey())
-      setOpen(true)
-    } catch {
-      // Showing the warning should not depend on storage access being available.
-      setOpen(true)
-    }
+    setOpen(true)
   }, [isDepegged])
 
   if (!isDepegged || sellPriceUsd === null || buybackPriceUsd === null) {
@@ -128,7 +110,7 @@ export default function FirmaDepegAlertDialog({
         </div>
 
         <AlertDialogDescription className="text-xs">
-          Prices are live references and can change. This reminder is shown once per day.
+          Prices are live references and can change. This alert appears whenever Firma is below its peg.
         </AlertDialogDescription>
 
         <AlertDialogFooter>
