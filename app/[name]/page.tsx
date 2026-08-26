@@ -115,8 +115,6 @@ export default function TokenPage() {
   })
   
   const isLoadingStats = useRef<boolean>(false)
-  const shouldShowSidebarOrderBook = isDesktopViewport && activeTab !== 'orderbook'
-  const shouldFetchOrderBook = activeTab === 'orderbook' || shouldShowSidebarOrderBook
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -226,6 +224,11 @@ export default function TokenPage() {
       name: "Trident by Hodl Wars"
     };
   }
+
+  const isFirmaToken = tokenData.tokenId === tokens.firma.tokenId
+  const shouldShowSidebarOrderBook = isDesktopViewport && activeTab !== 'orderbook'
+  const shouldFetchOrderBook =
+    isFirmaToken || activeTab === 'orderbook' || shouldShowSidebarOrderBook
 
   useEffect(() => {
     const fetchChronikTokenInfo = async () => {
@@ -364,15 +367,9 @@ export default function TokenPage() {
       ? "74M SS frozed(belongs to GNC)"
       : null
   const swapHref = `/swap?tokenId=${encodeURIComponent(tokenData.tokenId)}&tokenName=${encodeURIComponent(tokenData.name)}`
-  const isFirmaToken = tokenData.tokenId === tokens.firma.tokenId
   const firmaLowestSellPriceXec = isFirmaToken && Number(orderBook?.stats?.min_price) > 0
     ? Number(orderBook.stats.min_price)
-    : isFirmaToken && displayLatestPrice > 0
-      ? displayLatestPrice
-      : null
-  const firmaSellPriceLabel = Number(orderBook?.stats?.min_price) > 0
-    ? "Agora lowest sell price"
-    : "Latest Firma sell price"
+    : null
   const tokenPageStats = [
     {
       label: "MCAP",
@@ -430,7 +427,6 @@ export default function TokenPage() {
       {isFirmaToken ? (
         <FirmaDepegAlertDialog
           sellPriceXec={firmaLowestSellPriceXec}
-          sellPriceLabel={firmaSellPriceLabel}
         />
       ) : null}
       <div className="container mx-auto max-w-7xl p-1 pt-0 sm:p-4 sm:pt-0">

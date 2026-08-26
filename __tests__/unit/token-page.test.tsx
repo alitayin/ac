@@ -89,6 +89,22 @@ vi.mock("@/components/ui/TokenProjectInfoCard", () => ({
   ),
 }))
 
+vi.mock("@/components/ui/FirmaDepegAlertDialog", () => ({
+  default: ({
+    sellPriceXec,
+    sellPriceLabel = "Agora lowest sell price",
+  }: {
+    sellPriceXec: number | null
+    sellPriceLabel?: string
+  }) => (
+    <div
+      data-testid="firma-depeg-alert"
+      data-sell-price={sellPriceXec ?? "none"}
+      data-sell-price-label={sellPriceLabel}
+    />
+  ),
+}))
+
 vi.mock("@/components/ui/ErrorBoundary", () => ({
   ErrorBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
@@ -138,6 +154,7 @@ vi.mock("@/lib/networkFee", () => ({
 }))
 
 import TokenPage from "@/app/[name]/page"
+import { tokens } from "@/config/tokens"
 import { fetchTokenDetails } from "@/lib/chronik"
 
 const TOKEN_ID =
@@ -220,6 +237,7 @@ describe("TokenPage", () => {
 
   afterEach(() => {
     cleanup()
+    vi.unstubAllGlobals()
   })
 
   it("renders project info cards instead of token-page swap panels", async () => {
@@ -317,5 +335,92 @@ describe("TokenPage", () => {
 
     expect(screen.getAllByTestId("token-project-info-card")).toHaveLength(2)
     expect(screen.getByTestId("order-book")).toBeInTheDocument()
+  })
+
+  it("uses the lowest active Firma ask instead of the latest trade on mobile", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    })))
+    mockUseParams.mockReturnValue({ name: "firma" })
+    mockFetchAgoraOrderBook.mockResolvedValue({
+      success: true,
+      data: {
+        orders: [{ price: 160_000, amount: 100 }],
+        stats: {
+          min_price: 160_000,
+          total_value: 16_000_000,
+        },
+      },
+    })
+    mockLoadTokenPageStats.mockResolvedValue({
+      source: "chronik",
+      nextChainTipHeight: 900000,
+      stats: {
+        latestPrice: 150_000,
+        priceChange24h: 0,
+        last24HoursXECAmount: 0,
+        last30DaysXECAmount: 0,
+        totalTransactions: 1,
+        totalXECAmount: 0,
+        tokenId: tokens.firma.tokenId,
+        tokenName: "Firma",
+      },
+    })
+
+    renderTokenPage()
+
+    await waitFor(() => {
+      expect(mockFetchAgoraOrderBook).toHaveBeenCalledWith(tokens.firma.tokenId)
+      expect(screen.getByTestId("firma-depeg-alert")).toHaveAttribute(
+        "data-sell-price",
+        "160000",
+      )
+    })
+    expect(screen.getByTestId("firma-depeg-alert")).toHaveAttribute(
+      "data-sell-price-label",
+      "Agora lowest sell price",
+    )
+  })
+
+  it("does not substitute the latest Firma trade when there is no active ask", async () => {
+    mockUseParams.mockReturnValue({ name: "firma" })
+    mockFetchAgoraOrderBook.mockResolvedValue({
+      success: true,
+      data: {
+        orders: [],
+        stats: {
+          min_price: 0,
+          total_value: 0,
+        },
+      },
+    })
+    mockLoadTokenPageStats.mockResolvedValue({
+      source: "chronik",
+      nextChainTipHeight: 900000,
+      stats: {
+        latestPrice: 155_000,
+        priceChange24h: 0,
+        last24HoursXECAmount: 0,
+        last30DaysXECAmount: 0,
+        totalTransactions: 1,
+        totalXECAmount: 0,
+        tokenId: tokens.firma.tokenId,
+        tokenName: "Firma",
+      },
+    })
+
+    renderTokenPage()
+
+    await waitFor(() => {
+      expect(screen.getAllByText("155000.0000")).toHaveLength(2)
+    })
+    expect(screen.getByTestId("firma-depeg-alert")).toHaveAttribute(
+      "data-sell-price",
+      "none",
+    )
   })
 })
