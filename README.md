@@ -12,10 +12,10 @@ eCash (XEC) eToken marketplace monitoring and trading platform built on the Agor
 ## Getting Started
 
 ```bash
-git clone https://github.com/alitayin/ac.git
-cd ac
-npm install
-npm run dev
+git clone <your-repo-url>
+cd agoracash
+pnpm install
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
@@ -23,8 +23,8 @@ Open [http://localhost:3000](http://localhost:3000)
 ## Build
 
 ```bash
-npm test
-npm run build
+pnpm test
+pnpm build
 ```
 
 Run tests and build locally before pushing to ensure no errors.
@@ -38,4 +38,4 @@ Next.js 14, TypeScript, Tailwind CSS, ecash-lib, ecash-agora, chronik-client
 - Telegram: https://t.me/agoraUI
 - Email: alitaweb3@gmail.com
 
-**Version**: 4.5.2
+**Version**: 4.5.3
